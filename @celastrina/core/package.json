@@ -1,0 +1,40 @@
+{
+  "name": "@celastrina/core",
+  "version": "1.0.0",
+  "description": "Javascript Framework for simplifying Microsoft Azure Functions and supporting resources.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/murrellrr/celastrina.git",
+    "directory": "@celastrina/core"
+  },
+  "keywords": [
+    "Microsoft",
+    "Azure",
+    "Function",
+    "Securtiy",
+    "Authorization",
+    "Recaptcha",
+    "Javascript",
+    "Node.js"
+  ],
+  "author": "Robert R Murrell",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/murrellrr/celastrina/issues"
+  },
+  "homepage": "https://github.com/murrellrr/celastrina#readme",
+  "dependencies": {
+    "@azure/cosmos": "^3.5.4",
+    "adal-node": "^0.2.1",
+    "axios": "^0.19.2",
+    "jsonwebtoken": "^8.5.1",
+    "querystring": "^0.2.0",
+    "moment": "^2.24.0",
+    "uuid": "^3.4.0",
+    "validator": "^11.1.0"
+  }
+}

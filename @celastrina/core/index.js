@@ -22,34 +22,62 @@
  * SOFTWARE.
  */
 
-/**
- * @brief
- *
- * @type {{dao: {CosmosStatement: CosmosStatement, CosmosDAOConfig: CosmosDAOConfig, DAO: DAO}, util: {notification:
- *       {EmailNotificationBody: EmailNotificationBody}, vault: {Vault: Vault}, messaging: {Message: Message,
- *       Header: Header}}, functions: {aaa: {SentryConfig: SentryConfig, AuthorizationQuery: AuthorizationQuery,
- *       Issuer: Issuer, AuthorizationMatch: AuthorizationMatch, MatchAny: MatchAny, AuthorizedJSONFunction:
- *       AuthorizedJSONFunction, MATCH_TYPE: {OVERRIDE: {OVERRIDE_NONE: number, OVERRIDE_IF_SYSTEM: number},
- *       AUTHORIZATION: {MATCH_ALL: number, MATCH_NONE: number, MATCH_ANY: number}}, MatchAll: MatchAll, MatchNone:
- *       MatchNone, AuthorizationGroup: AuthorizationGroup, ClaimsToken: ClaimsToken, Sentry: Sentry,
- *       AuthenticatedJSONFunction: AuthenticatedJSONFunction}, recaptcha: {RECAPTCHA_TOKEN_METHOD: {QUERY: number,
- *       HEADER: number, BODY: number}, RecaptchaJSONFunction: RecaptchaJSONFunction, Recaptcha: Recaptcha},
- *       http: {HTTPFunction: HTTPFunction, JSONHTTPFunction: JSONHTTPFunction, HTTPContext: HTTPContext,
- *       JSONHTTPContext: JSONHTTPContext}, base: {BaseContext: BaseContext, BaseFunction: BaseFunction,
- *       DefaultSecurePropertyHandler: DefaultSecurePropertyHandler, LOG_LEVEL: {LEVEL_TRACE: number, LEVEL_INFO:
- *       number, LEVEL_VERBOSE: number, LEVEL_WARN: number, LEVEL_ERROR: number}, MonitorResponse: MonitorResponse,
- *       VaultPropertyHandler: VaultPropertyHandler}, messaging}, error: {CelastrinaError: CelastrinaError,
- *       CelastrinaValidationError: CelastrinaValidationError}}}
- */
+const error        = require("./CelastrinaError");
+const dao          = require("./DAO");
+const vault        = require("./Vault");
+const base         = require("./BaseFunction");
+const http         = require("./HTTPFunction");
+const auth         = require("./Authorization");
+const captcha      = require("./Recaptcha");
+const message      = require("./Message");
+const messaging    = require("./MessageFunction");
+const notification = require("./Notification");
+
 module.exports = {
-    error:         require("./CelastrinaError"),
-    dao:           require("./DAO"),
-    util:          {vault:        require("./Vault"),
-                    messaging:    require("./Message"),
-                    notification: require("./Notification")},
-    functions:     {base:      require("./BaseFunction"),
-                    http:      require("./HTTPFunction"),
-                    messaging: require("./MessageFunction"),
-                    recaptcha: require("./Recaptcha"),
-                    aaa:       require("./Authorization")}
+    CelastrinaError:           error.CelastrinaError,
+    CelastrinaValidationError: error.CelastrinaValidationError,
+    
+    CosmosStatement: dao.CosmosStatement,
+    CosmosDAOConfig: dao.CosmosDAOConfig,
+    DAO:             dao.DAO,
+    
+    Vault: vault.Vault,
+    
+    LOG_LEVEL:                    base.LOG_LEVEL,
+    MonitorResponse:              base.MonitorResponse,
+    DefaultSecurePropertyHandler: base.DefaultSecurePropertyHandler,
+    VaultPropertyHandler:         base.VaultPropertyHandler,
+    BaseContext:                  base.BaseContext,
+    BaseFunction:                 base.BaseFunction,
+    
+    HTTPContext:      http.HTTPContext,
+    HTTPFunction:     http.HTTPFunction,
+    JSONHTTPContext:  http.JSONHTTPContext,
+    JSONHTTPFunction: http.JSONHTTPFunction,
+    
+    ClaimsToken:               auth.ClaimsToken,
+    SentryConfig:              auth.SentryConfig,
+    Sentry:                    auth.Sentry,
+    MATCH_TYPE:                auth.MATCH_TYPE,
+    AuthorizationMatch:        auth.AuthorizationMatch,
+    MatchAny:                  auth.MatchAny,
+    MatchAll:                  auth.MatchAll,
+    MatchNone:                 auth.MatchNone,
+    AuthorizationQuery:        auth.AuthorizationQuery,
+    Issuer:                    auth.Issuer,
+    AuthorizationGroup:        auth.AuthorizationGroup,
+    AuthorizedJSONFunction:    auth.AuthorizedJSONFunction,
+    AuthenticatedJSONFunction: auth.AuthenticatedJSONFunction,
+    
+    Recaptcha:              captcha.Recaptcha,
+    RECAPTCHA_TOKEN_METHOD: captcha.RECAPTCHA_TOKEN_METHOD,
+    RecaptchaJSONFunction:  captcha.RecaptchaJSONFunction,
+    
+    Header:  message.Header,
+    Message: message.Message,
+    
+    MessageContext:  messaging.MessageContext,
+    MessageFunction: messaging.MessageFunction,
+    
+    EmailNotificationBody: notification.EmailNotificationBody
 };

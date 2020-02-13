@@ -175,3 +175,8 @@ class MessageFunction extends BaseFunction {
             });
     }
 }
+
+module.exports = {
+    MessageContext:  MessageContext,
+    MessageFunction: MessageFunction
+};

@@ -1,55 +1,51 @@
 /*
- * Copyright (c) 2020, Robert R Murrell, llc. All rights reserved.
+ * Copyright (c) 2020, Robert R Murrell.
+ *
+ * MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 "use strict";
 
-const moment = require("moment");
-const jwt    = require("jsonwebtoken");
-const crypto = require('crypto');
-const axios  = require("axios").default;
+const moment    = require("moment");
+const jwt       = require("jsonwebtoken");
+const crypto    = require("crypto");
+const axios     = require("axios").default;
 
 const {TokenResponse, AuthenticationContext} = require("adal-node");
 const {CelastrinaError, CelastrinaValidationError} = require("CelastrinaError");
 const {LOG_LEVEL, JSONHTTPContext, JSONHTTPFunction} = require("HTTPFunction");
 
 /**
- * @typedef _ApplicationClaim
- * @property {null|undefined|string} [accountId]
- * @property {null|undefined|string} [profileId]
- * @property {null|undefined|string} [franchiseId]
- * @property {string[]} [roles]
- */
-/**
  * @typedef _XCLAToken
  * @property {string} aud
  * @property {string} sub
  * @property {string} oid
  * @property {string} iss
- * @property {string} given_name
- * @property {string} family_name
- * @property {string} country
- * @property {string} postalCode
- * @property {number} auth_time
  * @property {number} iat
  * @property {number} exp
- * @property {string[]} emails
- * @property {boolean} [newUser]
- * @property {string} [applicationId]
  */
 /**
  * @typedef _ClaimsPayload
- * @property {string} objectId
- * @property {null|undefined|string} [accountId]
- * @property {null|undefined|string} [profileId]
- * @property {null|undefined|string} [franchiseId]
- * @property {null|undefined|ClaimName} [name]
- * @property {null|undefined|ClaimLocation} [location]
  * @property {moment.Moment} issued
  * @property {moment.Moment} expires
- * @property {string[]} [roles]
- * @property {null|undefined|string[]} [emails]
- * @property {null|undefined|boolean} [newUser]
  * @property {string} token
  * @property {string} audience
  * @property {string} subject
@@ -62,15 +58,7 @@ const {LOG_LEVEL, JSONHTTPContext, JSONHTTPFunction} = require("HTTPFunction");
  * @property {boolean} overridden
  */
 /**
- * @typedef _AxiosData
- * @property {string} access_token
- */
-/**
- * @typedef {AxiosResponse<T>} _AxiosResponse
- * @property {_AxiosData} data
- */
-/**
- * @typedef _ManagedToken
+ * @typedef _ManagedResourceToken
  * @property {string} access_token
  * @property {string} expires_on
  * @property {string} resource
@@ -78,81 +66,30 @@ const {LOG_LEVEL, JSONHTTPContext, JSONHTTPFunction} = require("HTTPFunction");
  * @property {string} client_id
  */
 /**
- * @brief Enumeration types for handling role matching roles, user ID matching rules, and system role overrides.
+ * @brief
  *
- * @type {{OVERRIDE: {OVERRIDE_IF_ADMIN: string, OVERRIDE_NONE: string, OVERRIDE_IF_EMPLOYEE: string,
- *        OVERRIDE_IF_ADMIN_OR_SYSTEM: string, OVERRIDE_IF_INTERNAL: string, OVERRIDE_IF_SYSTEM: string},
- *        ROLE_MATCH: {ROLE_ANY: string, ROLE_ALL: string, ROLE_NONE: string}, USER_MATCH: {UID_EQUAL: string,
- *        UID_NOTEQUAL: string}}}
+ * @type {{OVERRIDE: {OVERRIDE_NONE: number, OVERRIDE_IF_SYSTEM: number}, AUTHORIZATION: {MATCH_ALL: number,
+ *         MATCH_NONE: number, MATCH_ANY: number}}}
  */
 const MATCH_TYPE = {
-    ROLE_MATCH: {
-        ROLE_ANY:  "role.match.any",
-        ROLE_ALL:  "role.match.all",
-        ROLE_NONE: "role.match.none"
-    },
-    USER_MATCH: {
-        UID_EQUAL:    "object.match.equal",
-        UID_NOTEQUAL: "object.match.notEqual"
+    AUTHORIZATION: {
+        MATCH_ANY:  1,
+        MATCH_ALL:  2,
+        MATCH_NONE: 3
     },
     OVERRIDE: {
-        OVERRIDE_NONE:               "override.none",
-        OVERRIDE_IF_ADMIN:           "override.ifAdmin",
-        OVERRIDE_IF_SYSTEM:          "override.ifSystem",
-        OVERRIDE_IF_EMPLOYEE:        "override.ifEmployee",
-        OVERRIDE_IF_ADMIN_OR_SYSTEM: "override.ifAdminOrSystem",
-        OVERRIDE_IF_INTERNAL:        "override.ifAdminOrSystemOrEmployee" // Admin, System, or Employee
+        OVERRIDE_NONE:      4,
+        OVERRIDE_IF_SYSTEM: 5
     }
 };
 
 /**
- * @brief
+ * @brief JWT Claims from the Authorization header bearer token.
  *
  * @author Robert R Murrell
  *
- * @type {{country: string, postalCode: string}}
- */
-class ClaimLocation {
-    /**
-     * @brief
-     *
-     * @param {string} country
-     * @param {string} postalCode
-     */
-    constructor(country, postalCode) {
-        this.county     = country;
-        this.postalCode = postalCode;
-    }
-}
-
-/**
- * @brief
- *
- * @author Robert R Murrell
- *
- * @type {{given: string, sur: string}}
- */
-class ClaimName {
-    /**
-     * @brief
-     *
-     * @param {string} given
-     * @param {string} sur
-     */
-    constructor(given, sur) {
-        this.given = given;
-        this.sur   = sur;
-    }
-}
-
-/**
- * @brief
- *
- * @author Robert R Murrell
- *
- * @type {{audience: string, subject: string, application: string, objectId: string, accountId: string, profileId: string, franchiseId: string,
- *         authorized: moment.Moment, issued: moment.Moment, expires: moment.Moment, roles: string[], emails: string[],
- *         name: ClaimName}}
+ * @type {{audience: null|string, subject: null|string, issuer: null|string, issued: null|string, expires: null|string,
+ *         roles: *[]|string[], token: null|string}}
  */
 class ClaimsToken {
     constructor(source) {
@@ -160,52 +97,31 @@ class ClaimsToken {
         this.audience    = null;
         this.subject     = null;
         this.issuer      = null;
-        this.token       = null;
-        this.objectId    = null;
-        this.accountId   = null;
-        this.profileId   = null;
-        this.franchiseId = null;
         this.issued      = null;
         this.expires     = null;
-        this.name        = null;
-        this.location    = null;
-        this.roles       = [];
-        this.emails      = [];
-        this.newUser     = false;
+        this.roles       = []; // Not part of the claim but will be built by your application.
+        this.token       = null;
         Object.assign(this, source);
     }
 
-    toJSON() {
-        return {objectId: this.objectId, accountId: this.accountId, profileId: this.profileId,
-                franchiseId: this.franchiseId, issued: this.issued.format(), expires: this.expires.format(),
-                name: this.name, location: this.location, roles: this.roles, emails: this.emails, newUser: this.newUser};
-    }
-
     /**
      * @brief
      *
-     * @returns {string}
+     * @returns {{audience: null|string, subject: null|string, issuer: null|string, issued: null|string,
+     *            expires: null|string, roles: *[]|string[]}}
+     */
+    toJSON() {
+        return {audience: this.audience, subject: this.subject, issuer: this.issuer, issued: this.issued.format(),
+                expires: this.expires.format(), roles: this.roles};
+    }
+
+    /**
+     * @brief Returns the framework version of this claims token.
+     *
+     * @returns {string} the framework version of this claims token.
      */
     get version() {
         return this._version;
-    }
-
-    /**
-     * @brief Gets the first email in the array.
-     *
-     * @returns {string}
-     */
-    get email() {
-        return this.emails[0];
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {boolean}
-     */
-    get isNewUser() {
-        return this.newUser;
     }
 
     /**
@@ -234,10 +150,7 @@ class ClaimsToken {
         // Deep copy the objects and arrays.
         claims.issued   = moment(source.issued);
         claims.expires  = moment(source.expires);
-        claims.name     = new ClaimName(source.name.given, source.name.sur);
-        claims.location = new ClaimLocation(source.location.country, source.location.postalCode);
         claims.roles    = JSON.parse(JSON.stringify(source.roles));
-        claims.emails   = JSON.parse(JSON.stringify(source.emails));
 
         return claims;
     }
@@ -247,6 +160,7 @@ class ClaimsToken {
      *
      * @param {{null | {payload: string, signature: MSFIDOSignature | ArrayBuffer | string, header: *} | _XCLAToken} source
      * @param {string} claim
+     *
      * @returns {ClaimsToken}
      *
      * @private
@@ -254,7 +168,6 @@ class ClaimsToken {
     static _create(source, claim) {
         /** @type {_ClaimsPayload} */
         let xclatoken = {
-            objectId: source.oid,
             issued:   moment.unix(source.iat),
             expires:  moment.unix(source.exp),
             audience: source.aud,
@@ -267,11 +180,14 @@ class ClaimsToken {
     }
 
     /**
-     * @brief
+     * @brief Decodes a JWT token and records the claims values.
      *
-     * @param {string} bearerToken
+     * @description This framework does not validate the signature of the token. Signature validation should be done by
+     *              an API Manager, in Microsoft Azure's case, at least API Management.
      *
-     * @returns {ClaimsToken}
+     * @param {string} bearerToken The bearer token from the request.
+     *
+     * @returns {ClaimsToken} A ClaimsToken representing the decoded claims from the JWT toke.
      */
     static parse(bearerToken) {
         /**@type {null | {payload: string, signature: MSFIDOSignature | ArrayBuffer | string, header: *} | _XCLAToken} */
@@ -281,45 +197,50 @@ class ClaimsToken {
 }
 
 /**
- * @brief
+ * @brief Base class for matching authorization requests.
  *
  * @author Robert R Murrell
  */
-class RoleMatch {
+class AuthorizationMatch {
     constructor() {};
 
     /**
-     * @brief
+     * @brief Compares the assertion to the authorizations an determines if the match according to the rules.
      *
-     * @param {string[]} assertion The roles of the user.
-     * @param {string[]} roles The roles required to authorize.
+     * @description Implementors, override this method an specify your own rules. The default in the class is to err on
+     *              the side of caution an never match, always returning <code>false</code>.
      *
-     * @return {boolean}
+     * @param {string[]} assertion The role or subject the requester is asserting they are.
+     * @param {string[]} authorizations The roles or subjects the assertion must match against to be considered a match
+     *                   for this rule.
+     *
+     * @return {boolean} <code>True</code> if the assertion matches the rules, <code>false</code> otherwise.
      */
-    authorize(assertion, roles) {
+    match(assertion, authorizations) {
         return false;
     }
 }
 
 /**
- * @brief Matching Scheme for matching any roles specified.
+ * @brief Matching scheme to ensure an assertion matches any of the authorizations specified.
  *
  * @author Robert R Murrell
  */
-class RoleMatchAny  extends RoleMatch {
+class MatchAny  extends AuthorizationMatch {
     constructor() {super()};
 
     /**
-     * @brief
+     * @brief Asserts <code>true</code> if the assertion matches any of the authorizations.
      *
-     * @param {string[]} assertion The roles of the user.
-     * @param {string[]} roles The roles required to authorize.
+     * @param {string[]} assertion The role or subject the requester is asserting they are.
+     * @param {string[]} authorizations The roles or subjects the assertion must match against to be considered a match
+     *                   for this rule.
      *
-     * @return {boolean}
+     * @return {boolean} <code>True</code> if the assertion matches any authorizations, <code>false</code> otherwise.
      */
-    authorize(assertion, roles) {
+    match(assertion, authorizations) {
         for(const index in assertion) {
-            if(roles.includes(assertion[index]))
+            if(authorizations.includes(assertion[index]))
                 return true;
         }
         return false;
@@ -327,24 +248,25 @@ class RoleMatchAny  extends RoleMatch {
 }
 
 /**
- * @brief Matching Scheme for matching all roles specified.
+ * @brief Matching scheme to ensure an assertion matches all of the authorizations specified.
  *
  * @author Robert R Murrell
  */
-class RoleMatchAll extends RoleMatch {
+class MatchAll extends AuthorizationMatch {
     constructor() {super()};
 
     /**
-     * @brief
+     * @brief Asserts <code>true</code> if the assertion matches all of the authorizations.
      *
-     * @param {string[]} assertion The roles of the user.
-     * @param {string[]} roles The roles required to authorize.
+     * @param {string[]} assertion The role or subject the requester is asserting they are.
+     * @param {string[]} authorizations The roles or subjects the assertion must match against to be considered a match
+     *                   for this rule.
      *
-     * @return {boolean}
+     * @return {boolean} <code>True</code> if the assertion matches all authorizations, <code>false</code> otherwise.
      */
-    authorize(assertion, roles) {
+    match(assertion, authorizations) {
         for(const index in assertion) {
-            if(!roles.includes(assertion[index]))
+            if(!authorizations.includes(assertion[index]))
                 return false;
         }
         return true;
@@ -352,24 +274,26 @@ class RoleMatchAll extends RoleMatch {
 }
 
 /**
- * @brief Matching Scheme for matching no roles specified.
+ * @brief Matching scheme to ensure an assertion matches none of the authorizations specified.
  *
  * @author Robert R Murrell
  */
-class RoleMatchNone extends RoleMatch {
+class MatchNone extends AuthorizationMatch {
     constructor() {super()};
 
     /**
-     * @brief
+     * @brief Asserts <code>true</code> if the assertion matches none of the authorizations.
      *
-     * @param {string[]} assertion The roles of the user.
-     * @param {string[]} roles The roles required to authorize.
+     * @param {string[]} assertion The role or subject the requester is asserting they are.
+     * @param {string[]} authorizations The roles or subjects the assertion must match against to be considered a match
+     *                   for this rule.
      *
-     * @return {boolean}
+     * @return {boolean} <code>True</code> if the assertion matches none of the authorizations, <code>false</code>
+     *                   otherwise.
      */
-    authorize(assertion, roles) {
+    match(assertion, authorizations) {
         for(const index in assertion) {
-            if(roles.includes(assertion[index]))
+            if(authorizations.includes(assertion[index]))
                 return false;
         }
         return true;
@@ -380,177 +304,175 @@ class RoleMatchNone extends RoleMatch {
  * @brief
  *
  * @author Robert R Murrell
+ *
+ * @type {{roles: string[], matcher: null|AuthorizationMatch}}
  */
-class RoleQuery {
+class AuthorizationQuery {
     /**
      * @brief
      *
      * @param {string[]} roles
-     * @param {MATCH_TYPE.ROLE_MATCH} [match]
+     * @param {number|MATCH_TYPE.AUTHORIZATION} [match]
      */
-    constructor(roles, match = MATCH_TYPE.ROLE_MATCH.ROLE_ALL) {
+    constructor(roles, match = MATCH_TYPE.AUTHORIZATION.MATCH_NONE) {
         this.roles   = roles;
         this.matcher = null;
 
         switch(match) {
-            case MATCH_TYPE.ROLE_MATCH.ROLE_ANY:
-                this.matcher = new RoleMatchAny();
+            case MATCH_TYPE.AUTHORIZATION.MATCH_ANY:
+                this.matcher = new MatchAny();
                 break;
-            case MATCH_TYPE.ROLE_MATCH.ROLE_NONE:
-                this.matcher = new RoleMatchNone();
+            case MATCH_TYPE.AUTHORIZATION.MATCH_ALL:
+                this.matcher = new MatchAll();
                 break;
-            default: // ROLE_MATCH.MATCH_ALL: Be as restrictive as possible if not declarative enough.
-                this.matcher = new RoleMatchAll();
+            case MATCH_TYPE.AUTHORIZATION.MATCH_NONE:
+                this.matcher = new MatchNone();
                 break;
+            default: // Be as restrictive if not declarative.
+                throw CelastrinaError.newError("Invalid Authorization Match configuration.");
         }
     }
 
     /**
+     * @brief
      *
      * @param {string[]} assertion
      *
      * @returns {boolean}
      */
-    authorize(assertion) {
-        return this.matcher.authorize(assertion, this.roles);
+    match(assertion) {
+        return this.matcher.match(assertion, this.roles);
     }
 }
 
 /**
- * @brief
+ * @brief Represents the issuer of a claim.
  *
- * @author Robert R Murrell
- */
-class ObjectQuery {
-    /**
-     * @brief
-     *
-     * @param {string} objectId
-     * @param {MATCH_TYPE.USER_MATCH} [match]
-     */
-    constructor(objectId, match = MATCH_TYPE.USER_MATCH.UID_EQUAL) {
-        this.objectId = objectId;
-        this.match    = match;
-    }
-
-    /**
-     * @brief
-     *
-     * @param {string} assertion
-     *
-     * @returns {boolean}
-     */
-    authorize(assertion) {
-        let matched = assertion === this.objectId;
-        if(this.match === MATCH_TYPE.USER_MATCH.UID_EQUAL)
-            return matched;
-        else
-            return !matched;
-    }
-}
-
-/**
- * @brief
+ * @description <p>This class is used to match issuers from the JWT token and escalate to roles within your application.
+ *              This is useful to distinguish between a user from an Microsoft Azure B2C tenant and a managed identity
+ *              from a platform service such as the API Management Gateway or an Azure Function.</p>
  *
- * @type {{admin: string, employee: string, system: string}}
- */
-class SystemRoles {
-    /**
-     * @brief
-     *
-     * @param {string[]} roles
-     */
-    constructor(roles) {
-        this._admin    = roles[0];
-        this._system   = roles[1];
-        this._employee = roles[2];
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {string[]}
-     */
-    getRoles() {
-        return [this._admin, this._system, this._employee];
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {string}
-     */
-    get admin() {
-        return this._admin;
-    }
-
-    /**
-     *
-     * @returns {null|string}
-     */
-    get system() {
-        return this._system;
-    }
-
-    /**
-     *
-     * @returns {string}
-     */
-    get employee() {
-        return this._employee;
-    }
-}
-
-/**
- * @brief
+ *              <p>This allows your application to provide different responses based on who you are, or taking
+ *              different actions if it is a user vs. an internal system function.</p>
  *
  * @author Robert R Murrell
  *
- * @type {{issuer: string, audience: string, escalate: boolean, claims: {subjects: [string]}}}
+ * @type {{name: null|string, [issuer]: null|string, [audience]: null|string, match: number|MATCH_TYPE.AUTHORIZATION,
+ *         query: null|AuthorizationQuery, [subjects]: string[], [roles]: string[]}}
  */
 class Issuer {
-    constructor(source) {
-        this.issuer   = null;
-        this.audience = null;
-        this.claims   = [];
-        this.roles    = [];
-        Object.assign(this, source);
-    }
-
     /**
      * @brief
      *
-     * @param {ClaimsToken} claims
+     * @param {Object|Issuer} source
+     */
+    constructor(source) {
+        this.name     = null;
+        this.issuer   = null;
+        this.audience = null;
+        this.match    = MATCH_TYPE.AUTHORIZATION.MATCH_NONE; // Heavily restrictive when lightly declarative.
+        this.query    = null;
+        this.subjects = null;
+        this.roles    = null;
+        Object.assign(this, source);
+
+        // Checking the configs.
+        if(typeof this.name !== "string" || this.name.trim().length === 0)
+            throw CelastrinaError.newError("Invalid name for issuer.");
+        if(typeof this.issuer !== "string" || this.issuer.trim().length === 0)
+            throw CelastrinaError.newError("Invalid issuer name for issuer " + this.name + ".");
+        if(typeof this.audience !== "string" || this.audience.trim().length === 0)
+            throw CelastrinaError.newError("Invalid audience name for issuer " + this.name + ".");
+
+        // Ensure subject integrity if specified
+        if(typeof this.subjects === "undefined" || this.subjects != null)
+            this.subjects = [];
+        else if(!Array.isArray(this.subjects))
+            // You intended to do SOMETHING with subject but I cant figure it out.. err on caution.
+            throw CelastrinaError.newError("Invalid subject for issuer " + this.name + ".");
+        if(this.subjects.length > 0)
+            this.query = new AuthorizationQuery(this.subjects, this.match);
+
+        // Ensure role integrity if specified.
+        if(typeof this.roles === "undefined" || this.roles != null)
+            this.roles = [];
+        else if(!Array.isArray(this.roles))
+            // You intended to do SOMETHING with roles but I cant figure it out.. err on caution.
+            throw CelastrinaError.newError("Invalid roles for issuer " + this.name + ".");
+    }
+
+    /**
+     * @brief Checks to see if this issuer configuration is the issuer of the JWT token.
+     *
+     * @description
+     *
+     * @param {ClaimsToken} claims The claims token representing the claims from JWT.
      *
      * @return boolean
      */
     isIssuer(claims) {
         let issuer = (claims.issuer === this.issuer && claims.audience === this.audience);
-        if(issuer) {
-            // Check to see if there are secondary claims
-            if(typeof this.claims !== "undefined" && this.claims != null && Array.isArray(this.claims)) {
-                // Check if there are additional subjects.
-                let subjects = this.claims.subjects;
-                if (typeof subjects !== "undefined" && subjects != null && Array.isArray(subjects))
-                    issuer = this._matchAny(claims.subject, subjects)
-            }
-        }
+        if(issuer && (this.subjects.length > 0))
+            return this.query.match([claims.subject]);
+        return issuer;
+    }
+
+    /**
+     * @brief Checks to see if this issuer configuration is the issuer of the JWT token.
+     *
+     * @description
+     *
+     * @param {ClaimsToken} claims The claims token representing the claims from JWT.
+     *
+     * @return boolean
+     */
+    setRoles(claims) {
+        let issuer = this.isIssuer(claims);
+        if(issuer)
+            claims.roles = claims.roles.concat(this.roles);
         return issuer;
     }
 
     /**
      * @brief
      *
-     * @param {string} value
-     * @param {string[]} claims
-     * @private
+     * @param {Object|Issuer} source
      */
-    _matchAny(value, claims) {
-        for(const index in claims) {
-            if(claims[index] === value)
-                return true;
-        }
-        return false;
+    static copy(source) {
+        if(typeof source == "undefined" || source == null)
+            throw CelastrinaError.newError("Source cannot be null.");
+        let issuer = new Issuer(source);
+
+        // Deep copy the elements for security reasons.
+        issuer.roles    = JSON.parse(JSON.stringify(source.roles));
+        issuer.subjects = JSON.parse(JSON.stringify(source.subjects));
+        if(issuer.query != null)
+            issuer.query = new AuthorizationMatch(issuer.subjects, issuer.match);
+
+        return issuer;
+    }
+
+    /**
+     * @brief Static Factory method for creating instances of Issuer.
+     *
+     * @param {string} name
+     * @param {string} issuer
+     * @param {string} audience
+     * @param {number|MATCH_TYPE.AUTHORIZATION} match
+     * @param {string} subject
+     * @param {string[]} roles
+     */
+    static create(name, issuer, audience, match, subject,
+                  roles) {
+        let source = {
+            name:     name,
+            issuer:   issuer,
+            audience: audience,
+            match:    match,
+            subject:  subject,
+            roles:    roles
+        };
+        return Issuer.copy(source);
     }
 }
 
@@ -571,22 +493,23 @@ class Issuer {
  * @property {string} iv
  */
 /**
- * @typedef _SentryConfigClaim
- * @property {string} sub
- * @property {string} oid
+ * @typedef _SentryConfigMSI
+ * @property {string} endpoint
+ * @property {string} secret
  */
 /**
  * @typedef _SentryConfig
  * @property {_SentryConfigApplication} application
  * @property {_SentryConfigCrypto} crypto
- * @property {string[]} system
+ * @property {string[]} roles
  * @property {{user: Issuer, system: Issuer}} issuers
+ * @property {boolean} useApplicationClaims
  */
 
 /**
  * @brief
  *
- * @type {{authority: string, tenant: string, roles: SystemRoles}}
+ * @type {{authority: string, tenant: string, roles: string[]}}
  */
 class SentryConfig {
     /**
@@ -599,61 +522,23 @@ class SentryConfig {
     constructor(config, msi_endpoint = null, msi_secret = null) {
         /**@type {_SentryConfig}*/
         let _config = JSON.parse(config);
-        this._application = _config.application;
-        this._crypto      = _config.crypto;
-        this._roles       = new SystemRoles(_config.system);
-        this._msi         = {endpoint: msi_endpoint, secret: msi_secret};
-        this._issuers     = [];
-
+        
+        /** @type {_SentryConfigApplication} */
+        this.application = _config.application;
+        /** @type {_SentryConfigCrypto} */
+        this.crypto      = _config.crypto;
+        this.roles       = _config.roles;
+        /** @type {Issuer[]} */
+        this.issuers     = [];
+        /** @type {boolean} */
+        this.useApplicationClaims = _config.useApplicationClaims;
+        /** @type {_SentryConfigMSI} */
+        this.msi         = {endpoint: msi_endpoint, secret: msi_secret};
+        
         // Create the issuer objects.
         for(const index in _config.issuers) {
-            this._issuers.unshift(new Issuer(_config.issuers[index]));
+            this.issuers.push(new Issuer(_config.issuers[index]));
         }
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {{authority: string, credentials: _SentryConfigCredential, tenant: string}|_SentryConfigApplication}
-     */
-    get application() {
-        return this._application;
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {{iv: string, algorithm: string, key: string}|_SentryConfigCrypto}
-     */
-    get crypto() {
-        return this._crypto;
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {SystemRoles}
-     */
-    get roles() {
-        return this._roles;
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {{user: Issuer, system: Issuer}}
-     */
-    get issuers() {
-        return this._issuers;
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {{endpoint: string, secret: string}}
-     */
-    get msi() {
-        return this._msi;
     }
 }
 
@@ -673,11 +558,11 @@ class Sentry {
     constructor(config) {
         if(!(config instanceof SentryConfig))
             throw CelastrinaError.newError("Not authorized.", 401);
-        /**@type {null|ClaimsToken}*/
-        this.claim         = null;
+        /** @type {null|ClaimsToken} */
+        this.claims        = null;
         this.appTokens     = {};
         this.managedTokens = {};
-        this._config       = config;
+        this.config        = config;
     }
 
     /**
@@ -687,85 +572,57 @@ class Sentry {
      *
      * @returns {Promise<void>}
      */
-    async validate(bearerToken) {
+    async authenticate(bearerToken) {
         return new Promise(
             (resolve, reject) => {
                 if(typeof bearerToken === "undefined" || bearerToken == null || !bearerToken.trim())
                     reject(CelastrinaError.newError("Not authorized.", 401));
                 else {
-                    this.claim  = ClaimsToken.parse(bearerToken);
+                    this.claims  = ClaimsToken.parse(bearerToken);
                     let now = moment();
-                    if(now.isSameOrAfter(this.claim.expires))
+                    if(now.isSameOrAfter(this.claims.expires))
                         reject(CelastrinaError.newError("Not Authorized. Token expired.", 401));
                     else {
-                        // Checking to see which issues match this claim.
                         let issuers = this.config.issuers;
-                        let issuer  = null;
                         let matched = false;
-                        // Loop through and find the correct issuer.
                         for(const index in issuers) {
-                           /**@type Issuer*/
-                           issuer = issuers[index];
-                           if((matched = issuer.isIssuer(this.claim))) {
-                               this.claim.roles = this.claim.roles.concat(issuer.roles);
-                               break;
-                           }
+                           /** @type Issuer */
+                           if(issuers[index].setRoles(this.claims) && !matched)
+                                matched = true;
                         }
 
-                        if(!matched)
-                            reject(CelastrinaError.newError("Forbidden.", 403));
-                        else
+                        if(matched)
                             resolve();
+                        else
+                            reject(CelastrinaError.newError("Forbidden.", 403));
                     }
                 }
             });
     }
 
     /**
-     * @brief
+     * @brief Decrypts an application specific claims object.
      *
-     * @returns {SentryConfig}
+     * @param {string} claims The claims to decrypt. Typically a cookie shared with this domain.
+     *
+     * @returns {Promise<Object>} The application specific claims object.
      */
-    get config() {
-        return this._config;
-    }
-
-    /**
-     * @brief Loads the application claim from the cookie and decripts it, setting the various application information.
-     *
-     * @description Loads the <code>cookie</code> parameter token and attempts to decrypt if. If it is
-     *              successfully decrypted, the accountId, franchiseId, profileId, and roles will be set in the claim.
-     *
-     * @param {string} claim The claim to load. For NoDoubtShowcase, this should be from the cookie set to this domain.
-     *
-     * @returns {Promise<boolean>} <code>True</code> is the application specific claims was present, <code>false</code>
-     *                             otherwise. An CelastrinaError will be thrown if there is an issue decrypting the application
-     *                             claim.
-     */
-    async loadApplicationClaims(claim) {
+    async loadApplicationClaims(claims) {
         return new Promise(
             (resolve, reject) => {
                 try {
-                    if(typeof claim !== "undefined" && claim != null) {
-                        let iv = new Buffer(this.config.crypto.iv);
-                        let ivstring = iv.toString("hex");
-                        let cipher = Buffer.from(claim, "base64").toString("hex");
-                        let key = crypto.createHash("sha256").update(this.config.crypto.key).digest();
-                        let decipher = crypto.createDecipheriv("aes256", key, ivstring);
+                    if(typeof claims !== "undefined" && claims != null) {
+                        let iv        = new Buffer(this.config.crypto.iv);
+                        let ivstring  = iv.toString("hex");
+                        let cipher    = Buffer.from(claims, "base64").toString("hex");
+                        let key       = crypto.createHash("sha256").update(this.config.crypto.key).digest();
+                        let decipher  = crypto.createDecipheriv("aes256", key, ivstring);
                         let decrypted = decipher.update(cipher, "hex", "utf8");
                         decrypted += decipher.final("utf8");
                         resolve(decrypted);
-
-                        /**@type {_ApplicationClaim}*/
-                        let appobj = JSON.parse(decrypted);
-
-                        this.claim.accountId = appobj.accountId;
-                        this.claim.profileId = appobj.profileId;
-                        this.claim.franchiseId = appobj.franchiseId;
-                        this.claim.roles = this.claim.roles.concat(appobj.roles);
                     }
-
-                    resolve();
+                    else
+                        reject(CelastrinaError.newError("Invalid application claims."));
                 }
                 catch (exception) {
                     reject(exception);
@@ -774,19 +631,17 @@ class Sentry {
     }
 
     /**
-     * @brief
+     * @brief Encrypts an application specific claims object.
      *
-     * @param {_ApplicationClaim} claims
+     * @param {Object} claims The application specific claims object to encrypt.
      *
-     * @returns {Promise<void>}
+     * @returns {Promise<string>} Base64 encoded encrypted claims object.
      */
     async createApplicationClaims(claims) {
         return new Promise(
             (resolve, reject) => {
-                if(typeof claims === "undefined")
-                    reject(CelastrinaValidationError.newValidationError("Claims cannot be null.", "claims"));
-                else {
-                    try {
+                try {
+                    if(typeof claims !== "undefined" && claims != null) {
                         let iv        = new Buffer(this.config.crypto.iv);
                         let ivstring  = iv.toString("hex");
                         let key       = crypto.createHash("sha256").update(this.config.crypto.key).digest();
@@ -795,19 +650,33 @@ class Sentry {
                         encrypted += cipher.final("hex");
                         resolve(Buffer.from(encrypted, "hex").toString("base64"));
                     }
-                    catch (exception) {
-                        reject(exception);
-                    }
+                    else
+                        reject(CelastrinaError.newError("Invalid application claims."));
+                }
+                catch (exception) {
+                    reject(exception);
                 }
             });
     }
 
     /**
-     * @brief
+     * @brief Registers an application resource.
      *
-     * @param {string} resource
+     * @description <p>An application resources registration is the resource-based bearer token from a AZAD Domain
+     *              registered application. Use the client ID (Application ID), AZAD tenant (domain name), and a
+     *              resource ID (URL to a resource) will create a bearer token. Add that token to any REST API call
+     *              when an app resources has been granted access.</p>
+     *
+     *              <p>This method uses the application authority,tenant, id, and secret from the {SentryConfig}
+     *              object to create application resources.</p>
+     *
+     *              <p>Sentry also uses Microsoft adal-node to generate the token.</p>
+     *
+     * @param {string} resource The name of the resource.
      *
      * @returns {Promise<void>}
+     *
+     * @see SentryConfig
      */
     async registerAppResource(resource) {
         return new Promise(
@@ -890,7 +759,7 @@ class Sentry {
      * @param {{}} headers
      */
     setManagedResourceAuthorization(resource, headers) {
-        /**@type {_ManagedToken}*/
+        /**@type {_ManagedResourceToken}*/
         let tokenObject = this.managedTokens[resource];
 
         if(typeof tokenObject === "undefined")
@@ -915,7 +784,7 @@ class Sentry {
      * @param {{}} headers
      */
     setUserAuthorization(headers) {
-        headers["Authorization"] = "Bearer " + this.claim.token;
+        headers["Authorization"] = "Bearer " + this.claims.token;
     }
 
     /**
@@ -927,34 +796,9 @@ class Sentry {
      */
     isAuthorizedByOverride(override= MATCH_TYPE.OVERRIDE.OVERRIDE_NONE) {
         try {
-            if (override !== MATCH_TYPE.OVERRIDE.OVERRIDE_NONE) {
-                let overrideQuery = new RoleQuery([], MATCH_TYPE.ROLE_MATCH.ROLE_ANY);
-                let sysroles      = this._config.roles;
-
-                switch (override) {
-                    case MATCH_TYPE.OVERRIDE.OVERRIDE_IF_INTERNAL:
-                        overrideQuery.roles.push(sysroles.admin);
-                        overrideQuery.roles.push(sysroles.employee);
-                        if(sysroles.system != null)
-                            overrideQuery.roles.push(sysroles.system);
-                        break;
-                    case MATCH_TYPE.OVERRIDE.OVERRIDE_IF_ADMIN_OR_SYSTEM:
-                        overrideQuery.roles.push(sysroles.admin);
-                        if(sysroles.system != null)
-                            overrideQuery.roles.push(sysroles.system);
-                        break;
-                    case MATCH_TYPE.OVERRIDE.OVERRIDE_IF_SYSTEM:
-                        if(sysroles.system != null)
-                            overrideQuery.roles.push(sysroles.system);
-                        break;
-                    case MATCH_TYPE.OVERRIDE.OVERRIDE_IF_EMPLOYEE:
-                        overrideQuery.roles.push(sysroles.employee);
-                        break;
-                    default: // MATCH_TYPE.USER_OVERRIDE.SKIP_ADMIN: Be as restrictive as possible if not declarative enough.
-                        overrideQuery.roles.push(sysroles.admin);
-                        break;
-                }
-                return overrideQuery.authorize(this.claim.roles);
+            if(override !== MATCH_TYPE.OVERRIDE.OVERRIDE_NONE) {
+                let query = new AuthorizationQuery(this.config.roles, MATCH_TYPE.AUTHORIZATION.MATCH_ANY);
+                return query.match(this.claims.roles);
             }
             else
                 return false;
@@ -967,13 +811,13 @@ class Sentry {
     /**
      * @brief Checks to see if the User ID in the token matches the User ID in parameter <code>uid</code>.
      *
-     * @param {ObjectQuery} objectQuery The User ID to test against the token object.
+     * @param {AuthorizationQuery} query The User ID to test against the token object.
      *
      * @returns {boolean} True if authorized by user ID or override role, false if not.
      */
-    isAuthorizedByObjectId(objectQuery) {
+    isAuthorizedBySubject(query) {
         try {
-            return objectQuery.authorize(this.claim.objectId);
+            return query.match([this.claims.subject]);
         }
         catch(exception) {
             throw CelastrinaError.wrapError(exception, 403);
@@ -986,13 +830,13 @@ class Sentry {
      *
      * This method invokes the <code>authorize</code> function of the Role Match class specified.
      *
-     * @param {RoleQuery} roleQuery The matching scheme and roles to match.
+     * @param {AuthorizationQuery} query The matching scheme and roles to match.
      *
      * @returns {boolean} True if authorized by role or override role, false if not.
      */
-    isAuthorizedByRole(roleQuery) {
+    isAuthorizedByRole(query) {
         try {
-            return roleQuery.authorize(this.claim.roles);
+            return query.match(this.claims.roles);
         }
         catch(exception) {
             throw CelastrinaError.wrapError(exception, 403);
@@ -1001,22 +845,22 @@ class Sentry {
 
     /**
      * @brief Checks to see if the asserted user ID and roles match the token user ID and roles in accordance to the
-     *        <code>ObjectQuery</code> and <code>RoleQuery</code> matching schemes.
+     *        <code>SubjectQuery</code> and <code>RoleQuery</code> matching schemes.
      *
      * If an override is specified in the <code>override</code> parameter, then the user is first checked for role
      * match in accordance with the override scheme specified. If the user matched the override scheme, then the user ID
      * check is skipped and returns true, otherwise, the user ID and role checks are made in accordance to the
      * <code>objectQuery</code> and <code>roleQuery</code> parameters schemes.
      *
-     * @param {ObjectQuery} objectQuery The use ID and scheme to match.
-     * @param {RoleQuery} roleQuery The roles and schemes to match.
+     * @param {AuthorizationQuery} subjectQuery The use ID and scheme to match.
+     * @param {AuthorizationQuery} roleQuery The roles and schemes to match.
      *
      * @return {boolean} True if authorized by user id and role, or override role, false if not.
      */
-    isAuthorizedByObjectIdAndRole(objectQuery, roleQuery) {
+    isAuthorizedBySubjectAndRole(subjectQuery, roleQuery) {
         try {
             if(this.isAuthorizedByRole(roleQuery))
-                return this.isAuthorizedByObjectId(objectQuery);
+                return this.isAuthorizedBySubject(subjectQuery);
             else
                 return false;
         }
@@ -1028,16 +872,16 @@ class Sentry {
     /**
      * @brief Promise based version of <code>isAuthorizedByUserIdAndRole</code>.
      *
-     * @param {ObjectQuery} objectQuery The use ID and scheme to match.
-     * @param {RoleQuery} roleQuery The roles and schemes to match.
+     * @param {AuthorizationQuery} subjectQuery The use ID and scheme to match.
+     * @param {AuthorizationQuery} roleQuery The roles and schemes to match.
      *
      * @returns {Promise<boolean>}
      */
-    async authorize(objectQuery, roleQuery) {
+    async authorize(subjectQuery, roleQuery) {
         return new Promise(
             (resolve, reject) => {
                 try {
-                    resolve(this.isAuthorizedByObjectIdAndRole(objectQuery, roleQuery));
+                    resolve(this.isAuthorizedBySubjectAndRole(subjectQuery, roleQuery));
                 }
                 catch(exception) {
                     reject(exception);
@@ -1048,15 +892,15 @@ class Sentry {
     /**
      * @brief Promise based version of <code>isAuthorizedByRole</code>.
      *
-     * @param {RoleQuery} roleQuery The roles and schemes to match.
+     * @param {AuthorizationQuery} query The roles and schemes to match.
      *
      * @returns {Promise<boolean>}
      */
-    async authorizeByRole(roleQuery) {
+    async authorizeByRole(query) {
         return new Promise(
             (resolve, reject) => {
                 try {
-                    resolve(this.isAuthorizedByRole(roleQuery));
+                    resolve(this.isAuthorizedByRole(query));
                 }
                 catch(exception) {
                     reject(exception);
@@ -1067,15 +911,15 @@ class Sentry {
     /**
      * @brief Promise based version of <code>isAuthorizedByUserId</code>.
      *
-     * @param {ObjectQuery} userQuery The use ID and scheme to match.
+     * @param {AuthorizationQuery} query The use ID and scheme to match.
      *
      * @returns {Promise<boolean>}
      */
-    async authorizeByObjectId(userQuery) {
+    async authorizeBySubject(query) {
         return new Promise(
             (resolve, reject) => {
                 try {
-                    resolve(this.isAuthorizedByObjectId(userQuery));
+                    resolve(this.isAuthorizedBySubject(query));
                 }
                 catch(exception) {
                     reject(exception);
@@ -1091,7 +935,7 @@ class Sentry {
  *
  * @author Robert R Murrell
  */
-class AuthenticatedGroup {
+class AuthorizationGroup {
     constructor() {}
 
     /**
@@ -1120,9 +964,9 @@ class AuthenticatedGroup {
 /**
  * @brief Allows any authenticated request to be processed.
  *
- * @decription <strong>WARNING</strong>: This class uses {Sentry} which DOES NOT validate the JWT token. All secure
- *             services <strong>MUST</strong> be protected by an APIM Gateway that will validate the token prior to
- *             invoking this function.
+ * @description <strong>WARNING</strong>: This class uses {Sentry} which <strong>DOES NOT</strong> validate the JWT
+ *              token signature. All secure services <strong>MUST</strong> be protected by an APIM Gateway that will
+ *              validate the token prior to invoking this function.
  *
  * @author Robert R Murrell
  */
@@ -1136,6 +980,62 @@ class AuthenticatedJSONFunction extends JSONHTTPFunction {
         super(config);
     }
 
+    /**
+     * @brief Overridden to initialize the sentry object. This is done so that its available during initialization to
+     *        add any additional roles, issuers, etc prior to authentication or authorization.
+     *
+     * @param {_SecureContext & JSONHTTPContext} context
+     *
+     * @returns {Promise<void>}
+     */
+    async bootstrap(context) {
+        return new Promise(
+            (resolve, reject) => {
+                super.bootstrap(context)// Call super per the JS DOC.
+                    .then(() => {
+                        return Promise.all([context.getSecureEnvironmentProperty("CLA-SENTRY-CONFIG"),
+                                                   context.getEnvironmentProperty("MSI_ENDPOINT"),
+                                                   context.getEnvironmentProperty("MSI_SECRET")]);
+                    })
+                    .then((resolved) => {
+                        context.sentry = new Sentry(new SentryConfig(resolved[0], resolved[1], resolved[2]));
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            });
+    }
+
+    /**
+     * @brief Retrieves the application token for decryption.
+     *
+     * @param {_SecureContext & JSONHTTPContext} context
+     *
+     * @returns {Promise<null|string>} <code>null</code> or the encrypted application specific token
+     */
+    async getApplicationToken(context) {
+        return new Promise(
+            (resolve) => {
+                resolve(null);
+            });
+    }
+    
+    /**
+     * @brief
+     *
+     * @param {_SecureContext & JSONHTTPContext} context
+     * @param {Object} token
+     *
+     * @returns {Promise<boolean>}
+     */
+    async authenticateApplicationToken(context, token) {
+        return new Promise(
+            (resolve) => {
+                resolve(false);
+            });
+    }
+    
     /**
      * @brief
      *
@@ -1155,19 +1055,34 @@ class AuthenticatedJSONFunction extends JSONHTTPFunction {
                     else {
                         // Cutting off "Bearer "
                         bearer = bearer.slice(7).trim();
-                        Promise.all([context.getSecureEnvironmentProperty("CLA-SENTRY-CONFIG"),
-                                            context.getEnvironmentProperty("MSI_ENDPOINT"),
-                                            context.getEnvironmentProperty("MSI_SECRET")])
-                            .then((resolved) => {
-                                context.sentry = new Sentry(new SentryConfig(resolved[0], resolved[1], resolved[2]));
-                                return context.sentry.validate(bearer);
-                            })
+                        context.sentry.authenticate(bearer)
                             .then(() => {
-                                // Sentry requires a token thats decode-able so, if it can be created you are authenticated.
-                                // WARNING: Sentry does NOT validate the token. That MUST be done by the APIM Gateway.
-                                context.log("Request authenticated.", LOG_LEVEL.LEVEL_INFO,
-                                            "AuthenticatedJSONFunction.authenticate(context)");
-                                resolve();
+                                // Sentry requires a token that is decode-able so, if it can be decoded by jsonwebtoken
+                                // the we assume you are authenticated.
+                                // WARNING: Sentry does NOT validate the token signature. Validation should be done
+                                //          further up the architecture like in the APIM.
+                                context.log("Request authenticated by JWT.", LOG_LEVEL.LEVEL_INFO,
+                                    "AuthenticatedJSONFunction.authenticate(context)");
+                                
+                                // Checking to see if there is an encrypted token
+                                if(context.sentry.config.useApplicationClaims) {
+                                    this.getApplicationToken(context)
+                                        .then((encrypted) => {
+                                            return context.sentry.loadApplicationClaims(encrypted);
+                                        })
+                                        .then((resolved) => {
+                                            return this.authenticateApplicationToken(context, resolved);
+                                        })
+                                        .then((resolved) => {
+                                            if(resolved)
+                                                resolve();
+                                            else
+                                                reject(CelastrinaError.newError("Not Authorized.", 401));
+                                        })
+                                        .catch((exception) => {
+                                            reject(exception);
+                                        });
+                                }
                             })
                             .catch((exception) => {
                                 reject(exception);
@@ -1188,7 +1103,7 @@ class AuthenticatedJSONFunction extends JSONHTTPFunction {
  *              class <strong>DOES NOT</strong> validate the JWT token. All secure services <strong>MUST</strong> be
  *              protected by an APIM Gateway that will validate the token prior to invoking this function.</p>
  *
- *              <p>This class defaults to AuthenticatedGroup if no group is specified. This allows anyone with a
+ *              <p>This class defaults to AuthorizationGroup if no group is specified. This allows anyone with a
  *              valid JWT token to perform this task.</p>
  *
  * @author Robert R Murrell
@@ -1198,9 +1113,9 @@ class AuthorizedJSONFunction extends AuthenticatedJSONFunction {
      * @brief
      *
      * @param {null|string} [config]
-     * @param {AuthenticatedGroup} [group]
+     * @param {AuthorizationGroup} [group]
      */
-    constructor(config, group = new AuthenticatedGroup()) {
+    constructor(config, group = new AuthorizationGroup()) {
         super(config);
         this._group = group;
     }
@@ -1208,7 +1123,7 @@ class AuthorizedJSONFunction extends AuthenticatedJSONFunction {
     /**
      * @brief
      *
-     * @returns {AuthenticatedGroup}
+     * @returns {AuthorizationGroup}
      */
     get group() {
         return this._group;
@@ -1221,52 +1136,48 @@ class AuthorizedJSONFunction extends AuthenticatedJSONFunction {
      *
      * @returns {Promise<void>}
      */
-    async authenticate(context) {
+    async authorize(context) {
         return new Promise((resolve, reject) => {
             context.log("Authorizing request.", LOG_LEVEL.LEVEL_INFO,
                         "AuthorizedJSONFunction.authenticate(context)");
-            super.authenticate(context)
-                .then(() => {
-                    context.overridden = false;
-                    // Checking to see if weve been overridden...
-                    if(context.sentry.isAuthorizedByOverride(MATCH_TYPE.OVERRIDE.OVERRIDE_IF_ADMIN_OR_SYSTEM)) {
-                        context.log("Request authorized by override.");
-                        context.overridden = true;
-                        resolve();
-                    }
-                    else
-                        return this._group.authorize(context.sentry);
-                })
-                .then(() => {
-                    return this._group.authorize(context.sentry);
-                })
-                .then((resolved) => {
-                    if(resolved) {
-                        context.log("Authorization successful.", LOG_LEVEL.LEVEL_INFO,
-                            "AuthorizedJSONFunction.authenticate(context)");
-                        resolve();
-                    }
-                    else
-                        reject(CelastrinaError.newError("Forbidden.", 403));
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            context.overridden = false;
+            // Checking to see if we've been overridden...
+            if(context.sentry.isAuthorizedByOverride(MATCH_TYPE.OVERRIDE.OVERRIDE_IF_SYSTEM)) {
+                context.log("Request authorized by override.");
+                context.overridden = true;
+                resolve();
+            }
+            else {
+                this._group.authorize(context.sentry)
+                    .then((resolved) => {
+                        if(resolved) {
+                            context.log("Authorization successful.", LOG_LEVEL.LEVEL_INFO,
+                                "AuthorizedJSONFunction.authenticate(context)");
+                            resolve();
+                        }
+                        else
+                            reject(CelastrinaError.newError("Forbidden.", 403));
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
         });
     }
 }
 
 module.exports = {
-    ClaimName:             ClaimName,
-    ClaimLocation:         ClaimLocation,
-    ClaimsToken:           ClaimsToken,
-    SystemRoles:           SystemRoles,
-    SentryConfig:          SentryConfig,
-    RoleQuery:             RoleQuery,
-    ObjectQuery:           ObjectQuery,
-    Sentry:                Sentry,
-    MATCH_TYPE:            MATCH_TYPE,
-    AuthenticatedGroup:    AuthenticatedGroup,
+    ClaimsToken:               ClaimsToken,
+    SentryConfig:              SentryConfig,
+    Sentry:                    Sentry,
+    MATCH_TYPE:                MATCH_TYPE,
+    AuthorizationMatch:        AuthorizationMatch,
+    MatchAny:                  MatchAny,
+    MatchAll:                  MatchAll,
+    MatchNone:                 MatchNone,
+    AuthorizationQuery:        AuthorizationQuery,
+    Issuer:                    Issuer,
+    AuthorizationGroup:        AuthorizationGroup,
     AuthorizedJSONFunction:    AuthorizedJSONFunction,
     AuthenticatedJSONFunction: AuthenticatedJSONFunction
 };

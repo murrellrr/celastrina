@@ -1,5 +1,25 @@
 /*
- * Copyright (c) 2020, Robert R Murrell, llc. All rights reserved.
+ * Copyright (c) 2020, Robert R Murrell.
+ *
+ * MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 "use strict";
@@ -214,7 +234,7 @@ class HTTPContext extends BaseContext {
      */
     send(body = null, status = 200) {
         this._context.res.status = status;
-        this._context.res.headers["X-nodoubtshowcase-request-uuid"] = this._requestId;
+        this._context.res.headers["X-celastrina-request-uuid"] = this._requestId;
 
         if(status !== 204) {
             if (body === null) {
@@ -463,7 +483,7 @@ class HTTPFunction extends BaseFunction {
     async _trace(context) {
         return new Promise((resolve) => {
             context.log("WARNING: TRACE Method not implemented.", this._topic, LOG_LEVEL.LEVEL_WARN);
-            context.monitorResponse.addPassedDiagnostic("Defualt HTTPFunction",
+            context.monitorResponse.addPassedDiagnostic("Default HTTPFunction",
                 "HTTPFunction._trace(context): Not implemented.");
             resolve();
         });
@@ -587,7 +607,7 @@ class JSONHTTPContext extends HTTPContext {
      */
     send(body = null, status = 200) {
         this._context.res.status = status;
-        this._context.res.headers["X-nodoubtshowcase-request-uuid"] = this._requestId;
+        this._context.res.headers["X-celastrina-request-uuid"] = this._requestId;
         this._context.res.body = body;
     }
 }

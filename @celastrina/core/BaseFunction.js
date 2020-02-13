@@ -1,5 +1,25 @@
 /*
- * Copyright (c) 2020, Robert R Murrell, llc. All rights reserved.
+ * Copyright (c) 2020, Robert R Murrell.
+ *
+ * MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 "use strict";
@@ -491,6 +511,25 @@ class BaseFunction {
     }
 
     /**
+     * @brief Lifecycle operation to perform key operations of setting up and bootstrapping this function.
+     *
+     * @description <p>Override this function to perform any pre-initialization tasks. The lifecycle is invoked after
+     *              the context is created but before initialization. Implementors MUST call the super of
+     *              or this function may not work as intended or produce errors.</p>
+     *
+     *              <p>Do not rely on any internal features of this function while inside this promise.</p>
+     *
+     * @param {BaseContext} context The context of the function.
+     *
+     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     */
+    async bootstrap(context) {
+        return new Promise((resolve) => {
+            resolve();
+        });
+    }
+
+    /**
      * @brief Lifecycle operation to initialize any objects required to perform the function.
      *
      * @description Override this function to perform any initialization actions.
@@ -508,7 +547,9 @@ class BaseFunction {
     /**
      * @brief Lifecycle operation to authenticate a requester before performing the action.
      *
-     * @description Override this function to perform any authentication actions.
+     * @description Override this function to perform any authentication actions. If you need to validate anything
+     *              related to authentication you'll need to do it here as validation lifecycle is invoked AFTER
+     *              authentication and authorization.
      *
      * @param {BaseContext} context The context of the function.
      *
@@ -521,7 +562,24 @@ class BaseFunction {
     }
 
     /**
-     * @brief Lifecycle operation to validate the payload before performing the rest of the lifecycle.
+     * @brief Lifecycle operation to authorize a requester before performing the action.
+     *
+     * @description Override this function to perform any authorization actions. If you need to validate anything
+     *              related to authorization you'll need to do it here as validation lifecycle is invoked AFTER
+     *              authorization.
+     *
+     * @param {BaseContext} context The context of the function.
+     *
+     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     */
+    async authorize(context) {
+        return new Promise((resolve) => {
+            resolve();
+        });
+    }
+
+    /**
+     * @brief Lifecycle operation to validate the business input before performing the rest of the lifecycle.
      *
      * @description Override this function to perform any validation actions.
      *
@@ -638,7 +696,7 @@ class BaseFunction {
      *
      * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
      */
-    async managedInit(context) {
+    async secureInitialize(context) {
         return new Promise(
             (resolve, reject) => {
                 let params = new URLSearchParams();
@@ -675,11 +733,16 @@ class BaseFunction {
             this.createContext(context)
                 .then((local) => {
                     _context = local;
+                    _context.log("Bootstrap Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
+                        "BaseFunction.execute(context)");
+                    return this.bootstrap(_context);
+                })
+                .then(() => {
                     let _promise;
                     if (this._managed) {
                         _context.log("Function Invoked in Managed Mode. Initializing Vault.",
                                      LOG_LEVEL.LEVEL_INFO, "BaseFunction.execute(context)");
-                        _promise = this.managedInit(_context);
+                        _promise = this.secureInitialize(_context);
                     } else {
                         _context.log("Function Invoked.",
                                      LOG_LEVEL.LEVEL_INFO, "BaseFunction.execute(context)");
@@ -690,14 +753,19 @@ class BaseFunction {
                     // Execute the rest of the lifecycle.
                     _promise
                         .then(() => {
-                            _context.log("Validate Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
-                                         "BaseFunction.execute(context)");
-                            return this.validate(_context);
-                        })
-                        .then(() => {
                             _context.log("Authenticate Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
                                          "BaseFunction.execute(context)");
                             return this.authenticate(_context);
+                        })
+                        .then(() => {
+                            _context.log("Authorize Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
+                                "BaseFunction.execute(context)");
+                            return this.authorize(_context);
+                        })
+                        .then(() => {
+                            _context.log("Validate Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
+                                "BaseFunction.execute(context)");
+                            return this.validate(_context);
                         })
                         .then(() => {
                             _context.log("Load Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
@@ -779,9 +847,12 @@ class BaseFunction {
 }
 
 module.exports = {
-    LOG_LEVEL:    LOG_LEVEL,
-    BaseContext:  BaseContext,
-    BaseFunction: BaseFunction
+    LOG_LEVEL:                    LOG_LEVEL,
+    MonitorResponse:              MonitorResponse,
+    DefaultSecurePropertyHandler: DefaultSecurePropertyHandler,
+    VaultPropertyHandler:         VaultPropertyHandler,
+    BaseContext:                  BaseContext,
+    BaseFunction:                 BaseFunction
 };
 
 

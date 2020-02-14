@@ -89,7 +89,8 @@ class HTTPContext extends BaseContext {
 
         this._context.res = {status: 200,
                              headers: {"Content-Type": "text/html; charset=ISO-8859-1"},
-                             body: "<html lang=\"en\"><head><title>" + topic + "</title></head><body>200, Success</body></html>"};
+                             body: "<html lang=\"en\"><head><title>" + topic +
+                                    "</title></head><body>200, Success</body></html>"};
 
         // Override the request ID if its there.
         let id = context.req.query["requestId"];
@@ -239,7 +240,8 @@ class HTTPContext extends BaseContext {
         if(status !== 204) {
             if (body === null) {
                 let content = this._topic + ", " + status + ".";
-                this._context.res.body = "<html lang=\"en\"><head><title>" + content + "</title></head><body>" + content +
+                this._context.res.body = "<html lang=\"en\"><head><title>" + content +
+                    "</title></head><body>" + content +
                     "</body></html>";
             }
             else
@@ -541,7 +543,8 @@ class HTTPFunction extends BaseFunction {
                 }
 
                 context.log("Request failed to process. (NAME:" + ex.cause.name + ") (MESSAGE:" +
-                            ex.cause.message + ") (STACK:" + ex.cause.stack + ")", this._topic, LOG_LEVEL.LEVEL_ERROR);
+                            ex.cause.message + ") (STACK:" + ex.cause.stack + ")", LOG_LEVEL.LEVEL_ERROR,
+                            "HTTPFunction.exception(context, exception)");
                 resolve();
             });
     }
@@ -563,7 +566,7 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief Dispatches the HTTP request to the corrosponding handler method.
+     * @brief Dispatches the HTTP request to the corresponding handler method.
      *
      * @param {BaseContext | HTTPContext} context
      *

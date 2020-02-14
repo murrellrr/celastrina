@@ -31,7 +31,8 @@ const axios     = require("axios").default;
 
 const {TokenResponse, AuthenticationContext} = require("adal-node");
 const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
-const {LOG_LEVEL, JSONHTTPContext, JSONHTTPFunction} = require("./HTTPFunction");
+const {LOG_LEVEL} = require("./BaseFunction");
+const {JSONHTTPContext, JSONHTTPFunction} = require("./HTTPFunction");
 
 /**
  * @typedef _XCLAToken
@@ -99,7 +100,6 @@ class ClaimsToken {
         this.issuer      = null;
         this.issued      = null;
         this.expires     = null;
-        this.roles       = []; // Not part of the claim but will be built by your application.
         this.token       = null;
         Object.assign(this, source);
     }
@@ -150,7 +150,6 @@ class ClaimsToken {
         // Deep copy the objects and arrays.
         claims.issued   = moment(source.issued);
         claims.expires  = moment(source.expires);
-        claims.roles    = JSON.parse(JSON.stringify(source.roles));
 
         return claims;
     }
@@ -375,7 +374,10 @@ class Issuer {
         this.subjects = null;
         this.roles    = null;
         Object.assign(this, source);
-
+        
+        this.matchSubjects = false;
+        this.escalateRoles = false;
+        
         // Checking the configs.
         if(typeof this.name !== "string" || this.name.trim().length === 0)
             throw CelastrinaError.newError("Invalid name for issuer.");
@@ -385,20 +387,19 @@ class Issuer {
             throw CelastrinaError.newError("Invalid audience name for issuer " + this.name + ".");
 
         // Ensure subject integrity if specified
-        if(typeof this.subjects === "undefined" || this.subjects != null)
-            this.subjects = [];
-        else if(!Array.isArray(this.subjects))
-            // You intended to do SOMETHING with subject but I cant figure it out.. err on caution.
-            throw CelastrinaError.newError("Invalid subject for issuer " + this.name + ".");
-        if(this.subjects.length > 0)
-            this.query = new AuthorizationQuery(this.subjects, this.match);
-
+        if(typeof this.subjects !== "undefined" && this.subjects != null) {
+            // Subjects were specified. Ensure its an array.
+            if((this.matchSubjects = Array.isArray(this.subjects)))
+                this.query = new AuthorizationQuery(this.subjects, this.match);
+            else
+                throw CelastrinaError.newError("Invalid subjects for Issuer '" + this.name + "'.");
+        }
+        
         // Ensure role integrity if specified.
-        if(typeof this.roles === "undefined" || this.roles != null)
-            this.roles = [];
-        else if(!Array.isArray(this.roles))
-            // You intended to do SOMETHING with roles but I cant figure it out.. err on caution.
-            throw CelastrinaError.newError("Invalid roles for issuer " + this.name + ".");
+        if(typeof this.roles !== "undefined" && this.roles != null) {
+            if(!(this.escalateRoles = Array.isArray(this.roles)))
+                throw CelastrinaError.newError("Invalid roles for issuer '" + this.name + "'.");
+        }
     }
 
     /**
@@ -412,7 +413,7 @@ class Issuer {
      */
     isIssuer(claims) {
         let issuer = (claims.issuer === this.issuer && claims.audience === this.audience);
-        if(issuer && (this.subjects.length > 0))
+        if(issuer && (this.matchSubjects))
             return this.query.match([claims.subject]);
         return issuer;
     }
@@ -423,13 +424,17 @@ class Issuer {
      * @description
      *
      * @param {ClaimsToken} claims The claims token representing the claims from JWT.
+     * @param {string[]} roles
      *
      * @return boolean
      */
-    setRoles(claims) {
+    setRoles(claims, roles) {
         let issuer = this.isIssuer(claims);
-        if(issuer)
-            claims.roles = claims.roles.concat(this.roles);
+        if(issuer && this.escalateRoles) {
+            for(const index in this.roles) {
+                roles.push(this.roles[index]);
+            }
+        }
         return issuer;
     }
 
@@ -563,6 +568,7 @@ class Sentry {
         this.appTokens     = {};
         this.managedTokens = {};
         this.config        = config;
+        this.roles         = []; // Not part of the claim but will be built by your application.
     }
 
     /**
@@ -587,7 +593,7 @@ class Sentry {
                         let matched = false;
                         for(const index in issuers) {
                            /** @type Issuer */
-                           if(issuers[index].setRoles(this.claims) && !matched)
+                           if(issuers[index].setRoles(this.claims, this.roles) && !matched)
                                 matched = true;
                         }
 
@@ -798,7 +804,7 @@ class Sentry {
         try {
             if(override !== MATCH_TYPE.OVERRIDE.OVERRIDE_NONE) {
                 let query = new AuthorizationQuery(this.config.roles, MATCH_TYPE.AUTHORIZATION.MATCH_ANY);
-                return query.match(this.claims.roles);
+                return query.match(this.roles);
             }
             else
                 return false;
@@ -836,7 +842,7 @@ class Sentry {
      */
     isAuthorizedByRole(query) {
         try {
-            return query.match(this.claims.roles);
+            return query.match(this.roles);
         }
         catch(exception) {
             throw CelastrinaError.wrapError(exception, 403);
@@ -1083,6 +1089,8 @@ class AuthenticatedJSONFunction extends JSONHTTPFunction {
                                             reject(exception);
                                         });
                                 }
+                                else
+                                    resolve();
                             })
                             .catch((exception) => {
                                 reject(exception);
@@ -1143,7 +1151,8 @@ class AuthorizedJSONFunction extends AuthenticatedJSONFunction {
             context.overridden = false;
             // Checking to see if we've been overridden...
             if(context.sentry.isAuthorizedByOverride(MATCH_TYPE.OVERRIDE.OVERRIDE_IF_SYSTEM)) {
-                context.log("Request authorized by override.");
+                context.log("Request authorized by override.", LOG_LEVEL.LEVEL_TRACE,
+                            "AuthorizedJSONFunction.authenticate(context)");
                 context.overridden = true;
                 resolve();
             }
@@ -1151,6 +1160,8 @@ class AuthorizedJSONFunction extends AuthenticatedJSONFunction {
                 this._group.authorize(context.sentry)
                     .then((resolved) => {
                         if(resolved) {
+                            context.log("Request authorized by role.", LOG_LEVEL.LEVEL_INFO,
+                                "AuthorizedJSONFunction.authenticate(context)");
                             context.log("Authorization successful.", LOG_LEVEL.LEVEL_INFO,
                                 "AuthorizedJSONFunction.authenticate(context)");
                             resolve();

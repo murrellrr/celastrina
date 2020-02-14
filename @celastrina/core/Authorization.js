@@ -30,8 +30,8 @@ const crypto    = require("crypto");
 const axios     = require("axios").default;
 
 const {TokenResponse, AuthenticationContext} = require("adal-node");
-const {CelastrinaError, CelastrinaValidationError} = require("CelastrinaError");
-const {LOG_LEVEL, JSONHTTPContext, JSONHTTPFunction} = require("HTTPFunction");
+const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
+const {LOG_LEVEL, JSONHTTPContext, JSONHTTPFunction} = require("./HTTPFunction");
 
 /**
  * @typedef _XCLAToken

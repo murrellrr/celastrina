@@ -699,6 +699,9 @@ class BaseFunction {
     async secureInitialize(context) {
         return new Promise(
             (resolve, reject) => {
+                context.log("Secure Initialize Lifecycle.",
+                            LOG_LEVEL.LEVEL_INFO, "BaseFunction.secureInitialize(context)");
+                
                 let params = new URLSearchParams();
                 params.append("resource", "https://vault.azure.net");
                 params.append("api-version", "2017-09-01");
@@ -708,6 +711,8 @@ class BaseFunction {
                 axios.get(process.env["MSI_ENDPOINT"], config)
                     .then((response) => {
                         context._setPropertyHandler(new VaultPropertyHandler(new Vault(response.data.access_token)));
+                        context.log("Initialize Lifecycle.",
+                            LOG_LEVEL.LEVEL_INFO, "BaseFunction.secureInitialize(context)");
                         return this.initialize(context);
                     })
                     .then(() => {
@@ -739,14 +744,15 @@ class BaseFunction {
                 })
                 .then(() => {
                     let _promise;
-                    if (this._managed) {
-                        _context.log("Function Invoked in Managed Mode. Initializing Vault.",
+                    if(this._managed) {
+                        _context.log("Function Invoked in Secure Managed Mode. Initializing Vault.",
                                      LOG_LEVEL.LEVEL_INFO, "BaseFunction.execute(context)");
                         _promise = this.secureInitialize(_context);
                     } else {
                         _context.log("Function Invoked.",
                                      LOG_LEVEL.LEVEL_INFO, "BaseFunction.execute(context)");
-                        _context.log("Initialization Lifecycle.");
+                        _context.log("Initialize Lifecycle.",
+                            LOG_LEVEL.LEVEL_INFO, "BaseFunction.execute(context)");
                         _promise = this.initialize(_context);
                     }
 
@@ -784,6 +790,8 @@ class BaseFunction {
                             }
                         })
                         .then(() => {
+                            _context.log("Save Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
+                                "BaseFunction.execute(context)");
                             return this.save(_context);
                         })
                         .catch((exception) => {
@@ -792,7 +800,8 @@ class BaseFunction {
                             return this.exception(_context, exception);
                         })
                         .then(() => {
-                            _context.log("Terminate Lifecycle.");
+                            _context.log("Terminate Lifecycle.",
+                                LOG_LEVEL.LEVEL_INFO, "BaseFunction.execute(context)");
                             return this.terminate(_context);
                         })
                         .then(() => {

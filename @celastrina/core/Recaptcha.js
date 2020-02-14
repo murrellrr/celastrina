@@ -27,8 +27,8 @@
 const axios       = require("axios").default;
 const querystring = require("querystring");
 
-const {CelastrinaValidationError, CelastrinaError} = require("CelastrinaError");
-const {LOG_LEVEL, JSONHTTPContext, JSONHTTPFunction} = require("HTTPFunction");
+const {CelastrinaValidationError, CelastrinaError} = require("./CelastrinaError");
+const {LOG_LEVEL, JSONHTTPContext, JSONHTTPFunction} = require("./HTTPFunction");
 
 /**
  * @typedef {_Body} _RecaptchaBody

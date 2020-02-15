@@ -2,10 +2,16 @@
 Javascript Framework for simplifying Microsoft Azure Functions and supporting resources.
 
 ## Prerequisite
-...
+1. You gotta know Azure, at least a little bit.
+2. You gotta know Javascript and Node.jd, duh.
+
+## Coming Soon!
+1. Queue Triggers for use with Service Bus, Event Hub, or Storage Queues.
+2. Async messaging handler to send notifications via Twilio. I know! I know! - Azure already got that, but mines a bit more
+comprehensive, I promise.
 
 ## Quick-start
-Wanted to get started fast? First, create an HTTP Trigger use npm azure tools:
+Want to get started fast? First, create an HTTP Trigger using npm azure tools:
 
 `func init`, then `func new` and create your HTTP Trigger function. Then initialize npm using `npm init`. Then install Celastrina: 
 
@@ -37,24 +43,18 @@ In your `function.json` ass the following configuration before your bindings:
 }
 ```
 
-Make sure you have an in and out binding named `req` and `res` respectively. This is required for Celastrina to work but will be configurable in future releases.
+Make sure you have an in and out binding named `req` and `res` respectively. This is required for Celastrina to work but 
+will be configurable in future releases.
 
 #### Update your local settings
-Now, lets tell Celastrina what to do on start-up, its pretty simple. Add the following to your `local.settings.json`:
+Now, lets tell Celastrina what to do on start-up, its pretty simple. Add the following to your `local.settings.json` or 
+if deployed, your application settings:
 
 ```
 {
-  "IsEncrypted": false,
-  "Values": {
-    "FUNCTIONS_WORKER_RUNTIME": "node",
-    "AzureWebJobsStorage": "{AzureWebJobsStorage}",
+...
     "YOUR-APP-CONGIGURATION": "{\"_topic\":\"Your App Name\", \"_managed\":false}"
-  },
-  "Host": {
-    "LocalHttpPort": 7071,
-    "CORS": "*",
-    "CORSCredentials": false
-  }
+...
 }
 ```
 
@@ -234,11 +234,66 @@ class MyJsonFunction extends JSONHTTPFunction {
 /*
  * Dont forget to add a configuration item passing the config.
  */
-module.exports = new MyJsonFunction("CONGIGURATION-ITEM");
+module.exports = new MyJsonFunction("YOUR-APP-CONGIGURATION");
 ```
 
 #### So, what about that managed mode stuff again?
-...
+Well, &quot;managed&quot; mode is a little more complicated, First lets talk briefly about making stuff secure. 
+Remember, Celastrina is a Microsoft Azure Framework, not a Cloud agnostic framework. Azure has specific PaaS services in 
+mind to protect and manage your configurations, as well as protect access to other resources in the Cloud. Azure 
+resources are a mixed bag of AAA security ranging from authorization bearer tokens like JWT, SAS tokens, and even access 
+keys like those used to CRUD an Azure Cosmos DB. In my experience to date I have had to write just as convoluted set of 
+code to leverage these AAA features. This has often required me to have sensitive information within my configurations. 
+Naturally, I started down the path of app configurations in my serverless compute. This is all well and good if I am 
+the only devops guy on a project like something I would do for a mom-and-pop 503c. This was not cool when other 
+developers started working on projects. I found myself struggling to protect sensitive information while support 
+the devops pipeline I have come to love. What could I do?
+
+**Managed Identity** and **Key Vault** to the rescue! Leveraging these two, simple, affordable, PaaS 
+capabilities made configuring and protecting my secrets simple. Celastrina environment properties are accessed via
+the **BaseContext** object. Invoking `context.getEnvironmentProperty(ket:string)` will return a configuration property 
+just like the traditional way in azure functions, `process.env["key"];`. Celastrina offers another function 
+`context.getSecureEnvironmentProperty(ket:string)` to securely access configuration items. When `_managed: false`, 
+invocations of this method get the values directly from either local.settings.json or the configuration settings of your 
+deployed azure function. When `_managed: true` however, The context will attempt to look up the value from an Azure Key 
+Vault secret. No worries, on first invocation, the secret value will be cached so you don't hammer Key Vault on 
+successive calls to that configuration items.
+
+To make this work, there are a few things you must to within azure: 
+
+1. Enable managed identities. Here is a good link on how to do that: https://docs.microsoft.com/en-us/azure/app-service/overview-managed-identity?tabs=dotnet.
+2. create a Key Vault. Instructions for that can be found here: https://docs.microsoft.com/en-us/azure/key-vault/quick-create-portal.
+3. Grant an access policy to Key Value your functions managed identity, I just do Get and List policies.
+4. Set up our configuration depending on your deployment.
+
+#### Example
+If doing local development or in the lifecycle where you don't care about security like development or integration, make 
+sure you are **not** in managed mode in your `local.settings.json` or if deployed, your application configuration:
+
+```
+"YOUR-APP-CONGIGURATION": "{\"_topic\":\"Your App Name\", \"_managed\":false}"
+"YOUR-CONFIG-ITEM": "What ever value you want."
+```
+
+With this configuration, calling `context.getSecureEnvironmentProperty("YOUR-CONFIG-ITEM")` will simply retrieve from 
+the configuration the value `"What ever value you want"`.  Now, lets move to UAT or production. Update your 
+configuration as follows:
+
+```
+"YOUR-APP-CONGIGURATION": "{\"_topic\":\"Your App Name\", \"_managed\":true}"
+"YOUR-CONFIG-ITEM": "https://{vault name}.vault.azure.net/secrets/{secret name}/{version id}"
+```
+
+Now, any call to `context.getSecureEnvironmentProperty("YOUR-CONFIG-ITEM")` will:
+
+1. Check the local configuration cache to see if we've already fetch the configuration item.
+2. If so, return the value, in this case `"What ever value you want"`.
+3. If not, make a request to the Azure Key Vault using key `https://{vault name}.vault.azure.net/secrets/{secret name}/{version id}`, 
+ yours would look something like this: `https://celastrina-secret-test.vault.azure.net/secrets/YOUR-CONFIG-ITEM/1234567890405fa6bf213e63bce891`.
+4. Cache the value.
+5. Return `"What ever value you want"`
+
+That's it, now your configurations and secrets are secure! You're welcome!
 
 ## So, I want my users to be authenticated, what do I do?
 ...

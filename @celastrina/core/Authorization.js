@@ -324,11 +324,9 @@ class AuthorizationQuery {
             case MATCH_TYPE.AUTHORIZATION.MATCH_ALL:
                 this.matcher = new MatchAll();
                 break;
-            case MATCH_TYPE.AUTHORIZATION.MATCH_NONE:
+            default: // MATCH_TYPE.AUTHORIZATION.MATCH_NONE: Be restrictive if not declarative.
                 this.matcher = new MatchNone();
                 break;
-            default: // Be as restrictive if not declarative.
-                throw CelastrinaError.newError("Invalid Authorization Match configuration.");
         }
     }
 

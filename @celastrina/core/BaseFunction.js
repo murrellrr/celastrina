@@ -234,9 +234,14 @@ class VaultPropertyHandler extends DefaultSecurePropertyHandler {
  * @type {{subject: null|string, roles: string[]}}
  */
 class BaseUser {
-    constructor() {
+    /**
+     * @brief
+     *
+     * @param {null|string} [sub]
+     */
+    constructor(sub = null) {
         this._version    = "1.0";
-        this._subject    = null;
+        this._subject    = sub;
         this._roles      = [];
     }
 
@@ -270,6 +275,17 @@ class BaseUser {
     /**
      * @brief
      *
+     * @param {string[]} roles
+     */
+    addRoles(roles) {
+        if(typeof roles === "undefined" || roles == null || !Array.isArray(roles))
+            throw CelastrinaError.newError("Roles are required.");
+        this._roles = roles.concat(this._roles);
+    }
+
+    /**
+     * @brief
+     *
      * @param {string} role
      */
     addRole(role) {
@@ -296,7 +312,7 @@ class BaseUser {
      *
      * @param {string} role
      */
-    isEnrolledIn(role) {
+    isInRole(role) {
         return this._roles.includes(role);
     }
 
@@ -525,6 +541,292 @@ class BaseContext {
             this._context.done(value);
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * @brief
+ *
+ * @author Robert R Murrell
+ *
+ * @type {{config: SentryConfig, _user: null|JwtUser, appTokens: Object, managedTokens: Object}}
+ */
+class Sentry {
+    /**
+     * @brief
+     *
+     * @param {SentryConfig} config
+     */
+    constructor(config) {
+        if(!(config instanceof SentryConfig))
+            throw CelastrinaError.newError("Not authorized.", 401);
+        this._user         = null;
+        this.appTokens     = {};
+        this.managedTokens = {};
+        this.config        = config;
+        this.roles         = [];
+    }
+
+    /**
+     * @brief
+     *
+     * @returns {null|JwtUser}
+     */
+    get user() {
+        return this._user;
+    }
+
+    /**
+     * @brief
+     *
+     * @param {string} bearerToken
+     *
+     * @returns {Promise<BaseUser>}
+     */
+    async authenticate(bearerToken) {
+        return new Promise(
+            (resolve, reject) => {
+                if(typeof bearerToken === "undefined" || bearerToken == null || !bearerToken.trim())
+                    reject(CelastrinaError.newError("Not authorized.", 401));
+                else {
+                    this._user  = JwtUser.decode(bearerToken);
+                    let now = moment();
+                    if(now.isSameOrAfter(this._user.expires))
+                        reject(CelastrinaError.newError("Not Authorized.", 401));
+                    else {
+                        let issuers = this.config.issuers;
+                        let matched = false;
+                        for(const index in issuers) {
+                            /** @type Issuer */
+                            if(issuers[index].setRoles(this._user, this.roles) && !matched)
+                                matched = true;
+                        }
+
+                        if(matched)
+                            resolve(_user);
+                        else
+                            reject(CelastrinaError.newError("Not Authorized.", 401));
+                    }
+                }
+            });
+    }
+
+    /**
+     * @brief Decrypts an application specific claims object.
+     *
+     * @param {string} claims The claims to decrypt. Typically a cookie shared with this domain.
+     *
+     * @returns {Promise<Object>} The application specific claims object.
+     */
+    async loadApplicationClaims(claims) {
+        return new Promise(
+            (resolve, reject) => {
+                try {
+                    if(typeof claims !== "undefined" && claims != null) {
+                        let iv        = new Buffer(this.config.crypto.iv);
+                        let ivstring  = iv.toString("hex");
+                        let cipher    = Buffer.from(claims, "base64").toString("hex");
+                        let key       = crypto.createHash("sha256").update(this.config.crypto.key).digest();
+                        let decipher  = crypto.createDecipheriv("aes256", key, ivstring);
+                        let decrypted = decipher.update(cipher, "hex", "utf8");
+                        decrypted += decipher.final("utf8");
+                        resolve(decrypted);
+                    }
+                    else
+                        reject(CelastrinaError.newError("Invalid application claims."));
+                }
+                catch (exception) {
+                    reject(exception);
+                }
+            });
+    }
+
+    /**
+     * @brief Encrypts an application specific claims object.
+     *
+     * @param {Object} claims The application specific claims object to encrypt.
+     *
+     * @returns {Promise<string>} Base64 encoded encrypted claims object.
+     */
+    async createApplicationClaims(claims) {
+        return new Promise(
+            (resolve, reject) => {
+                try {
+                    if(typeof claims !== "undefined" && claims != null) {
+                        let iv        = new Buffer(this.config.crypto.iv);
+                        let ivstring  = iv.toString("hex");
+                        let key       = crypto.createHash("sha256").update(this.config.crypto.key).digest();
+                        let cipher    = crypto.createCipheriv("aes256", key, ivstring);
+                        let encrypted = cipher.update(JSON.stringify(claims), "utf8", "hex");
+                        encrypted += cipher.final("hex");
+                        resolve(Buffer.from(encrypted, "hex").toString("base64"));
+                    }
+                    else
+                        reject(CelastrinaError.newError("Invalid application claims."));
+                }
+                catch (exception) {
+                    reject(exception);
+                }
+            });
+    }
+
+    /**
+     * @brief Registers an application resource.
+     *
+     * @description <p>An application resources registration is the resource-based bearer token from a AZAD Domain
+     *              registered application. Use the client ID (Application ID), AZAD tenant (domain name), and a
+     *              resource ID (URL to a resource) will create a bearer token. Add that token to any REST API call
+     *              when an app resources has been granted access.</p>
+     *
+     *              <p>This method uses the application authority,tenant, id, and secret from the {SentryConfig}
+     *              object to create application resources.</p>
+     *
+     *              <p>Sentry also uses Microsoft adal-node to generate the token.</p>
+     *
+     * @param {string} resource The name of the resource.
+     *
+     * @returns {Promise<void>}
+     *
+     * @see SentryConfig
+     */
+    async registerAppResource(resource) {
+        return new Promise(
+            (resolve, reject) => {
+                let adContext = new AuthenticationContext(this.config.application.authority + "/" +
+                    this.config.application.tenant);
+                adContext.acquireTokenWithClientCredentials(resource, this.config.application.credentials.id,
+                    this.config.application.secret,
+                    (err, response) => {
+                        if(err)
+                            reject(CelastrinaError.newError("Not authorized.", 401));
+                        else {
+                            this.appTokens[resource] = response;
+                            resolve();
+                        }
+                    });
+            });
+    }
+
+    /**
+     * @brief Creates a resource authorization from a managed identity.
+     *
+     * @description For this function to work properly your azure function must have managed identities enabled.
+     *
+     * @param {string} resource
+     * @param {string} endpoint
+     * @param {string} secret
+     *
+     * @returns {Promise<void>}
+     */
+    async registerManagedResource(resource, endpoint, secret) {
+        return new Promise(
+            (resolve, reject) => {
+                let params = new URLSearchParams();
+                params.append("resource", resource);
+                params.append("api-version", "2017-09-01");
+                let config = {params: params,
+                    headers: {"secret": this.config.msi.secret}};
+                axios.get(this.config.msi.endpoint, config)
+                    .then((/**@type {_AxiosResponse}*/response) => {
+                        this.managedTokens[resource] = response.data;
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            });
+    }
+
+    /**
+     * @brief
+     *
+     * @param {string} resource
+     * @param {{}} headers
+     */
+    setAppResourceAuthorization(resource, headers) {
+        /**@type {TokenResponse}*/
+        let tokenObject = this.appTokens[resource];
+
+        if(typeof tokenObject === "undefined" )
+            throw CelastrinaError.newError("Not Authorized.", 401);
+        else
+        if(tokenObject.tokenType === "Bearer") {
+            let now = moment();
+            let exp = moment(tokenObject.expiresOn);
+
+            if(now.isSameOrAfter(exp))
+                throw CelastrinaError.newError("Not Authorized.", 401);
+
+            headers["Authorization"] = "Bearer " + tokenObject.accessToken;
+        }
+        else
+            throw CelastrinaError.newError("Token type " + tokenObject.tokenType + " not supported.");
+    }
+
+    /**
+     * @brief
+     *
+     * @param {string} resource
+     * @param {{}} headers
+     */
+    setManagedResourceAuthorization(resource, headers) {
+        /**@type {_ManagedResourceToken}*/
+        let tokenObject = this.managedTokens[resource];
+
+        if(typeof tokenObject === "undefined")
+            throw CelastrinaError.newError("Not Authorized.", 401);
+        else
+        if(tokenObject.token_type === "Bearer") {
+            let now = moment();
+            let exp = moment(tokenObject.expires_on);
+
+            if(now.isSameOrAfter(exp))
+                throw CelastrinaError.newError("Not Authorized.", 401);
+
+            headers["Authorization"] = "Bearer " + tokenObject.access_token;
+        }
+        else
+            throw CelastrinaError.newError("Token type " + tokenObject.token_type + " not supported.");
+    }
+
+    /**
+     * @brief
+     *
+     * @param {{}} headers
+     */
+    setUserAuthorization(headers) {
+        headers["Authorization"] = "Bearer " + this._user.token;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /**
  * @brief Base function class to use with Azure functions.

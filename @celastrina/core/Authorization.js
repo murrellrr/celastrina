@@ -35,13 +35,18 @@ const {LOG_LEVEL, BaseUser} = require("./BaseFunction");
 const {JSONHTTPContext, JSONHTTPFunction} = require("./HTTPFunction");
 
 /**
- * @typedef _XCLAToken
+ * @typedef _jwtpayload
  * @property {string} aud
  * @property {string} sub
  * @property {string} oid
  * @property {string} iss
  * @property {number} iat
  * @property {number} exp
+ * @property {string} nonce
+ */
+/**
+ * @typedef _jwt
+ * @property {_jwtpayload} payload
  */
 /**
  * @typedef _ClaimsPayload
@@ -93,14 +98,25 @@ const MATCH_TYPE = {
  *         _issued: null|moment.Moment, _expires: null|moment.Moment}}
  */
 class JwtUser extends BaseUser {
-    constructor() {
-        super();
-        this._nonce    = null;
-        this._audience = null;
-        this._issuer   = null;
-        this._issued   = null;
-        this._expires  = null;
-        this._token    = null;
+    /**
+     * @brief
+     *
+     * @param {string} sub
+     * @param {string} aud
+     * @param {string} iss
+     * @param {number} iat
+     * @param {number} exp
+     * @param {string} nonce
+     * @param {string} token
+     */
+    constructor(sub, aud, iss, iat, exp, nonce, token) {
+        super(sub);
+        this._nonce    = nonce;
+        this._audience = aud;
+        this._issuer   = iss;
+        this._issued   = moment.unix(iat);
+        this._expires  = moment.unix(exp);
+        this._token    = token;
     }
 
     get nonce() {
@@ -162,12 +178,6 @@ class JwtUser extends BaseUser {
             headers["Authorization"] = "Bearer " + this.token;
     }
 
-    parse(json) {
-        super.parse(json);
-        this._issued   = moment(this._issued);
-        this._expires  = moment(this._expires);
-    }
-
     /**
      * @brief
      *
@@ -187,14 +197,41 @@ class JwtUser extends BaseUser {
     /**
      * @brief
      *
-     * @param {Object} source
+     * @param {JwtUser} source
      */
     copy(source) {
-        //
+        //sub, aud, iss, iat, exp, nonce, token
+        if(source instanceof JwtUser)
+            return new JwtUser(source._subject, source._audience, source._issuer, source._issued.unix(),
+                               source._expires.unix(), source._nonce, source._token);
+        else
+            throw CelastrinaError.newError("Source must be an instance of JwtUser.")
     }
 
-    static create() {
-        //
+    /**
+     * @brief
+     *
+     * @param {string} bearerToken
+     *
+     * @return {Promise<JwtUser>}
+     */
+    static async decode(bearerToken) {
+        return new Promise((resolve, reject) => {
+            if(typeof bearerToken !== "string" || bearerToken.trim().length === 0)
+                reject(CelastrinaError.newError(""));
+            else {
+                try {
+                    /** @type {_jwt} */
+                    let token   = jwt.decode(bearerToken);
+                    let payload = token.payload;
+                    resolve(new JwtUser(payload.sub, payload.aud, payload.iss, payload.iat, payload.exp,
+                                        payload.nonce, bearerToken));
+                }
+                catch (exception) {
+                    reject(exception);
+                }
+            }
+        });
     }
 }
 
@@ -552,7 +589,7 @@ class SentryConfig {
  *
  * @author Robert R Murrell
  *
- * @type {{config: SentryConfig, claim: null|BaseUser, appTokens: Object, managedTokens: Object}}
+ * @type {{config: SentryConfig, _user: null|JwtUser, appTokens: Object, managedTokens: Object}}
  */
 class Sentry {
     /**
@@ -563,8 +600,7 @@ class Sentry {
     constructor(config) {
         if(!(config instanceof SentryConfig))
             throw CelastrinaError.newError("Not authorized.", 401);
-        /** @type {null|BaseUser} */
-        this._user          = null;
+        this._user         = null;
         this.appTokens     = {};
         this.managedTokens = {};
         this.config        = config;
@@ -574,7 +610,7 @@ class Sentry {
     /**
      * @brief
      *
-     * @returns {BaseUser}
+     * @returns {null|JwtUser}
      */
     get user() {
         return this._user;
@@ -593,7 +629,7 @@ class Sentry {
                 if(typeof bearerToken === "undefined" || bearerToken == null || !bearerToken.trim())
                     reject(CelastrinaError.newError("Not authorized.", 401));
                 else {
-                    let _user  = BaseUser.parse(bearerToken);
+                    this._user  = JwtUser.decode(bearerToken);
                     let now = moment();
                     if(now.isSameOrAfter(this._user.expires))
                         reject(CelastrinaError.newError("Not Authorized.", 401));

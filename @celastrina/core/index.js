@@ -54,8 +54,8 @@ module.exports = {
     HTTPFunction:     http.HTTPFunction,
     JSONHTTPContext:  http.JSONHTTPContext,
     JSONHTTPFunction: http.JSONHTTPFunction,
-    
-    ClaimsToken:               auth.ClaimsToken,
+
+    BaseUser:                  auth.BaseUser,
     SentryConfig:              auth.SentryConfig,
     Sentry:                    auth.Sentry,
     MATCH_TYPE:                auth.MATCH_TYPE,

@@ -227,6 +227,101 @@ class VaultPropertyHandler extends DefaultSecurePropertyHandler {
 }
 
 /**
+ * @brief JWT Claims from the Authorization header bearer token.
+ *
+ * @author Robert R Murrell
+ *
+ * @type {{subject: null|string, roles: string[]}}
+ */
+class BaseUser {
+    constructor() {
+        this._version    = "1.0";
+        this._subject    = null;
+        this._roles      = [];
+    }
+
+    /**
+     * @brief Returns the framework version of this claims token.
+     *
+     * @returns {string} the framework version of this claims token.
+     */
+    get version() {
+        return this._version;
+    }
+
+    /**
+     * @brief
+     *
+     * @returns {null|string}
+     */
+    get subject() {
+        return this._subject;
+    }
+
+    /**
+     * @brief
+     *
+     * @returns {string[]}
+     */
+    get roles() {
+        return this._roles;
+    }
+
+    /**
+     * @brief
+     *
+     * @param {string} role
+     */
+    addRole(role) {
+        if(typeof role !== "string" || role.trim().length === 0 || this._roles.includes(role))
+            throw CelastrinaError.newError("Role is required and cannot be duplicate.");
+        this._roles.unshift(role);
+    }
+
+    /**
+     * @brief
+     *
+     * @param {string} role
+     */
+    removeRole(role) {
+        if(typeof role === "string" && role.trim().length > 0 && this.roles.includes(role)) {
+            let index;
+            if((index =this._roles.indexOf(role)) > -1)
+                this._roles = this._roles.slice(index, 1);
+        }
+    }
+
+    /**
+     * @brief
+     *
+     * @param {string} role
+     */
+    isEnrolledIn(role) {
+        return this._roles.includes(role);
+    }
+
+    /**
+     * @brief
+     *
+     * @param {string} json
+     *
+     * @return {Object}
+     */
+    parse(json) {
+        Object.assign(this, JSON.parse(json));
+    }
+
+    /**
+     * @brief
+     *
+     * @returns {*}
+     */
+    toJSON() {
+        return {_subject: this._subject, _roles: this._roles};
+    }
+}
+
+/**
  * @brief
  *
  * @author Robert R Murrell
@@ -249,6 +344,7 @@ class BaseContext {
         this._monitorResponse = null;
         /** @type {DefaultSecurePropertyHandler} */
         this._properties      = new DefaultSecurePropertyHandler();
+        this.user             = null;
     }
 
     /**
@@ -553,11 +649,13 @@ class BaseFunction {
      *
      * @param {BaseContext} context The context of the function.
      *
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     * @returns {Promise<BaseUser>} An instance of BaseUser.
+     *
+     * @throws {CelastrinaError} if the user cannot be authenticated for any reason.
      */
     async authenticate(context) {
         return new Promise((resolve) => {
-            resolve();
+            resolve(new BaseUser());
         });
     }
 
@@ -569,10 +667,13 @@ class BaseFunction {
      *              authorization.
      *
      * @param {BaseContext} context The context of the function.
+     * @param {BaseUser} user The user to authorize.
      *
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     * @returns {Promise<void>} Void if successful.
+     *
+     * @throws {CelastrinaError} if the user cannot be authorized for any reason.
      */
-    async authorize(context) {
+    async authorize(context, user) {
         return new Promise((resolve) => {
             resolve();
         });
@@ -586,6 +687,8 @@ class BaseFunction {
      * @param {BaseContext} context The context of the function.
      *
      * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     *
+     * @throws {CelastrinaValidationError} if the input cannot be validated.
      */
     async validate(context) {
         return new Promise((resolve) => {
@@ -601,7 +704,9 @@ class BaseFunction {
      *
      * @param {BaseContext} context The context of the function.
      *
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     * @returns {Promise<void>} Void if successful.
+     *
+     * @throws {CelastrinaError} if the monitor lifecycle fails for any reason.
      */
     async monitor(context) {
         return new Promise(
@@ -620,7 +725,9 @@ class BaseFunction {
      *
      * @param {BaseContext} context The context of the function.
      *
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     * @returns {Promise<void>} Void if successful.
+     *
+     * @throws {CelastrinaError} if the load lifecycle fails for any reason.
      */
     async load(context) {
         return new Promise((resolve) => {
@@ -635,7 +742,9 @@ class BaseFunction {
      *
      * @param {BaseContext} context The context of the function.
      *
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     * @returns {Promise<void>} Void if successful.
+     *
+     * @throws {CelastrinaError} if the process lifecycle fails for any reason.
      */
     async process(context) {
         return new Promise((resolve) => {
@@ -650,7 +759,9 @@ class BaseFunction {
      *
      * @param {BaseContext} context The context of the function.
      *
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     * @returns {Promise<void>} Void if successful.
+     *
+     * @throws {CelastrinaError} if the save lifecycle fails for any reason.
      */
     async save(context) {
         return new Promise((resolve) => {
@@ -666,7 +777,9 @@ class BaseFunction {
      * @param {BaseContext} context The context of the function.
      * @param {*} exception
      *
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     * @returns {Promise<void>} Void if successful.
+     *
+     * @throws {CelastrinaError} if the exception lifecycle fails for any reason.
      */
     async exception(context, exception) {
         return new Promise((resolve) => {
@@ -681,7 +794,9 @@ class BaseFunction {
      *
      * @param {BaseContext} context The context of the function.
      *
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     * @returns {Promise<void>} Void if successful.
+     *
+     * @throws {CelastrinaError} if the terminate lifecycle fails for any reason.
      */
     async terminate(context) {
         return new Promise((resolve) => {
@@ -694,7 +809,9 @@ class BaseFunction {
      *
      * @param {BaseContext} context The context of the function.
      *
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     * @returns {Promise<void>} Void if successful.
+     *
+     * @throws {CelastrinaError} if the secureInitialize lifecycle fails for any reason.
      */
     async secureInitialize(context) {
         return new Promise(
@@ -728,8 +845,6 @@ class BaseFunction {
      * @brief Method called by the Azure Function to execute the lifecycle.
      *
      * @param {_AzureFunctionContext} context The context of the function.
-     *
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
      */
     execute(context) {
         /** @type {BaseContext} */
@@ -763,10 +878,11 @@ class BaseFunction {
                                          "BaseFunction.execute(context)");
                             return this.authenticate(_context);
                         })
-                        .then(() => {
+                        .then((user) => {
                             _context.log("Authorize Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
                                 "BaseFunction.execute(context)");
-                            return this.authorize(_context);
+                            _context.user = user;
+                            return this.authorize(_context, user);
                         })
                         .then(() => {
                             _context.log("Validate Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
@@ -861,6 +977,7 @@ module.exports = {
     DefaultSecurePropertyHandler: DefaultSecurePropertyHandler,
     VaultPropertyHandler:         VaultPropertyHandler,
     BaseContext:                  BaseContext,
+    BaseUser:                     BaseUser,
     BaseFunction:                 BaseFunction
 };
 

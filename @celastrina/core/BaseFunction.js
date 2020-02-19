@@ -557,21 +557,16 @@ class BaseContext {
  *
  * @author Robert R Murrell
  *
- * @type {{config: SentryConfig, _user: null|JwtUser, appTokens: Object, managedTokens: Object}}
+ * @type {{ _user: null|JwtUser, appTokens: Object, managedTokens: Object}}
  */
-class Sentry {
+class BaseSentry {
     /**
      * @brief
-     *
-     * @param {SentryConfig} config
      */
-    constructor(config) {
-        if(!(config instanceof SentryConfig))
-            throw CelastrinaError.newError("Not authorized.", 401);
+    constructor() {
         this._user         = null;
         this.appTokens     = {};
         this.managedTokens = {};
-        this.config        = config;
         this.roles         = [];
     }
 
@@ -901,6 +896,31 @@ class BaseFunction {
             (resolve, reject) => {
                 try {
                     resolve(new BaseContext(context, this._topic));
+                }
+                catch(exception) {
+                    reject(exception);
+                }
+            });
+    }
+
+    /**
+     * @brief Lifecycle operation to perform key operations of setting up and bootstrapping this function.
+     *
+     * @description <p>Override this function to perform any pre-initialization tasks. The lifecycle is invoked after
+     *              the context is created but before initialization. Implementors MUST call the super of
+     *              or this function may not work as intended or produce errors.</p>
+     *
+     *              <p>Do not rely on any internal features of this function while inside this promise.</p>
+     *
+     * @param {BaseContext} context The context of the function.
+     *
+     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     */
+    async createSentry(context) {
+        return new Promise(
+            (resolve, reject) => {
+                try {
+                    resolve(new BaseSentry());
                 }
                 catch(exception) {
                     reject(exception);

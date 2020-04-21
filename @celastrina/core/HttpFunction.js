@@ -24,49 +24,226 @@
 
 "use strict";
 
+const moment = require("moment");
+const jwt    = require("jsonwebtoken");
+
 const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
-const {LOG_LEVEL, BaseContext, BaseFunction} = require("./BaseFunction");
+const {LOG_LEVEL, JSONProperty, Configuration, BaseSubject, BaseSentry, BaseContext,
+       BaseFunction} = require("./BaseFunction");
 
 /**
- * @typedef _AzureFunctionRequest
- * @property {Object} headers
- * @property {Object} params
- * @property {Object} body
+ * @typedef _jwtpayload
+ * @property {string} aud
+ * @property {string} sub
+ * @property {string} oid
+ * @property {string} iss
+ * @property {number} iat
+ * @property {number} exp
+ * @property {string} nonce
+ */
+/**
+ * @typedef _jwt
+ * @property {_jwtpayload} payload
+ */
+/**
+ * @typedef _ClaimsPayload
+ * @property {moment.Moment} issued
+ * @property {moment.Moment} expires
+ * @property {string} token
+ * @property {string} audience
+ * @property {string} subject
+ * @property {string} issuer
  */
 
-/**
- * @typedef _AzureFunctionResponse
- * @property {number} status
- * @property {Object} headers
- * @property {Object} body
- */
 
-/**
- * @typedef _AzureLog
- * @property error
- * @property warn
- * @property verbose
- * @property info
- */
+class Issuer {
+    constructor(name, audiance) {
+        this._name     = name;
+        this._audiance = audiance;
+    }
 
-/**
- * @typedef {Object} _Body
- */
+    static create(source) {
+        //
+    }
+}
 
-/**
- * @typedef _AzureFunctionContext
- * @property {Object} bindings
- * @property {_AzureLog} log
- *
- * @typedef {Base & _AzureFunctionContext} _AzureHTTPFunctionContext
- * @property {_AzureFunctionResponse} res
- * @property {_AzureFunctionRequest} req
- * @property {Object} params
- * @property {Object} query
- * @property {string} method
- * @property {string} originalUrl
- * @property {string} rawBody
- */
+class JwtSubject extends BaseSubject {
+    /**
+     * @brief
+     *
+     * @param {string} sub
+     * @param {string} aud
+     * @param {string} iss
+     * @param {number} iat
+     * @param {number} exp
+     * @param {string} nonce
+     * @param {string} token
+     * @param {Array.<string>} [roles]
+     */
+    constructor(sub, aud, iss, iat, exp, nonce, token,
+                roles = []) {
+        super(sub, roles);
+        this._nonce    = nonce;
+        this._audience = aud;
+        this._issuer   = iss;
+        this._issued   = moment.unix(iat);
+        this._expires  = moment.unix(exp);
+        this._token    = token;
+    }
+
+    /**
+     * @brief
+     *
+     * @returns {string}
+     */
+    get nonce() {
+        return this._nonce;
+    }
+
+    /**
+     * @brief
+     *
+     * @returns {string}
+     */
+    get audience() {
+        return this._audience;
+    }
+
+    /**
+     * @brief
+     *
+     * @returns {string}
+     */
+    get issuer() {
+        return this._issuer;
+    }
+
+    /**
+     * @brief
+     *
+     * @returns {moment.Moment}
+     */
+    get issued() {
+        return this._issued;
+    }
+
+    /**
+     * @brief
+     *
+     * @returns {moment.Moment}
+     */
+    get expires() {
+        return this._expires;
+    }
+
+    /**
+     * @brief
+     *
+     * @returns {string}
+     */
+    get token() {
+        return this._token;
+    }
+
+    /**
+     * @brief
+     *
+     * @param {string[]} headers
+     */
+    setAuthorizationHeader(headers) {
+        if(typeof headers !== "undefined" && headers != null)
+            headers["Authorization"] = "Bearer " + this.token;
+    }
+
+    /**
+     * @brief
+     *
+     * @returns {{subject:string, roles: Array.<string>, nounce:string, audience: string, issuer: string,
+     *            issued: string, expires: string}}
+     */
+    toJSON() {
+        let json = super.toJSON();
+        json.nonce    = this._nonce;
+        json.audience = this._audience;
+        json.issuer   = this._issuer;
+        json.issued   = this._issued.format();
+        json.expires  = this._expires.format();
+        return json;
+    }
+
+    /**
+     * @brief
+     *
+     * @param {JwtSubject} source
+     */
+    copy(source) {
+        //sub, aud, iss, iat, exp, nonce, token
+        if(source instanceof JwtSubject)
+            return new JwtSubject(source._id, source._audience, source._issuer, source._issued.unix(),
+                                  source._expires.unix(), source._nonce, source._token);
+        else
+            throw CelastrinaError.newError("Source must be an instance of JwtUser.")
+    }
+
+    /**
+     * @brief
+     *
+     * @param {string} bearerToken
+     *
+     * @return {Promise<JwtSubject>}
+     */
+    static async decode(bearerToken) {
+        return new Promise((resolve, reject) => {
+            if(typeof bearerToken !== "string" || bearerToken.trim().length === 0)
+                reject(CelastrinaError.newError(""));
+            else {
+                try {
+                    /** @type {_jwt} */
+                    let token   = jwt.decode(bearerToken);
+                    let payload = token.payload;
+                    resolve(new JwtSubject(payload.sub, payload.aud, payload.iss, payload.iat, payload.exp,
+                                           payload.nonce, bearerToken));
+                }
+                catch (exception) {
+                    reject(exception);
+                }
+            }
+        });
+    }
+}
+
+class JwtConfiguration extends Configuration {
+    /**
+     * @brief
+     *
+     * @param {StringProperty|string} name
+     * @param {BooleanProperty|boolean} managed
+     */
+    constructor(name, managed = true) {
+        super(name, managed);
+        /** @type {Array.<Issuer>} */
+        this._issuers = [];
+    }
+
+    /**
+     *
+     * @param {JSONProperty|Issuer} issuer
+     *
+     * @returns {JwtConfiguration}
+     */
+    addIssuer(issuer) {
+        this._issuers.unshift(issuer);
+        return this;
+    }
+
+    /**
+     *
+     * @returns {Array<Issuer>}
+     */
+    get issuers() {
+        return this._issuers;
+    }
+}
 
 /**
  * @brief Base context for an HTTP Request/Response.
@@ -81,27 +258,48 @@ class HTTPContext extends BaseContext {
     /**
      * @brief
      *
-     * @param {_AzureHTTPFunctionContext} context
-     * @param {string} [topic]
+     * @param {_AzureFunctionContext} context
+     * @param {string} name
+     * @param {PropertyHandler} properties
      */
-    constructor(context, topic = "HTTPFunction") {
-        super(context, topic);
-
+    constructor(context, name, properties) {
+        super(context, name, properties);
+        // Setting up the default response.
         this._context.res = {status: 200,
-                             headers: {"Content-Type": "text/html; charset=ISO-8859-1"},
-                             body: "<html lang=\"en\"><head><title>" + topic +
-                                    "</title></head><body>200, Success</body></html>"};
+            headers: {"Content-Type": "text/html; charset=ISO-8859-1"},
+            body: "<html lang=\"en\"><head><title>" + this._name +
+                "</title></head><body>200, Success</body></html>"};
+    }
 
-        // Override the request ID if its there.
-        let id = context.req.query["requestId"];
-        if(typeof id === "string")
-            this._requestId = id;
-        // Checking to see if this is a monitoring request.
-        /** @type {null|undefined|boolean} */
-        let monitorQuery = context.req.query["monitor"];
-        if((typeof monitorQuery === "undefined" && context.req.method.toLowerCase() === "trace") ||
-                (typeof monitorQuery === "boolean" && monitorQuery))
-            this._setContextToMonitor();
+    async initialize(configuration) {
+        return new Promise((resolve, reject) => {
+            // Override the request ID if its there.
+            let id = this._context.req.query["requestId"];
+            if (typeof id === "undefined" || id == null)
+                id = this._context.req.headers["x-celastrina-requestId"];
+            if(typeof id === "string")
+                this._requestId = id;
+
+            // Checking to see if we are in monitoring mode
+            let monitor = false;
+            if(this.method === "trace")
+                monitor = true;
+            else {
+                monitor = this._context.req.query["monitor"];
+                if (typeof monitor === "undefined" || monitor == null)
+                    monitor = this._context.req.headers["x-celastrina-monitor"];
+                monitor = (typeof monitor === "string") ? (monitor === "true") : false;
+            }
+            this._monitor = monitor;
+
+            super.initialize(configuration)
+                .then((context) => {
+                    resolve(context);
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
     }
 
     /**
@@ -165,6 +363,22 @@ class HTTPContext extends BaseContext {
      */
     get raw() {
         return this._context.req.rawBody;
+    }
+
+    /**
+     * @brief Gets a query string.
+     *
+     * @param {string} name The name of the header.
+     * @param {null|string} [defaultValue] The value to return if the header was undefined, null, or empty.
+     *
+     * @return {null|string}
+     */
+    getQuery(name, defaultValue = null) {
+        let qry = this._context.req.query[name];
+        if(typeof qry !== "string")
+            return defaultValue;
+        else
+            return qry;
     }
 
     /**
@@ -239,7 +453,7 @@ class HTTPContext extends BaseContext {
 
         if(status !== 204) {
             if (body === null) {
-                let content = this._topic + ", " + status + ".";
+                let content = this._name + ", " + status + ".";
                 this._context.res.body = "<html lang=\"en\"><head><title>" + content +
                     "</title></head><body>" + content +
                     "</body></html>";
@@ -317,6 +531,98 @@ class HTTPContext extends BaseContext {
 }
 
 /**
+ * @brief
+ *
+ * @description
+ *
+ * @author Robert R Murrell
+ */
+class JwtSentry extends BaseSentry {
+    constructor() {
+        super();
+        /** @type {Array.<Issuer>} */
+        this._issuers = [];
+    }
+
+    /**
+     * @brief
+     *
+     * @param {Configuration} configuration
+     *
+     * @returns {Promise<BaseSentry>}
+     */
+    async initialize(configuration) {
+        return new Promise((resolve, reject) => {
+            super.initialize(configuration)
+                .then((sentry) => {
+                    // Going to initialize the acceptable issuers.
+
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+
+    /**
+     *
+     * @param {BaseContext | HTTPContext} context
+     *
+     * @returns {Promise<BaseSubject>}
+     */
+    async authenticate(context) {
+        return new Promise((resolve, reject) => {
+            let auth = context.getRequestHeader("authorization");
+            if(typeof auth !== "string")
+                auth = context.getRequestHeader("x-celastrina-authorization");
+            if(typeof auth !== "string")
+                auth = context.getQuery("authorization");
+
+            if(typeof auth !== "string")
+                reject(CelastrinaError.newError("Not Authorized.", 401));
+            else {
+                // Checking to see if it starts with bearer
+                if(auth.startsWith("Bearer "))
+                    auth = auth.slice(7);
+
+                let jwtsubject = JwtSubject.decode(auth);
+
+                // No we check the issuers.
+            }
+        });
+    }
+
+    /**
+     *
+     * @param {BaseContext} context
+     *
+     * @returns {Promise<void>}
+     */
+    async authorize(context) {
+        return new Promise((resolve, reject) => {
+            resolve();
+        });
+    }
+
+    _loadIssuers(promises) {
+        for(let index = 0; index < this._issuers.length; ++index) {
+            promises.unshift(this._loadIssuer(this._issuers[index]));
+        }
+    }
+
+    async _loadIssuer(issuer) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(Issuer.create(issuer));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+}
+
+/**
  * @brief Extension of the {BaseFunction} that handles HTTP triggers.
  *
  * @description Implementors must create a httpTrigger input binding named <code>red</code> and an output binding named
@@ -330,24 +636,26 @@ class HTTPFunction extends BaseFunction {
     /**
      * @brief
      *
-     * @param {null|string} [config]
+     * @param {Configuration} configuration
      */
-    constructor(config = null) {
-        super(config);
+    constructor(configuration) {
+        super(configuration);
     }
 
     /**
      * @brief Converts an Azure function context to an {HTTPContext}.
      *
-     * @param {_AzureFunctionContext} context The base Azure Function Context.
+     * @param {_AzureFunctionContext} context
+     * @param {string} name
+     * @param {PropertyHandler} properties
      *
      * @returns {Promise<BaseContext & HTTPContext>}
      */
-    async createContext(context) {
+    async createContext(context, name, properties) {
         return new Promise(
             (resolve, reject) => {
                 try {
-                    resolve(new HTTPContext(context, this._topic));
+                    resolve(new HTTPContext(context, name, properties));
                 }
                 catch(exception) {
                     reject(exception);
@@ -502,8 +810,8 @@ class HTTPFunction extends BaseFunction {
         return new Promise((resolve, reject) => {
             this._trace(context)
                 .then(() => {
-                    let response = [{test: context.topic, passed: context.monitorResponse.passed,
-                                     failed: context.monitorResponse.failed, result: context.monitorResponse.result}];
+                    let response = [{test: context.name, passed: context.monitorResponse.passed,
+                        failed: context.monitorResponse.failed, result: context.monitorResponse.result}];
                     context.send(response, 200);
                     resolve();
                 })
@@ -543,8 +851,8 @@ class HTTPFunction extends BaseFunction {
                 }
 
                 context.log("Request failed to process. (NAME:" + ex.cause.name + ") (MESSAGE:" +
-                            ex.cause.message + ") (STACK:" + ex.cause.stack + ")", LOG_LEVEL.LEVEL_ERROR,
-                            "HTTPFunction.exception(context, exception)");
+                    ex.cause.message + ") (STACK:" + ex.cause.stack + ")", LOG_LEVEL.LEVEL_ERROR,
+                    "HTTPFunction.exception(context, exception)");
                 resolve();
             });
     }
@@ -585,6 +893,29 @@ class HTTPFunction extends BaseFunction {
     }
 }
 
+class JwtHTTPFunction extends HTTPFunction {
+    /**
+     * @brief
+     *
+     * @param {Configuration} configuration
+     */
+    constructor(configuration) {
+        super(configuration);
+    }
+
+    async createSentry() {
+        return new Promise(
+            (resolve, reject) => {
+                try {
+                    resolve(new JwtSentry());
+                }
+                catch(exception) {
+                    reject(exception);
+                }
+            });
+    }
+}
+
 /**
  * @brief
  *
@@ -594,11 +925,12 @@ class JSONHTTPContext extends HTTPContext {
     /**
      * @brief
      *
-     * @param {_AzureHTTPFunctionContext} context
-     * @param {string} [topic]
+     * @param {_AzureFunctionContext} context
+     * @param {string} name
+     * @param {PropertyHandler} properties
      */
-    constructor(context, topic = "JSON HTTP function") {
-        super(context, topic);
+    constructor(context, name, properties) {
+        super(context, name, properties);
         this._context.res.headers["Content-Type"] = "application/json; charset=utf-8";
     }
 
@@ -610,7 +942,7 @@ class JSONHTTPContext extends HTTPContext {
      */
     send(body = null, status = 200) {
         this._context.res.status = status;
-        this._context.res.headers["X-celastrina-request-uuid"] = this._requestId;
+        this._context.res.headers["X-celastrina-requestId"] = this._requestId;
         this._context.res.body = body;
     }
 }
@@ -629,24 +961,26 @@ class JSONHTTPFunction extends HTTPFunction {
     /**
      * @brief
      *
-     * @param {null|string} [config]
+     * @param {Configuration} configuration
      */
-    constructor(config = null) {
-        super(config);
+    constructor(configuration) {
+        super(configuration);
     }
 
     /**
      * @brief Returns a {JSONHTTPContext}
      *
      * @param {_AzureFunctionContext} context
+     * @param {string} name
+     * @param {PropertyHandler} properties
      *
      * @returns {Promise<HTTPContext & JSONHTTPContext>}
      */
-    async createContext(context) {
+    async createContext(context, name, properties) {
         return new Promise(
             (resolve, reject) => {
                 try {
-                    resolve(new JSONHTTPContext(context, this._topic));
+                    resolve(new JSONHTTPContext(context, name, properties));
                 }
                 catch(exception) {
                     reject(exception);
@@ -655,9 +989,25 @@ class JSONHTTPFunction extends HTTPFunction {
     }
 }
 
-module.exports = {
-    HTTPContext:      HTTPContext,
-    HTTPFunction:     HTTPFunction,
-    JSONHTTPContext:  JSONHTTPContext,
-    JSONHTTPFunction: JSONHTTPFunction
-};
+class JwtJSONHTTPFunction extends JSONHTTPFunction {
+    /**
+     * @brief
+     *
+     * @param {Configuration} configuration
+     */
+    constructor(configuration) {
+        super(configuration);
+    }
+
+    async createSentry() {
+        return new Promise(
+            (resolve, reject) => {
+                try {
+                    resolve(new JwtSentry());
+                }
+                catch(exception) {
+                    reject(exception);
+                }
+            });
+    }
+}

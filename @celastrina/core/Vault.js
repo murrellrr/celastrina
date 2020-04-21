@@ -37,13 +37,11 @@ const axios  = require("axios").default;
 
 /**
  * @brief
- *
  * @author Robert R Murrell
  */
 class Vault {
     /**
      * @brief
-     *
      * @param {string} token
      */
     constructor(token) {
@@ -54,9 +52,15 @@ class Vault {
 
     /**
      * @brief
-     *
+     * @returns {string}
+     */
+    get token() {
+        return this.config.headers["Authorization"];
+    }
+
+    /**
+     * @brief
      * @param {string} identifier
-     *
      * @returns {Promise<string>}
      */
     async getSecret(identifier) {

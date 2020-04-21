@@ -22,62 +22,22 @@
  * SOFTWARE.
  */
 
-const error        = require("./CelastrinaError");
-const dao          = require("./DAO");
-const vault        = require("./Vault");
-const base         = require("./BaseFunction");
-const http         = require("./HTTPFunction");
-const auth         = require("./Authorization");
-const captcha      = require("./Recaptcha");
-const message      = require("./Message");
-const messaging    = require("./MessageFunction");
-const notification = require("./Notification");
+const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
+const {Vault} = require("./Vault");
+const {PropertyType, Property, JsonProperty, StringProperty, BooleanProperty, NumericProperty, Role, Configuration,
+       ApplicationRegistration, ResourceRegistration} = require("./BaseFunction");
 
 module.exports = {
-    CelastrinaError:           error.CelastrinaError,
-    CelastrinaValidationError: error.CelastrinaValidationError,
-    
-    CosmosStatement: dao.CosmosStatement,
-    CosmosDAOConfig: dao.CosmosDAOConfig,
-    DAO:             dao.DAO,
-    
-    Vault: vault.Vault,
-    
-    LOG_LEVEL:                    base.LOG_LEVEL,
-    MonitorResponse:              base.MonitorResponse,
-    DefaultSecurePropertyHandler: base.DefaultSecurePropertyHandler,
-    VaultPropertyHandler:         base.VaultPropertyHandler,
-    BaseContext:                  base.BaseContext,
-    BaseFunction:                 base.BaseFunction,
-    
-    HTTPContext:      http.HTTPContext,
-    HTTPFunction:     http.HTTPFunction,
-    JSONHTTPContext:  http.JSONHTTPContext,
-    JSONHTTPFunction: http.JSONHTTPFunction,
-
-    BaseUser:                  auth.BaseUser,
-    SentryConfig:              auth.SentryConfig,
-    Sentry:                    auth.Sentry,
-    MATCH_TYPE:                auth.MATCH_TYPE,
-    AuthorizationMatch:        auth.AuthorizationMatch,
-    MatchAny:                  auth.MatchAny,
-    MatchAll:                  auth.MatchAll,
-    MatchNone:                 auth.MatchNone,
-    AuthorizationQuery:        auth.AuthorizationQuery,
-    Issuer:                    auth.Issuer,
-    AuthorizationGroup:        auth.AuthorizationGroup,
-    AuthorizedJSONFunction:    auth.AuthorizedJSONFunction,
-    AuthenticatedJSONFunction: auth.AuthenticatedJSONFunction,
-    
-    Recaptcha:              captcha.Recaptcha,
-    RECAPTCHA_TOKEN_METHOD: captcha.RECAPTCHA_TOKEN_METHOD,
-    RecaptchaJSONFunction:  captcha.RecaptchaJSONFunction,
-    
-    Header:  message.Header,
-    Message: message.Message,
-    
-    MessageContext:  messaging.MessageContext,
-    MessageFunction: messaging.MessageFunction,
-    
-    EmailNotificationBody: notification.EmailNotificationBody
+    CelastrinaError: CelastrinaError,
+    CelastrinaValidationError: CelastrinaValidationError,
+    Vault: Vault,
+    PropertyType: PropertyType,
+    Property: Property,
+    JsonProperty: JsonProperty,
+    StringProperty: StringProperty,
+    BooleanProperty: BooleanProperty,
+    NumericProperty: NumericProperty,
+    ApplicationRegistration: ApplicationRegistration,
+    ResourceRegistration: ResourceRegistration,
+    Configuration: Configuration
 };

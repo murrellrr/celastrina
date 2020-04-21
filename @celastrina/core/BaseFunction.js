@@ -24,26 +24,39 @@
 
 "use strict";
 
-const axios = require("axios").default;
-const {Vault} = require("./Vault");
-const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
+const axios             = require("axios").default;
+const moment            = require("moment");
+const uuid4v            = require("uuid/v4");
+const {TokenResponse, AuthenticationContext} = require("adal-node");
+const {CelastrinaError} = require("./CelastrinaError");
+const {Vault}           = require("./Vault");
 
-const uuid4v = require("uuid/v4");
-
+/**
+ * @typedef _ManagedResourceToken
+ * @property {string} access_token
+ * @property {string} expires_on
+ * @property {string} resource
+ * @property {string} token_type
+ * @property {string} client_id
+ */
+/**
+ * @typedef _CelastrinaToken
+ * @property {string} resource
+ * @property {string} token
+ * @property {moment.Moment} expires
+ */
 /**
  * @typedef _AzureFunctionRequest
  * @property {Object} headers
  * @property {Object} params
  * @property {Object} body
  */
-
 /**
  * @typedef _AzureFunctionResponse
  * @property {number} status
  * @property {Object} headers
  * @property {Object} body
  */
-
 /**
  * @typedef _AzureLog
  * @property error
@@ -52,18 +65,18 @@ const uuid4v = require("uuid/v4");
  * @property info
  * @function ()
  */
-
 /**
  * @typedef {Object} _Body
  */
-
-
 /**
  * @typedef _AzureFunctionContext
- * @property {Object} bindings
+ * @property {Object & {req: Object, res: Object}} bindings
+ * @property {Object & {invocationId: string}} bindingData
  * @property {_AzureLog} log
  * @property {function()|function(*)} done
  * @property {function(string)} log
+ * @property {string} invocationId
+ * @property {Object} traceContext
  *
  * @typedef {Base & _AzureFunctionContext} _AzureHTTPFunctionContext
  * @property {_AzureFunctionResponse} res
@@ -74,103 +87,25 @@ const uuid4v = require("uuid/v4");
  * @property {string} originalUrl
  * @property {string} rawBody
  */
-
-/**
- * @brief
- *
- * @type {{LEVEL_TRACE: number, LEVEL_INFO: number, LEVEL_VERBOSE: number, LEVEL_WARN: number, LEVEL_ERROR: number}}
+/*
+ * *********************************************************************************************************************
+ * PROPERTIES
+ * *********************************************************************************************************************
  */
-const LOG_LEVEL = {
-    LEVEL_TRACE:   0,
-    LEVEL_VERBOSE: 1,
-    LEVEL_INFO:    2,
-    LEVEL_WARN:    3,
-    LEVEL_ERROR:   4
-};
-
 /**
- * @brief
- *
- * @author Robert R Murrell
- *
- * @type {{_topic: string, _passed: Object, _failed: Object, failed: boolean}}
- */
-class MonitorResponse {
-    constructor() {
-        this._passed = {};
-        this._failed = {};
-        this._passedCheck = false;
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {Object}
-     */
-    get passed() {
-        return this._passed;
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {Object}
-     */
-    get failed() {
-        return this._failed;
-    }
-
-    /**
-     * @brief Sets a check that was made by this monitor that passed.
-     *
-     * @param {string} probe
-     * @param {string} message
-     */
-    addPassedDiagnostic(probe, message) {
-        this._passed[probe] = message;
-    }
-
-    /**
-     * @brief Sets a check that was made by this monitor that failed.
-     *
-     * @param {string} probe
-     * @param {string} message
-     */
-    addFailedDiagnostic(probe, message) {
-        if(!this._passedCheck) this._passedCheck = !this._passedCheck;
-        this._failed[probe] = message;
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {string}
-     */
-    get result() {
-        if(this._passedCheck)
-            return "FAILED";
-        else
-            return "PASSED";
-    }
-}
-
-/**
- * @brief
- *
+ * @brief Handler class to load properties from {process.env}.
  * @author Robert R Murrell
  */
-class DefaultSecurePropertyHandler {
+class PropertyHandler {
     constructor() {}
 
     /**
      * @brief
-     *
      * @param {string} key
-     * @param {null|string} defaultValue
-     *
+     * @param {null|string} [defaultValue]
      * @returns {Promise<string>}
      */
-    async getSecureEnvironmentProperty(key, defaultValue = null) {
+    async getEnvironmentProperty(key, defaultValue = null) {
         return new Promise((resolve) => {
             let value = process.env[key];
             if(typeof value === "undefined" || value.trim().length === 0)
@@ -178,12 +113,23 @@ class DefaultSecurePropertyHandler {
             resolve(value);
         });
     }
-}
 
+    /**
+     * @brief
+     * @param {string} key
+     * @param {null|string} [defaultValue]
+     * @returns {Promise<string>}
+     */
+    async getSecureEnvironmentProperty(key, defaultValue = null) {
+        return this.getEnvironmentProperty(key, defaultValue);
+    }
+}
 /**
+ * @brief
+ * @author Robert R Murrell
  * @type {{_vault: Vault}}
  */
-class VaultPropertyHandler extends DefaultSecurePropertyHandler {
+class VaultPropertyHandler extends PropertyHandler {
     /**
      * @prief
      *
@@ -197,10 +143,16 @@ class VaultPropertyHandler extends DefaultSecurePropertyHandler {
 
     /**
      * @brief
-     *
+     * @returns {Vault}
+     */
+    get vault() {
+        return this._vault;
+    }
+
+    /**
+     * @brief
      * @param {string} key
-     * @param {null|string} defaultValue
-     *
+     * @param {null|string} [defaultValue]
      * @returns {Promise<string>}
      */
     async getSecureEnvironmentProperty(key, defaultValue = null) {
@@ -225,249 +177,369 @@ class VaultPropertyHandler extends DefaultSecurePropertyHandler {
             });
     }
 }
-
-/**
- * @brief JWT Claims from the Authorization header bearer token.
- *
- * @author Robert R Murrell
- *
- * @type {{subject: null|string, roles: string[]}}
- */
-class BaseUser {
-    /**
-     * @brief
-     *
-     * @param {null|string} [sub]
-     */
-    constructor(sub = null) {
-        this._version    = "1.0";
-        this._subject    = sub;
-        this._roles      = [];
-    }
-
-    /**
-     * @brief Returns the framework version of this claims token.
-     *
-     * @returns {string} the framework version of this claims token.
-     */
-    get version() {
-        return this._version;
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {null|string}
-     */
-    get subject() {
-        return this._subject;
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {string[]}
-     */
-    get roles() {
-        return this._roles;
-    }
-
-    /**
-     * @brief
-     *
-     * @param {string[]} roles
-     */
-    addRoles(roles) {
-        if(typeof roles === "undefined" || roles == null || !Array.isArray(roles))
-            throw CelastrinaError.newError("Roles are required.");
-        this._roles = roles.concat(this._roles);
-    }
-
-    /**
-     * @brief
-     *
-     * @param {string} role
-     */
-    addRole(role) {
-        if(typeof role !== "string" || role.trim().length === 0 || this._roles.includes(role))
-            throw CelastrinaError.newError("Role is required and cannot be duplicate.");
-        this._roles.unshift(role);
-    }
-
-    /**
-     * @brief
-     *
-     * @param {string} role
-     */
-    removeRole(role) {
-        if(typeof role === "string" && role.trim().length > 0 && this.roles.includes(role)) {
-            let index;
-            if((index =this._roles.indexOf(role)) > -1)
-                this._roles = this._roles.slice(index, 1);
-        }
-    }
-
-    /**
-     * @brief
-     *
-     * @param {string} role
-     */
-    isInRole(role) {
-        return this._roles.includes(role);
-    }
-
-    /**
-     * @brief
-     *
-     * @param {string} json
-     *
-     * @return {Object}
-     */
-    parse(json) {
-        Object.assign(this, JSON.parse(json));
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {*}
-     */
-    toJSON() {
-        return {_subject: this._subject, _roles: this._roles};
-    }
-}
-
 /**
  * @brief
- *
  * @author Robert R Murrell
- *
- * @type {{_context: _AzureFunctionContext, _requestId: string, _topic: string}}
+ * @type {{_name:string, _type:string, _secure:boolean, _defaultValue:null|*}}
  */
-class BaseContext {
+class Property {
     /**
      * @brief
-     *
-     * @param {_AzureFunctionContext} context
-     * @param {string} [topic]
+     * @param {string} name
+     * @param {string} [type]
+     * @param {boolean} [secure]
+     * @param {null|*} [defaultValue]
      */
-    constructor(context, topic = "function") {
-        /** @type {_AzureFunctionContext} */
-        this._context         = context;
-        this._topic           = topic;
-        this._monitor         = false;
-        this._requestId       = uuid4v();
-        this._monitorResponse = null;
-        /** @type {DefaultSecurePropertyHandler} */
-        this._properties      = new DefaultSecurePropertyHandler();
-        this.user             = null;
+    constructor(name, type = "string", secure = false, defaultValue = null) {
+        this._name         = name;
+        this._type         = type;
+        this._secure       = secure;
+        this._defaultValue = defaultValue;
     }
 
     /**
      * @brief
-     *
-     * @param {DefaultSecurePropertyHandler} handler
+     * @returns {string}
      */
-    _setPropertyHandler(handler) {
-        this._properties = handler;
+    get name() {
+        return this._name;
     }
 
     /**
-     * @brief Switches this context to monitor mode.
-     *
-     * @description Should only be used by classes extending this class.
+     * @brief
+     * @returns {string}
      */
-    _setContextToMonitor() {
-        if(!this._monitor) {
-            this._monitor         = true;
-            this._monitorResponse = new MonitorResponse();
-        }
+    get type() {
+        return this._type;
     }
 
     /**
-     * @brief Returns true if this a monitor message, false otherwise.
-     *
+     * @brief
      * @returns {boolean}
      */
-    get isMonitorInvocation() {
-        return this._monitor;
-    }
-
-    /**
-     * @brief Returns the monitor response or null if this was not a monitor message.
-     *
-     * @description Use this to record your passed or failed checks you've mode.
-     *
-     * @returns {MonitorResponse|null}
-     */
-    get monitorResponse() {
-        return this._monitorResponse;
+    get secure() {
+        return this._secure;
     }
 
     /**
      * @brief
-     *
-     * @returns {_AzureFunctionContext}
+     * @returns {*}
      */
-    get context() {
-        return this._context;
+    get defaultValue() {
+        return this._defaultValue;
     }
 
     /**
-     * @brief Returns the topic for this context.
-     *
-     * @description The topic is the textual context of this software context and is used in logging through the
-     *              context.
-     *
-     * @returns {string}
+     * @brief
+     * @param {PropertyHandler} handler
+     * @returns {Promise<null|Object|string|boolean|number>}
      */
-    get topic() {
-        return this._topic;
-    }
+    load(handler) {
+        return new Promise((resolve, reject) => {
+            let promise;
+            if(this._secure)
+                promise = handler.getSecureEnvironmentProperty(this._name, this._defaultValue);
+            else
+                promise = handler.getEnvironmentProperty(this._name, this._defaultValue);
 
-    /**
-     * @brief Returns the uuid for this transaction.
-     *
-     * @returns {string}
-     */
-    get requestId() {
-        return this._requestId;
+            promise
+                .then((local) => {
+                    switch(this._type) {
+                        case "json":
+                            resolve(JSON.parse(local));
+                            break;
+                        case "string":
+                            resolve(local);
+                            break;
+                        case "boolean":
+                            resolve((local.toLowerCase() === "true"));
+                            break;
+                        case "number":
+                            resolve(Number(local));
+                            break;
+                        default:
+                            reject(CelastrinaError.newError("Unsupported type '" + this._type +
+                                                            "' in property '" + this._name + "'."));
+                    }
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
     }
-
+}
+/**
+ * @brief
+ * @author Robert R Murrell
+ * @type {Property}
+ */
+class JsonProperty extends Property {
     /**
-     * @brief Returns a binding object by name
-     *
-     * @param {string} name The binding to get.
-     */
-    getBinding(name) {
-        return this._context.bindings[name];
-    }
-
-    /**
-     * @brief Sets a binding object.
-     *
+     * @brief
      * @param {string} name
-     * @param {Object} value
+     * @param {boolean} secure
+     * @param {null|string} defaultValue
      */
-    setBinding(name, value) {
-        this._context.bindings[name] = value;
+    constructor(name, secure = false, defaultValue = null) {
+        super(name, "json", secure, defaultValue);
+    }
+}
+/**
+ * @brief
+ * @author Robert R Murrell
+ * @type {Property}
+ */
+class StringProperty extends Property {
+    /**
+     * @brief
+     * @param {string} name
+     * @param {boolean} secure
+     * @param {null|string} defaultValue
+     */
+    constructor(name, secure = false, defaultValue = null) {
+        super(name, "string", secure, defaultValue);
+    }
+}
+/**
+ * @brief
+ * @author Robert R Murrell
+ * @type {Property}
+ */
+class BooleanProperty extends Property {
+    /**
+     * @brief
+     * @param {string} name
+     * @param {boolean} secure
+     * @param {null|boolean} defaultValue
+     */
+    constructor(name, secure = false, defaultValue = null) {
+        super(name, "boolean", secure, defaultValue);
+    }
+}
+/**
+ * @brief
+ * @author Robert R Murrell
+ * @type {Property}
+ */
+class NumericProperty extends Property {
+    /**
+     * @brief
+     * @param {string} name
+     * @param {boolean} secure
+     * @param {null|number} defaultValue
+     */
+    constructor(name, secure = false, defaultValue = null) {
+        super(name, "number", secure, defaultValue);
+    }
+}
+/*
+ * *********************************************************************************************************************
+ * APPLICATION AUTHENTICATION AND AUTHORIZATION
+ * *********************************************************************************************************************
+ */
+/**
+ * @brief Application credential configuration
+ * @description An {ApplicationAuthorization} is a configuration for an Azure Application credential. This allows
+ *              functions to perform actions as the application identity, granting access to resources provided to the
+ *              application.
+ * @type {{_authority:StringProperty|string, _tenant:StringProperty|string, _id:StringProperty|string,
+ *         _secret:StringProperty|string}}
+ * @see https://docs.microsoft.com/en-us/azure/active-directory/develop/msal-client-application-configuration
+ */
+class ApplicationAuthorization {
+    /**
+     * @brief
+     * @param {StringProperty|string} authority
+     * @param {StringProperty|string} tenant
+     * @param {StringProperty|string} id
+     * @param {StringProperty|string} secret
+     * @param {Array.<StringProperty|string>} [resources]
+     * @param {BooleanProperty|boolean} [managed]
+     */
+    constructor(authority, tenant, id,
+                secret, resources = [], managed = false) {
+        this._authority = authority;
+        this._tenant    = tenant;
+        this._id        = id;
+        this._secret    = secret;
+        this._resources = resources;
+        this._managed   = managed;
+        this._tokens    = {};
     }
 
     /**
      * @brief
-     *
-     * @param {string} key
-     * @param {null|string} [defaultValue]
-     *
-     * @return {Promise<string>}
+     * @returns {string}
      */
-    async getEnvironmentProperty(key, defaultValue = null) {
+    get authority() {
+        return this._authority;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get tenant() {
+        return this._tenant;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get id() {
+        return this._id;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get secret() {
+        return this._secret;
+    }
+
+    /**
+     * @brief
+     * @returns {boolean}
+     */
+    get managed() {
+        return this._managed;
+    }
+
+    /**
+     * @brief
+     * @param {StringProperty|string} resource
+     * @returns {ApplicationAuthorization}
+     */
+    addResource(resource) {
+        this._resources.unshift(resource);
+        return this;
+    }
+
+    /**
+     * @brief
+     * @returns {Array.<string>}
+     */
+    get resources() {
+        return this._resources;
+    }
+
+    /**
+     * @brief
+     * @param {string} resource
+     * @returns {Promise<string>}
+     */
+    async getToken(resource) {
+        return new Promise((resolve, reject) => {
+            /** @type {_CelastrinaToken} */
+            let token = this._tokens[resource];
+            if(typeof token !== "object")
+                reject(CelastrinaError.newError("Resource '" + resource + "' not authorized for " +
+                                                 "application '" + this._id + "'.", 401));
+            else {
+                let exp = token.expires;
+                let now = moment();
+                if(exp.isSameOrAfter(now))
+                    this.refreshToken(resource)
+                        .then((rtoken) => {
+                            resolve(rtoken);
+                        })
+                        .catch((exception) => {
+                            reject(exception);
+                        });
+                else
+                    resolve(token.token);
+            }
+        });
+    }
+
+    /**
+     * @brief
+     * @param {string} resource
+     * @returns {Promise<string>}
+     * @private
+     */
+    async _refreshManagedToken(resource) {
+        return new Promise((resolve, reject) => {
+            let params = new URLSearchParams();
+            params.append("resource", resource);
+            params.append("api-version", "2017-09-01");
+            let config = {/** @type {URLSearchParams} */params: params, headers: {"secret": this._secret}};
+            axios.get(this._tenant, config)
+                .then((response) => {
+                    let token = {resource: resource,
+                                 token: response.data.access_token,
+                                 expires: moment(response.data.expires_on)};
+                    this._tokens[token.resource] = token;
+                    resolve(token.token);
+                })
+                .catch((exception) =>{
+                    reject(exception);
+                });
+        });
+    }
+
+    /**
+     * @brief
+     * @param {string} resource
+     * @returns {Promise<string>}
+     * @private
+     */
+    async _refreshApplicationToken(resource) {
+        return new Promise((resolve, reject) => {
+            let adContext = new AuthenticationContext(this._authority + "/" + this._tenant);
+            adContext.acquireTokenWithClientCredentials(resource, this._id, this._secret,
+                (err, response) => {
+                    if(err)
+                        reject(CelastrinaError.newError("Not authorized.", 401));
+                    else {
+                        let token = {resource: resource,
+                                     token: response.accessToken,
+                                     expires: moment(response.expiresOn)};
+                        this._tokens[token.resource] = token;
+                        resolve(token.token);
+                    }
+                });
+        });
+    }
+
+    /**
+     * @brief
+     * @param {string} resource
+     * @returns {Promise<string>}
+     */
+    async refreshToken(resource) {
+        return new Promise((resolve, reject) => {
+            let promise;
+            if(this._managed)
+                promise = this._refreshManagedToken(resource);
+            else
+                promise = this._refreshApplicationToken(resource);
+            promise
+                .then((token) => {
+                    resolve(token);
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+
+    /**
+     * @brief
+     * @param {Array.<_CelastrinaToken>} tokens
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _setResourceTokens(tokens) {
         return new Promise((resolve, reject) => {
             try {
-                let value = process.env[key];
-                if(typeof value === "undefined")
-                    value = defaultValue;
-                resolve(value);
+                let ritr = tokens[Symbol.iterator]();
+                for (let token of ritr) {
+                    this._tokens[token.resource] = token;
+                }
+                resolve();
             }
             catch(exception) {
                 reject(exception);
@@ -477,10 +549,1022 @@ class BaseContext {
 
     /**
      * @brief
-     *
+     * @param {{params:URLSearchParams, headers:Object}} config
+     * @param {string} resource
+     * @returns {Promise<_CelastrinaToken>}
+     * @private
+     */
+    async _initializeManagedResource(config, resource) {
+        return new Promise((resolve, reject) => {
+            config.params.set("resource", resource);
+            axios.get(this._tenant, config)
+                .then(( response) => {
+                    resolve({resource: resource,
+                                   token: response.data.access_token,
+                                   expires: moment(response.data.expires_on)});
+                })
+                .catch((exception) =>{
+                    reject(exception);
+                });
+        });
+    }
+
+    /**
+     * @brief
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _initializeManagedResources() {
+        return new Promise((resolve, reject) => {
+            let params = new URLSearchParams();
+            params.append("resource", "");
+            params.append("api-version", "2017-09-01");
+            let config = {/** @type {URLSearchParams} */params: params, headers: {"secret": this._secret}};
+
+            /** @type {Array.<Promise<_CelastrinaToken>>} */
+            let promises = [];
+            let itr = this._resources[Symbol.iterator]();
+            for(let resource of itr) {
+                promises.unshift(this._initializeManagedResource(config, resource));
+            }
+
+            Promise.all(promises)
+                .then((results) => {
+                    return this._setResourceTokens(results);
+                })
+                .then(() => {
+                    resolve();
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+
+    /**
+     * @brief
+     * @param {AuthenticationContext} adContext
+     * @param {string} resource
+     * @returns {Promise<_CelastrinaToken>}
+     * @private
+     */
+    async _initializeAppResource(adContext, resource) {
+        return new Promise((resolve, reject) => {
+            adContext.acquireTokenWithClientCredentials(resource, this._id, this._secret,
+                (err, response) => {
+                    if(err)
+                        reject(CelastrinaError.newError("Not authorized.", 401));
+                    else {
+                        resolve({resource: resource,
+                                       token: response.accessToken,
+                                       expires: moment(response.expiresOn)});
+                    }
+                });
+        });
+    }
+
+    /**
+     * @brief
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _initializeAppResources() {
+        return new Promise((resolve, reject) => {
+            try {
+                let adContext = new AuthenticationContext(this._authority + "/" + this._tenant);
+                /** @type {Array.<Promise<_CelastrinaToken>>} */
+                let promises = [];
+                let itr = this._resources[Symbol.iterator]();
+                for (let resource of itr) {
+                    promises.unshift(this._initializeAppResource(adContext, resource));
+                }
+
+                Promise.all(promises)
+                    .then((results) => {
+                        return this._setResourceTokens(results);
+                    })
+                    .then(() => {
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+
+    /**
+     * @brief
+     * @returns {Promise<void>}
+     */
+    async initialize() {
+        return new Promise((resolve, reject) => {
+            if(this._resources.length === 0)
+                reject(CelastrinaError.newError("No resources defined for authorization '" + this._id + "'."));
+            else {
+                let promise;
+                if(this._managed)
+                    promise = this._initializeManagedResources();
+                else
+                    promise = this._initializeAppResources();
+                promise
+                    .then(() => {
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+        });
+    }
+
+    /**
+     * @brief
+     * @param {Object} source
+     */
+    static create(source) {
+        if(typeof source === "undefined" || source == null)
+            throw CelastrinaError.newError("Invalid ApplicationAuthorization, cannot be null or undefined.");
+        if(!source.hasOwnProperty("_authority"))
+            throw CelastrinaError.newError("Invalid ApplicationAuthorization, _authority required.");
+        if(!source.hasOwnProperty("_tenant"))
+            throw CelastrinaError.newError("Invalid ApplicationAuthorization, _tenant required.");
+        if(!source.hasOwnProperty("_id"))
+            throw CelastrinaError.newError("Invalid ApplicationAuthorization, _id required.");
+        if(!source.hasOwnProperty("_secret"))
+            throw CelastrinaError.newError("Invalid ApplicationAuthorization, _secret required.");
+        if(!source.hasOwnProperty("_resources") || !Array.isArray(source._resources))
+            throw CelastrinaError.newError("Invalid ApplicationAuthorization, _resources required.");
+        return new ApplicationAuthorization(source._authority, source._tenant, source._id, source._secret,
+                                            source._resources);
+    }
+}
+/*
+ * *********************************************************************************************************************
+ * PROPERTIES LOADER FOR ASYNC LOADING OF CONFIGURATION
+ * *********************************************************************************************************************
+ */
+/**
+ * @brief
+ */
+class PropertyLoader {
+    /**
+     * @brief
+     * @param {Object} object
+     * @param {string} attribute
+     * @param {Property} property
+     * @param {PropertyHandler} handler
+     * @returns {Promise<void>}
+     */
+    static async load(object, attribute, property, handler) {
+        return new Promise((resolve, reject) => {
+            property.load(handler)
+                .then((resolved) => {
+                    object[attribute] = resolved;
+                    resolve();
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+}
+/*
+ * *********************************************************************************************************************
+ * SECURITY
+ * *********************************************************************************************************************
+ */
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class BaseSubject {
+    /**
+     * @brief
+     * @param {string} id
+     * @param {Array.<string>} roles
+     */
+    constructor(id, roles = []) {
+        this._id    = id;
+        this._roles = roles;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get id() {
+        return this._id;
+    }
+
+    /**
+     * @brief
+     * @returns {Array.<string>}
+     */
+    get roles() {
+        return this._roles;
+    }
+
+    /**
+     * @brief
+     * @param {string} role
+     */
+    addRole(role) {
+        this._roles.unshift(role);
+    }
+
+    /**
+     * @brief
+     * @param {Array.<string>} roles
+     */
+    addRoles(roles) {
+        this._roles = roles.concat(this._roles);
+    }
+
+    /**
+     * @brief
+     * @param {string} role
+     * @returns {Promise<boolean>}
+     */
+    async isInRole(role) {
+        return new Promise((resolve, reject) => {
+            resolve(this._roles.includes(role));
+        });
+    }
+
+    /**
+     * @brief
+     * @returns {{subject:string, roles:Array.<string>}}
+     */
+    toJSON() {
+       return {subject: this._id, roles: this._roles};
+    }
+}
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class ValueMatch {
+    /**
+     * @brief
+     * @param {string} assertion
+     * @param {Array.<string>} values
+     * @returns {Promise<boolean>}
+     */
+    async isMatch(assertion, values) {
+        return new Promise((resolve) => {
+            resolve(false);
+        });
+    }
+}
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class MatchAny extends ValueMatch {
+    /**
+     * @brief
+     * @param {string} assertion
+     * @param {Array.<string>} values
+     * @returns {Promise<boolean>}
+     */
+    async isMatch(assertion, values) {
+        return new Promise((resolve) => {
+            resolve(false);
+        });
+    }
+}
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class MatchAll extends ValueMatch {
+    /**
+     * @brief
+     * @param {string} assertion
+     * @param {Array.<string>} values
+     * @returns {Promise<boolean>}
+     */
+    async isMatch(assertion, values) {
+        return new Promise((resolve) => {
+            resolve(false);
+        });
+    }
+}
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class MatchNone extends ValueMatch {
+    /**
+     * @brief
+     * @param {string} assertion
+     * @param {Array.<string>} values
+     * @returns {Promise<boolean>}
+     */
+    async isMatch(assertion, values) {
+        return new Promise((resolve) => {
+            resolve(false);
+        });
+    }
+}
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class SubjectEnrollmentAssertion {
+    /**
+     * @brief
+     * @param {StringProperty|string} role
+     * @param {JsonProperty|Array.<string>} values
+     * @param {JsonProperty|ValueMatch} [matcher]
+     */
+    constructor(role, values, matcher = new MatchAny()) {
+        this._role    = role;
+        this._values  = values;
+        this._matcher = matcher;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get role() {
+        return this._role
+    }
+
+    /**
+     * @brief
+     * @returns {Array.<string>}
+     */
+    get values() {
+        return this._values;
+    }
+
+    /**
+     * @brief
+     * @returns {ValueMatch}
+     */
+    get matcher() {
+        return this._matcher;
+    }
+
+    /**
+     * @brief
+     * @param subject
+     * @returns {Promise<boolean>}
+     */
+    async assertRole(subject) {
+        return new Promise((resolve, reject) => {
+            this._matcher.isMatch(this._getSubjectValue(subject), this._values)
+                .then((result) => {
+                    if(result)
+                        subject.addRole(this._role);
+                    resolve(result);
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+
+    /**
+     * @brief
+     * @param subject
+     * @returns {*}
+     * @private
+     */
+    _getSubjectValue(subject) {
+        return subject.id;
+    }
+}
+/*
+ * *********************************************************************************************************************
+ * CONFIGURATION
+ * *********************************************************************************************************************
+ */
+/**
+ * @brief
+ * @author Robert R Murrell
+ * @type {{_name:StringProperty|string, managed:BooleanProperty|boolean}}
+ */
+class Configuration {
+    /**
+     * @brief
+     * @param {StringProperty|string} name
+     * @param {BooleanProperty|boolean} managed
+     */
+    constructor(name, managed = true) {
+        this._name    = name;
+        this._managed = managed;
+
+        /** @type {Array.<JsonProperty|ApplicationAuthorization>} **/
+        this._appauth = [];
+        /** @type {Array.<StringProperty|string>} **/
+        this._resauth = [];
+        /** @type {Array.<JsonProperty|SubjectEnrollmentAssertion>} */
+        this._roleenroll = [];
+        /** @type {null|PropertyHandler} */
+        this._handler = new PropertyHandler();
+        /** @type {_AzureFunctionContext|null} */
+        this._context = null;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get name() {
+        return this._name;
+    }
+
+    /**
+     * @brief
+     * @returns {boolean}
+     */
+    get isManaged() {
+        return this._managed;
+    }
+
+    /**
+     * @brief
+     * @returns {PropertyHandler}
+     */
+    get properties() {
+        return this._handler;
+    }
+
+    /**
+     * @brief
+     * @param {JsonProperty|ApplicationAuthorization} registration
+     * @returns {Configuration}
+     */
+    addApplicationAuthorization(registration) {
+        this._appauth.unshift(registration);
+        return this;
+    }
+
+    /**
+     * @brief
+     * @returns {Array<ApplicationAuthorization>}
+     */
+    get applicationAuthorizations() {
+        return this._appauth;
+    }
+
+    /**
+     * @brief Adds a resource name for authorization.
+     * @description Resource authorizations are used for Azure Functions with managed identities. If using an
+     *              application identity us {ApplicationAuthorization} instead.
+     *              In order for resource authorizations to work the {_managed} attribute of this {Configuration}
+     *              <strong>must be <code>true</code></strong> or the function will not boot strap.
+     * @param {StringProperty|string} resource The name of the resource to authorize.
+     * @returns {Configuration}
+     */
+    addResourceAuthorization(resource) {
+        if(!this._managed)
+            throw CelastrinaError.newError("Invalied managed state exception. This function MUST be " +
+                                           "managed (managed = true) to use resource authorizations. If " +
+                                           "attempting to assign resources to an application, please use " +
+                                           "ApplicationRegistration.");
+        this._resauth.unshift(resource);
+        return this;
+    }
+
+    /**
+     * @brief
+     * @returns {Array<string>}
+     */
+    get resourceAuthorizations() {
+        return this._resauth;
+    }
+
+    /**
+     * @brief
+     * @param {JsonProperty|SubjectEnrollmentAssertion} assertion
+     * @returns {Configuration}
+     */
+    addEnrollmentAssertion(assertion) {
+        this._roleenroll.unshift(assertion);
+        return this;
+    }
+
+    /**
+     * @brief
+     * @returns {Array.<SubjectEnrollmentAssertion>}
+     */
+    get enrollmentAssertions() {
+        return this._roleenroll;
+    }
+
+    /**
+     * @brief
+     * @returns {_AzureFunctionContext}
+     */
+    get context() {
+        return this._context;
+    }
+
+    /**
+     * @brief
+     * @param {string} endpoint
+     * @param {string} secret
+     * @returns {Promise<string>}
+     * @private
+     */
+    async _registerVaultResource(endpoint, secret) {
+        return new Promise((resolve, reject) => {
+            let params = new URLSearchParams();
+            params.append("resource", "https://vault.azure.net");
+            params.append("api-version", "2017-09-01");
+            let config = {params: params,
+                          headers: {"secret": process.env["MSI_SECRET"]}};
+
+            axios.get(process.env["MSI_ENDPOINT"], config)
+                .then((response) => {
+                    resolve(response.data.value);
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+
+    /**
+     * @brief
+     * @return {Promise<void>}
+     * @private
+     */
+    async _setManaged() {
+        return new Promise((resolve, reject) => {
+            try {
+                // We are going to ignore secure property values for this setting.
+                if(this._managed instanceof BooleanProperty) {
+                    // Setting if this is managed or not, going to ignore
+                    let local = process.env[this._managed.name];
+                    if(typeof local === "undefined" || local == null)
+                        this._managed = false;
+                    else
+                        this._managed = (local === "true");
+                }
+
+                // Now we load the appropriate property handler
+                if(this._managed) {
+                    this._registerVaultResource(process.env["MSI_ENDPOINT"], process.env["MSI_SECRET"])
+                        .then((value) => {
+                            this._handler = new VaultPropertyHandler(new Vault(value));
+                            resolve();
+                        })
+                        .catch((exception) => {
+                            reject(exception);
+                        });
+                }
+                else
+                    resolve();
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+
+    /**
+     * @brief
+     * @param {Object} obj
+     * @param {Array.<Promise>} promises
+     * @private
+     */
+    _load(obj, promises) {
+        if(typeof obj === "object") {
+            for(let prop in obj) {
+                let local = obj[prop];
+                if(typeof local !== "undefined" && local != null) {
+                    if(local instanceof Property)
+                        if(local.secure !== this._managed)
+                            throw CelastrinaError.newError("Managed configuration required. Property '" +
+                                local.name + "' is secure.");
+                        else
+                            promises.unshift(PropertyLoader.load(obj, prop, local, this._handler));
+                    else
+                        this._load(local, promises);
+                }
+            }
+        }
+    }
+
+    /**
+     * @brief
+     * @param {_AzureFunctionContext} context
+     * @returns {Promise<void>}
+     */
+    async load(context) {
+        return new Promise(
+            (resolve, reject) => {
+                try {
+                    // Set up the invocationId
+                    this._context = context;
+                    // Set up the properties loader
+                    this._setManaged()
+                        .then(() => {
+                            // Scan for any property object then replace async.
+                            /** @type {Array.<Promise<void>>} */
+                            let promises = [];
+                            this._load(this, promises);
+                            return Promise.all(promises);
+                        })
+                        .then(() => {
+                            resolve();
+                        })
+                        .catch((exception) => {
+                            reject(exception);
+                        });
+                }
+                catch(exception) {
+                    reject(exception);
+                }
+            });
+    }
+}
+/*
+ * *********************************************************************************************************************
+ * FUNCTION
+ * *********************************************************************************************************************
+ */
+/**
+ * @brief
+ * @author Robert R Murrell
+ * @type {{LEVEL_TRACE: number, LEVEL_INFO: number, LEVEL_VERBOSE: number, LEVEL_WARN: number, LEVEL_ERROR: number}}
+ */
+const LOG_LEVEL = {
+    LEVEL_TRACE:   0,
+    LEVEL_VERBOSE: 1,
+    LEVEL_INFO:    2,
+    LEVEL_WARN:    3,
+    LEVEL_ERROR:   4
+};
+/**
+ * @brief
+ * @author Robert R Murrell
+ * @type {{_topic: string, _passed: Object, _failed: Object, failed: boolean}}
+ */
+class MonitorResponse {
+    constructor() {
+        this._passed = {};
+        this._failed = {};
+        this._passedCheck = false;
+    }
+
+    /**
+     * @brief
+     * @returns {Object}
+     */
+    get passed() {
+        return this._passed;
+    }
+
+    /**
+     * @brief
+     * @returns {Object}
+     */
+    get failed() {
+        return this._failed;
+    }
+
+    /**
+     * @brief Sets a check that was made by this monitor that passed.
+     * @param {string} probe
+     * @param {string} message
+     */
+    addPassedDiagnostic(probe, message) {
+        this._passed[probe] = message;
+    }
+
+    /**
+     * @brief Sets a check that was made by this monitor that failed.
+     * @param {string} probe
+     * @param {string} message
+     */
+    addFailedDiagnostic(probe, message) {
+        if(!this._passedCheck) this._passedCheck = !this._passedCheck;
+        this._failed[probe] = message;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get result() {
+        if(this._passedCheck)
+            return "FAILED";
+        else
+            return "PASSED";
+    }
+}
+/**
+ * @brief
+ * @type {{_appauth:Object}}
+ */
+class BaseSentry {
+    constructor() {
+        this._appauth    = {};
+        this._localAppId = null;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get localApplicationId() {
+        return this._localAppId;
+    }
+
+    /**
+     * @brief Returns the authorization token for an application or managed identity and resource.
+     * @param {string} resource The resource to get an authorization token for. Example https://database.windows.net/.
+     *                 See https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/
+     *                 services-support-managed-identities for more information.
+     * @param {null|string} [id] The application ID, or the ID of the managed identity.
+     * @returns {Promise<string>}
+     */
+    async getAuthorizationToken(resource, id = null) {
+        return new Promise((resolve, reject) => {
+            if(id == null)
+                id = this._localAppId;
+            /** @type {ApplicationAuthorization} */
+            let appobj = this._appauth[id];
+            if(appobj instanceof ApplicationAuthorization)
+                resolve(appobj.getToken(resource));
+            else
+                reject(CelastrinaError.newError("Application ID '" + id + "' not found for resource '" +
+                    resource + "'."));
+        });
+    }
+
+    /**
+     * @brief
+     * @param {BaseContext} context
+     * @returns {Promise<BaseSubject>}
+     */
+    async authenticate(context) {
+        return new Promise((resolve, reject) => {
+            resolve(new BaseSubject(this._localAppId));
+        });
+    }
+
+    /**
+     * @brief
+     * @param {BaseContext} context
+     * @returns {Promise<void>}
+     */
+    async authorize(context) {
+        return new Promise((resolve, reject) => {
+            resolve();
+        });
+    }
+
+    /**
+     * @brief
+     * @param {BaseContext} context
+     * @param {BaseSubject} subject
+     * @returns {Promise<BaseSubject>}
+     */
+    async setRoles(context, subject) {
+        return new Promise((resolve, reject) => {
+            resolve(subject);
+        });
+    }
+
+    /**
+     * @brief
+     * @param {Configuration} configuration
+     * @returns {Promise<BaseSentry>}
+     */
+    async initialize(configuration) {
+        return new Promise((resolve, reject) => {
+            // Set up the local application id.
+            this._localAppId = process.env["CELASTRINA_MSI_OBJECT_ID"];
+            if(typeof this._localAppId !== "string")
+                this._localAppId = configuration.context.invocationId;
+
+            this._loadResourceAuthorizations(configuration);
+            this._loadApplicationAuthorizations(configuration.applicationAuthorizations)
+                .then(() => {
+                    resolve(this);
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+
+    /**
+     * @brief
+     * @param {Array.<Object|ApplicationAuthorization>} applications
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _loadApplicationAuthorizations(applications) {
+        return new Promise((resolve, reject) => {
+            if(applications.length > 0) {
+                let promises = [];
+                let itr = applications[Symbol.iterator]();
+                for (let appobj of itr) {
+                    promises.unshift(this._loadAppAuthorization(appobj));
+                }
+                Promise.all(promises)
+                    .then(() => {
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            else
+                resolve();
+        });
+    }
+
+    /**
+     * @brief
+     * @param {Configuration} configuration
+     * @private
+     */
+    _loadResourceAuthorizations(configuration) {
+        if(configuration.isManaged && configuration.resourceAuthorizations.length > 0) {
+            configuration.addApplicationAuthorization(new ApplicationAuthorization(process.env["MSI_ENDPOINT"],
+                "", this._localAppId, process.env["MSI_SECRET"], configuration.resourceAuthorizations,
+                true));
+        }
+    }
+
+    /**
+     * @brief
+     * @param {Object|ApplicationAuthorization} authorization
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _loadAppAuthorization(authorization) {
+        return new Promise((resolve, reject) => {
+            // First we convert it to an authorization if its not already.
+            if(!(authorization instanceof ApplicationAuthorization)) {
+                /** @type {ApplicationAuthorization} */
+                authorization = ApplicationAuthorization.create(authorization);
+            }
+
+            authorization.initialize()
+                .then(() => {
+                    this._appauth[authorization.id] = authorization;
+                    resolve();
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+}
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class BaseContext {
+    /**
+     * @brief
+     * @param {_AzureFunctionContext} context
+     * @param {string} name
+     * @param {PropertyHandler} properties
+     */
+    constructor(context, name, properties) {
+        this._requestId       = uuid4v();
+        this._context         = context;
+        this._traceId         = null;
+        this._monitor         = false;
+        /** @type {null|MonitorResponse} */
+        this._monitorResponse = null;
+        this._properties      = properties;
+        this._name            = name;
+        /** @type {null|BaseSubject} */
+        this._subject         = null;
+    }
+
+    /**
+     * @brief
+     * @brief {Configuration} configration
+     * @returns {Promise<BaseContext>}
+     */
+    async initialize(configuration) {
+        return new Promise((resolve, reject) => {
+            if(this._monitor)
+                this._monitorResponse = new MonitorResponse();
+
+            let traceContext = this._context.traceContext;
+            if(typeof traceContext !== "undefined" || traceContext != null)
+                this._traceId = traceContext.traceparent;
+
+            resolve(this);
+        });
+    }
+
+    /**
+     * @brief Returns true if this a monitor message, false otherwise.
+     * @returns {boolean}
+     */
+    get isMonitorInvocation() {
+        return this._monitor;
+    }
+
+    /**
+     * @brief Returns the monitor response or null if this was not a monitor message.
+     * @description Use this to record your passed or failed checks you've mode.
+     * @returns {null|MonitorResponse}
+     */
+    get monitorResponse() {
+        return this._monitorResponse;
+    }
+
+    /**
+     * @brief
+     * @returns {_AzureFunctionContext}
+     */
+    get context() {
+        return this._context;
+    }
+
+    /**
+     * @brief Returns the name for this context.
+     * @description The name is the textual context of this software context and is used in logging.
+     * @returns {string}
+     */
+    get name() {
+        return this._name;
+    }
+
+    /**
+     * @brief Returns the invocation ID assigned by azure during function invocation.
+     * @description This is not the same as the request ID, which is assigned by Celastrina.
+     * @returns {string}
+     */
+    get invocationId() {
+        return this._context.bindingData.invocationId;
+    }
+
+    /**
+     * @brief Returns the uuid for this transaction as assigned by Celastrina.
+     * @returns {string}
+     */
+    get requestId() {
+        return this._requestId;
+    }
+
+    /**
+     * @brief
+     * @returns {BaseSubject}
+     */
+    get subjcet() {
+        return this._subject;
+    }
+
+    /**
+     * @brief
+     * @param {BaseSubject} subject
+     */
+    set subject(subject) {
+        this._subject = subject;
+    }
+
+    /**
+     * @brief Returns a binding object by name
+     * @param {string} name The binding to get.
+     */
+    getBinding(name) {
+        return this._context.bindings[name];
+    }
+
+    /**
+     * @brief Sets a binding object.
+     * @param {string} name
+     * @param {Object} value
+     */
+    setBinding(name, value) {
+        this._context.bindings[name] = value;
+    }
+
+    /**
+     * @brief
      * @param {string} key
      * @param {null|string} [defaultValue]
-     *
+     * @return {Promise<string>}
+     */
+    async getEnvironmentProperty(key, defaultValue = null) {
+        return this._properties.getEnvironmentProperty(key, defaultValue);
+    }
+
+    /**
+     * @brief
+     * @param {string} key
+     * @param {null|string} [defaultValue]
      * @return {Promise<string>}
      */
     async getSecureEnvironmentProperty(key, defaultValue = null) {
@@ -489,16 +1573,15 @@ class BaseContext {
 
     /**
      * @brief
-     *
      * @param {Object} message
      * @param {LOG_LEVEL} [level] default is trace.
      * @param {null|string} [subject] default is null.
      */
     log(message = "[NO MESSAGE]", level = LOG_LEVEL.LEVEL_TRACE, subject = null) {
-        let out = "[" + this._topic + "][LEVEL " + level + "]";
-        if(typeof subject !== "undefined" && subject != null)
+        let out = "[" + this._name + "][LEVEL " + level + "]";
+        if(typeof subject === "string")
             out += "[" + subject + "]";
-         out += "[" + this._requestId + "]:" + message.toString();
+        out += "[" + this._context.invocationId + "]:" + "[" + this._requestId + "]:" + message.toString();
 
         switch(level) {
             case LOG_LEVEL.LEVEL_INFO:
@@ -520,7 +1603,6 @@ class BaseContext {
 
     /**
      * @brief
-     *
      * @param {Object} object
      * @param {LOG_LEVEL} [level] default is trace.
      * @param {null|string} [subject] default is null.
@@ -531,8 +1613,7 @@ class BaseContext {
 
     /**
      * @brief Calls context.done on the function context with the optional parameter.
-     *
-     * @param {null|Object} value
+     * @param {null|Object} [value]
      */
     done(value = null) {
         if(value === null)
@@ -541,382 +1622,50 @@ class BaseContext {
             this._context.done(value);
     }
 }
-
-
-
-
-
-
-
-
-
-
-
 /**
  * @brief
- *
  * @author Robert R Murrell
- *
- * @type {{ _user: null|JwtUser, appTokens: Object, managedTokens: Object}}
- */
-class BaseSentry {
-    /**
-     * @brief
-     */
-    constructor() {
-        this._user         = null;
-        this.appTokens     = {};
-        this.managedTokens = {};
-        this.roles         = [];
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {null|JwtUser}
-     */
-    get user() {
-        return this._user;
-    }
-
-    /**
-     * @brief
-     *
-     * @param {string} bearerToken
-     *
-     * @returns {Promise<BaseUser>}
-     */
-    async authenticate(bearerToken) {
-        return new Promise(
-            (resolve, reject) => {
-                if(typeof bearerToken === "undefined" || bearerToken == null || !bearerToken.trim())
-                    reject(CelastrinaError.newError("Not authorized.", 401));
-                else {
-                    this._user  = JwtUser.decode(bearerToken);
-                    let now = moment();
-                    if(now.isSameOrAfter(this._user.expires))
-                        reject(CelastrinaError.newError("Not Authorized.", 401));
-                    else {
-                        let issuers = this.config.issuers;
-                        let matched = false;
-                        for(const index in issuers) {
-                            /** @type Issuer */
-                            if(issuers[index].setRoles(this._user, this.roles) && !matched)
-                                matched = true;
-                        }
-
-                        if(matched)
-                            resolve(_user);
-                        else
-                            reject(CelastrinaError.newError("Not Authorized.", 401));
-                    }
-                }
-            });
-    }
-
-    /**
-     * @brief Decrypts an application specific claims object.
-     *
-     * @param {string} claims The claims to decrypt. Typically a cookie shared with this domain.
-     *
-     * @returns {Promise<Object>} The application specific claims object.
-     */
-    async loadApplicationClaims(claims) {
-        return new Promise(
-            (resolve, reject) => {
-                try {
-                    if(typeof claims !== "undefined" && claims != null) {
-                        let iv        = new Buffer(this.config.crypto.iv);
-                        let ivstring  = iv.toString("hex");
-                        let cipher    = Buffer.from(claims, "base64").toString("hex");
-                        let key       = crypto.createHash("sha256").update(this.config.crypto.key).digest();
-                        let decipher  = crypto.createDecipheriv("aes256", key, ivstring);
-                        let decrypted = decipher.update(cipher, "hex", "utf8");
-                        decrypted += decipher.final("utf8");
-                        resolve(decrypted);
-                    }
-                    else
-                        reject(CelastrinaError.newError("Invalid application claims."));
-                }
-                catch (exception) {
-                    reject(exception);
-                }
-            });
-    }
-
-    /**
-     * @brief Encrypts an application specific claims object.
-     *
-     * @param {Object} claims The application specific claims object to encrypt.
-     *
-     * @returns {Promise<string>} Base64 encoded encrypted claims object.
-     */
-    async createApplicationClaims(claims) {
-        return new Promise(
-            (resolve, reject) => {
-                try {
-                    if(typeof claims !== "undefined" && claims != null) {
-                        let iv        = new Buffer(this.config.crypto.iv);
-                        let ivstring  = iv.toString("hex");
-                        let key       = crypto.createHash("sha256").update(this.config.crypto.key).digest();
-                        let cipher    = crypto.createCipheriv("aes256", key, ivstring);
-                        let encrypted = cipher.update(JSON.stringify(claims), "utf8", "hex");
-                        encrypted += cipher.final("hex");
-                        resolve(Buffer.from(encrypted, "hex").toString("base64"));
-                    }
-                    else
-                        reject(CelastrinaError.newError("Invalid application claims."));
-                }
-                catch (exception) {
-                    reject(exception);
-                }
-            });
-    }
-
-    /**
-     * @brief Registers an application resource.
-     *
-     * @description <p>An application resources registration is the resource-based bearer token from a AZAD Domain
-     *              registered application. Use the client ID (Application ID), AZAD tenant (domain name), and a
-     *              resource ID (URL to a resource) will create a bearer token. Add that token to any REST API call
-     *              when an app resources has been granted access.</p>
-     *
-     *              <p>This method uses the application authority,tenant, id, and secret from the {SentryConfig}
-     *              object to create application resources.</p>
-     *
-     *              <p>Sentry also uses Microsoft adal-node to generate the token.</p>
-     *
-     * @param {string} resource The name of the resource.
-     *
-     * @returns {Promise<void>}
-     *
-     * @see SentryConfig
-     */
-    async registerAppResource(resource) {
-        return new Promise(
-            (resolve, reject) => {
-                let adContext = new AuthenticationContext(this.config.application.authority + "/" +
-                    this.config.application.tenant);
-                adContext.acquireTokenWithClientCredentials(resource, this.config.application.credentials.id,
-                    this.config.application.secret,
-                    (err, response) => {
-                        if(err)
-                            reject(CelastrinaError.newError("Not authorized.", 401));
-                        else {
-                            this.appTokens[resource] = response;
-                            resolve();
-                        }
-                    });
-            });
-    }
-
-    /**
-     * @brief Creates a resource authorization from a managed identity.
-     *
-     * @description For this function to work properly your azure function must have managed identities enabled.
-     *
-     * @param {string} resource
-     * @param {string} endpoint
-     * @param {string} secret
-     *
-     * @returns {Promise<void>}
-     */
-    async registerManagedResource(resource, endpoint, secret) {
-        return new Promise(
-            (resolve, reject) => {
-                let params = new URLSearchParams();
-                params.append("resource", resource);
-                params.append("api-version", "2017-09-01");
-                let config = {params: params,
-                    headers: {"secret": this.config.msi.secret}};
-                axios.get(this.config.msi.endpoint, config)
-                    .then((/**@type {_AxiosResponse}*/response) => {
-                        this.managedTokens[resource] = response.data;
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            });
-    }
-
-    /**
-     * @brief
-     *
-     * @param {string} resource
-     * @param {{}} headers
-     */
-    setAppResourceAuthorization(resource, headers) {
-        /**@type {TokenResponse}*/
-        let tokenObject = this.appTokens[resource];
-
-        if(typeof tokenObject === "undefined" )
-            throw CelastrinaError.newError("Not Authorized.", 401);
-        else
-        if(tokenObject.tokenType === "Bearer") {
-            let now = moment();
-            let exp = moment(tokenObject.expiresOn);
-
-            if(now.isSameOrAfter(exp))
-                throw CelastrinaError.newError("Not Authorized.", 401);
-
-            headers["Authorization"] = "Bearer " + tokenObject.accessToken;
-        }
-        else
-            throw CelastrinaError.newError("Token type " + tokenObject.tokenType + " not supported.");
-    }
-
-    /**
-     * @brief
-     *
-     * @param {string} resource
-     * @param {{}} headers
-     */
-    setManagedResourceAuthorization(resource, headers) {
-        /**@type {_ManagedResourceToken}*/
-        let tokenObject = this.managedTokens[resource];
-
-        if(typeof tokenObject === "undefined")
-            throw CelastrinaError.newError("Not Authorized.", 401);
-        else
-        if(tokenObject.token_type === "Bearer") {
-            let now = moment();
-            let exp = moment(tokenObject.expires_on);
-
-            if(now.isSameOrAfter(exp))
-                throw CelastrinaError.newError("Not Authorized.", 401);
-
-            headers["Authorization"] = "Bearer " + tokenObject.access_token;
-        }
-        else
-            throw CelastrinaError.newError("Token type " + tokenObject.token_type + " not supported.");
-    }
-
-    /**
-     * @brief
-     *
-     * @param {{}} headers
-     */
-    setUserAuthorization(headers) {
-        headers["Authorization"] = "Bearer " + this._user.token;
-    }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/**
- * @brief Base function class to use with Azure functions.
- *
- * @description <p>{BaseFunction} invokes an Azure Function using the following lifecycle:
- *                  <ul>
- *                      <li>initialize</li>
- *                      <li>authenticate</li>
- *                      <li>validate</li>
- *                      <li>load</li>
- *                      <li>process</li>
- *                      <li>save</li>
- *                      <li>terminate</li>
- *                  </ul></p>
- *              <p>
- *                  If a monitoring request is received then the process lifecycle will be replaced with a monitor
- *                  lifecycle action. Monitoring requests are used to interrogate an Azure Function and ensure the
- *                  function will perform as intended without performing a real, or otherwise perminent business
- *                  action. The {BaseFunction} class itself cannot detect a monitor request and must be implemented by
- *                  sub classes of this object. {BaseFunction} will follow the monitor lifecycle when the {BaseContext}
- *                  function {BaseContext.isMonitorInvocation()} returns <code>true</code>.
- *              </p>
- *              <p>
- *                  If an exception is thrown between the initialize and terminate lifecycles then an exception lifecycle
- *                  will be performed. Once an exception occurs, no further processing of the lifecycles between
- *                  initialize and terminate will be performed, only completing the terminate lifecycle before
- *                  gracefully completing the function. If an exception is thrown during the exception or terminate
- *                  lifecycles then an unhandled exception is reported and the functions is gracefully completed. This
- *                  framework will make every attempt to gracefully handle an exception. If your Azure function gets a
- *                  hard exception while using this framework please report a bug! The default exception handler will
- *                  check for an CelastrinaError and is present, will additionally check the {CelastrinaError.drop} attribute. If
- *                  <code>true</code>, no value will be returned from the Azure Context drop function, effectively
- *                  instructing the Azure Function to terminate gracefully. If using asynchronous functions, this will
- *                  deque the message even if not successful. If {CelastrinaError.drop} is <code>false</code>, the error
- *                  message will be returned, causing an Azure Function failure.
- *              </p>
- *
- * @author Robert R Murrell
- *
- * @type {{_topic: string, _managed: boolean}}
  */
 class BaseFunction {
     /**
      * @brief Initializes the function class.
-     *
-     * @description The config attribute must be null or an environment variable that contains JSON with the following
-     *              attributes: <code>{"_topic": "string", "_managed": boolean}</code>. If no configuration is specified
-     *              the {BaseFunction._topic} will default to "BaseFunction" and {BaseFunction._managed} will default to
-     *              true.
-     *
-     * @param {null|string} [config] String key to an environment variable (Application Setting) containing the
-     *                               serialized JSON string configuration. Default is <code>null</code>.
+     * @param {Configuration} configuration
      */
-    constructor(config = null) {
-        this._topic   = "BaseFunction";
-        this._managed = true;
-        if(typeof config === "string" && (config.trim().length !== 0))
-            Object.assign(this, JSON.parse(process.env[config]));
+    constructor(configuration) {
+        this._configuration = configuration;
+        /** @type {null|BaseSentry} */
+        this._sentry        = null;
+        /** @type {null|BaseContext} */
+        this._context       = null;
     }
 
     /**
-     * @brief Creates an implementations of Base Context from the Azure Function context passed in.
-     *
-     * @description Override this function to create the instance of BaseContext required for your function.
-     *
-     * @param {_AzureFunctionContext} context
-     *
-     * @returns {Promise<BaseContext>} The base context for this function.
+     * @brief
+     * @returns {Configuration}
      */
-    async createContext(context) {
-        return new Promise(
-            (resolve, reject) => {
-                try {
-                    resolve(new BaseContext(context, this._topic));
-                }
-                catch(exception) {
-                    reject(exception);
-                }
-            });
+    get configuration() {
+        return this._configuration;
+    }
+
+    get sentry() {
+        return this._sentry;
+    }
+
+    get context() {
+        return this._context;
     }
 
     /**
      * @brief Lifecycle operation to perform key operations of setting up and bootstrapping this function.
-     *
      * @description <p>Override this function to perform any pre-initialization tasks. The lifecycle is invoked after
      *              the context is created but before initialization. Implementors MUST call the super of
      *              or this function may not work as intended or produce errors.</p>
-     *
      *              <p>Do not rely on any internal features of this function while inside this promise.</p>
+     * @returns {Promise<BaseSentry>} BaseSentry if successful.
      *
-     * @param {BaseContext} context The context of the function.
-     *
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     * @throws {CelastrinaError}
      */
-    async createSentry(context) {
+    async createSentry() {
         return new Promise(
             (resolve, reject) => {
                 try {
@@ -929,31 +1678,65 @@ class BaseFunction {
     }
 
     /**
+     * @brief Creates an implementations of Base Context from the Azure Function context passed in.
+     * @description Override this function to create the instance of BaseContext required for your function.
+     * @param {_AzureFunctionContext} context
+     * @param {string} name
+     * @param {PropertyHandler} properties
+     * @returns {Promise<BaseContext>} The base context for this function.
+     */
+    async createContext(context, name, properties) {
+        return new Promise(
+            (resolve, reject) => {
+                try {
+                    resolve(new BaseContext(context, name, properties));
+                }
+                catch(exception) {
+                    reject(exception);
+                }
+            });
+    }
+
+    /**
      * @brief Lifecycle operation to perform key operations of setting up and bootstrapping this function.
-     *
      * @description <p>Override this function to perform any pre-initialization tasks. The lifecycle is invoked after
      *              the context is created but before initialization. Implementors MUST call the super of
      *              or this function may not work as intended or produce errors.</p>
-     *
      *              <p>Do not rely on any internal features of this function while inside this promise.</p>
-     *
-     * @param {BaseContext} context The context of the function.
-     *
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     * @param {_AzureFunctionContext} context The context of the function.
+     * @returns {Promise<void>} Void if successful.
+     * @throws {CelastrinaError}
      */
     async bootstrap(context) {
-        return new Promise((resolve) => {
-            resolve();
-        });
+        return new Promise(
+            (resolve, reject) => {
+                // First we load the configuration.
+                this._configuration.load(context)
+                    .then(() => {
+                        // Create the sentry
+                        return Promise.all([this.createSentry(),
+                                                   this.createContext(context, this._configuration.name,
+                                                                      this._configuration.properties)]);
+                    })
+                    .then((results) => {
+                        return Promise.all([results[0].initialize(this._configuration),
+                                                   results[1].initialize(this._configuration)]);
+                    })
+                    .then((results) => {
+                        this._sentry  = results[0];
+                        this._context = results[1];
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            });
     }
 
     /**
      * @brief Lifecycle operation to initialize any objects required to perform the function.
-     *
      * @description Override this function to perform any initialization actions.
-     *
      * @param {BaseContext} context The context of the function.
-     *
      * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
      */
     async initialize(context) {
@@ -964,52 +1747,54 @@ class BaseFunction {
 
     /**
      * @brief Lifecycle operation to authenticate a requester before performing the action.
-     *
      * @description Override this function to perform any authentication actions. If you need to validate anything
      *              related to authentication you'll need to do it here as validation lifecycle is invoked AFTER
      *              authentication and authorization.
-     *
      * @param {BaseContext} context The context of the function.
-     *
-     * @returns {Promise<BaseUser>} An instance of BaseUser.
-     *
+     * @returns {Promise<BaseSubject>} An instance of BaseSubject.
      * @throws {CelastrinaError} if the user cannot be authenticated for any reason.
      */
     async authenticate(context) {
-        return new Promise((resolve) => {
-            resolve(new BaseUser());
+        return new Promise((resolve, reject) => {
+            this._sentry.authenticate(context)
+                .then((subject) => {
+                    return this._sentry.setRoles(context, subject);
+                })
+                .then((subject) => {
+                    resolve(subject);
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
         });
     }
 
     /**
      * @brief Lifecycle operation to authorize a requester before performing the action.
-     *
      * @description Override this function to perform any authorization actions. If you need to validate anything
      *              related to authorization you'll need to do it here as validation lifecycle is invoked AFTER
      *              authorization.
-     *
      * @param {BaseContext} context The context of the function.
-     * @param {BaseUser} user The user to authorize.
-     *
      * @returns {Promise<void>} Void if successful.
-     *
      * @throws {CelastrinaError} if the user cannot be authorized for any reason.
      */
-    async authorize(context, user) {
-        return new Promise((resolve) => {
-            resolve();
+    async authorize(context) {
+        return new Promise((resolve, reject) => {
+            this._sentry.authorize(context)
+                .then(() => {
+                    resolve();
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
         });
     }
 
     /**
      * @brief Lifecycle operation to validate the business input before performing the rest of the lifecycle.
-     *
      * @description Override this function to perform any validation actions.
-     *
      * @param {BaseContext} context The context of the function.
-     *
      * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
-     *
      * @throws {CelastrinaValidationError} if the input cannot be validated.
      */
     async validate(context) {
@@ -1020,21 +1805,17 @@ class BaseFunction {
 
     /**
      * @brief Override this method to respond to monitor requests.
-     *
      * @description Fill out the monitor response and resolve. do not use send or done. This must return a promise that
      *              either resolves to void or rejects with a type of {CelastrinaError}
-     *
      * @param {BaseContext} context The context of the function.
-     *
      * @returns {Promise<void>} Void if successful.
-     *
      * @throws {CelastrinaError} if the monitor lifecycle fails for any reason.
      */
     async monitor(context) {
         return new Promise(
             (resolve) => {
                 context.log("No monitoring checks performed, monitor not overridden.",
-                    this._topic, LOG_LEVEL.LEVEL_WARN);
+                    LOG_LEVEL.LEVEL_WARN, "BaseFunction.monitor(context)");
                 context.monitorResponse.addPassedDiagnostic("default", "Monitor not overridden.");
                 resolve();
             });
@@ -1042,13 +1823,9 @@ class BaseFunction {
 
     /**
      * @brief Lifecycle operation to load information before performing the rest of the lifecycle.
-     *
      * @description Override this function to perform any loading actions.
-     *
      * @param {BaseContext} context The context of the function.
-     *
      * @returns {Promise<void>} Void if successful.
-     *
      * @throws {CelastrinaError} if the load lifecycle fails for any reason.
      */
     async load(context) {
@@ -1059,13 +1836,9 @@ class BaseFunction {
 
     /**
      * @brief Lifecycle operation to process the request.
-     *
      * @description Override this function to perform business logic of this function.
-     *
      * @param {BaseContext} context The context of the function.
-     *
      * @returns {Promise<void>} Void if successful.
-     *
      * @throws {CelastrinaError} if the process lifecycle fails for any reason.
      */
     async process(context) {
@@ -1076,13 +1849,9 @@ class BaseFunction {
 
     /**
      * @brief Lifecycle operation to save information after the process lifecycle.
-     *
      * @description Override this function to save any states after processing.
-     *
      * @param {BaseContext} context The context of the function.
-     *
      * @returns {Promise<void>} Void if successful.
-     *
      * @throws {CelastrinaError} if the save lifecycle fails for any reason.
      */
     async save(context) {
@@ -1093,14 +1862,10 @@ class BaseFunction {
 
     /**
      * @brief Lifecycle operation to save handle any exceptions during the lifecycle, up to processing.
-     *
      * @description Override this function to handle any exceptions up to processing.
-     *
      * @param {BaseContext} context The context of the function.
      * @param {*} exception
-     *
      * @returns {Promise<void>} Void if successful.
-     *
      * @throws {CelastrinaError} if the exception lifecycle fails for any reason.
      */
     async exception(context, exception) {
@@ -1111,13 +1876,9 @@ class BaseFunction {
 
     /**
      * @brief Lifecycle operation to clean up prior to the completion of the function.
-     *
      * @description Override this function to clean up before complettion.
-     *
      * @param {BaseContext} context The context of the function.
-     *
      * @returns {Promise<void>} Void if successful.
-     *
      * @throws {CelastrinaError} if the terminate lifecycle fails for any reason.
      */
     async terminate(context) {
@@ -1128,133 +1889,90 @@ class BaseFunction {
 
     /**
      * @brief Initialized the key vualt resource using the MSI managed identity configuration.
-     *
      * @param {BaseContext} context The context of the function.
-     *
      * @returns {Promise<void>} Void if successful.
-     *
      * @throws {CelastrinaError} if the secureInitialize lifecycle fails for any reason.
      */
     async secureInitialize(context) {
         return new Promise(
             (resolve, reject) => {
                 context.log("Secure Initialize Lifecycle.",
-                            LOG_LEVEL.LEVEL_INFO, "BaseFunction.secureInitialize(context)");
-                
-                let params = new URLSearchParams();
-                params.append("resource", "https://vault.azure.net");
-                params.append("api-version", "2017-09-01");
-                let config = {params: params,
-                    headers: {"secret": process.env["MSI_SECRET"]}};
-
-                axios.get(process.env["MSI_ENDPOINT"], config)
-                    .then((response) => {
-                        context._setPropertyHandler(new VaultPropertyHandler(new Vault(response.data.access_token)));
-                        context.log("Initialize Lifecycle.",
-                            LOG_LEVEL.LEVEL_INFO, "BaseFunction.secureInitialize(context)");
-                        return this.initialize(context);
-                    })
-                    .then(() => {
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
+                    LOG_LEVEL.LEVEL_INFO, "BaseFunction.secureInitialize(context)");
+                resolve();
             });
     }
 
     /**
      * @brief Method called by the Azure Function to execute the lifecycle.
-     *
      * @param {_AzureFunctionContext} context The context of the function.
      */
     execute(context) {
-        /** @type {BaseContext} */
-        let _context = null;
         try {
-            this.createContext(context)
-                .then((local) => {
-                    _context = local;
-                    _context.log("Bootstrap Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
-                        "BaseFunction.execute(context)");
-                    return this.bootstrap(_context);
-                })
+            context.log("[BaseFunction.execute(context)]: Configuring Celastrina.");
+            this.bootstrap(context)
                 .then(() => {
-                    let _promise;
-                    if(this._managed) {
-                        _context.log("Function Invoked in Secure Managed Mode. Initializing Vault.",
-                                     LOG_LEVEL.LEVEL_INFO, "BaseFunction.execute(context)");
-                        _promise = this.secureInitialize(_context);
-                    } else {
-                        _context.log("Function Invoked.",
-                                     LOG_LEVEL.LEVEL_INFO, "BaseFunction.execute(context)");
-                        _context.log("Initialize Lifecycle.",
-                            LOG_LEVEL.LEVEL_INFO, "BaseFunction.execute(context)");
-                        _promise = this.initialize(_context);
-                    }
-
                     // Execute the rest of the lifecycle.
-                    _promise
+                    this.initialize(this._context)
                         .then(() => {
-                            _context.log("Authenticate Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
-                                         "BaseFunction.execute(context)");
-                            return this.authenticate(_context);
-                        })
-                        .then((user) => {
-                            _context.log("Authorize Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
+                            this._context.log("Authenticate Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
                                 "BaseFunction.execute(context)");
-                            _context.user = user;
-                            return this.authorize(_context, user);
+                            return this.authenticate(this._context);
                         })
-                        .then(() => {
-                            _context.log("Validate Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
+                        .then((subject) => {
+                            this._context.log("Authorize Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
                                 "BaseFunction.execute(context)");
-                            return this.validate(_context);
+                            this._context.subject = subject;
+                            return this.authorize(this._context);
                         })
                         .then(() => {
-                            _context.log("Load Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
-                                         "BaseFunction.execute(context)");
-                            return this.load(_context);
+                            this._context.log("Validate Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
+                                "BaseFunction.execute(context)");
+                            return this.validate(this._context);
                         })
                         .then(() => {
-                            if (_context.isMonitorInvocation) {
-                                _context.log("Monitor Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
-                                             "BaseFunction.execute(context)");
-                                return this.monitor(_context);
+                            this._context.log("Load Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
+                                "BaseFunction.execute(context)");
+                            return this.load(this._context);
+                        })
+                        .then(() => {
+                            if(this._context.isMonitorInvocation) {
+                                this._context.log("Monitor Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
+                                    "BaseFunction.execute(context)");
+                                return this.monitor(this._context);
                             } else {
-                                _context.log("Process Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
-                                             "BaseFunction.execute(context)");
-                                return this.process(_context);
+                                this._context.log("Process Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
+                                    "BaseFunction.execute(context)");
+                                return this.process(this._context);
                             }
                         })
                         .then(() => {
-                            _context.log("Save Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
+                            this._context.log("Save Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
                                 "BaseFunction.execute(context)");
-                            return this.save(_context);
+                            return this.save(this._context);
                         })
                         .catch((exception) => {
-                            _context.log("Exception Lifecycle.", LOG_LEVEL.LEVEL_ERROR,
-                                         "BaseFunction.execute(context)");
-                            return this.exception(_context, exception);
+                            this._context.log("Exception Lifecycle.", LOG_LEVEL.LEVEL_ERROR,
+                                "BaseFunction.execute(context)");
+                            return this.exception(this._context, exception);
                         })
                         .then(() => {
-                            _context.log("Terminate Lifecycle.",
+                            this._context.log("Terminate Lifecycle.",
                                 LOG_LEVEL.LEVEL_INFO, "BaseFunction.execute(context)");
-                            return this.terminate(_context);
+                            return this.terminate(this._context);
                         })
                         .then(() => {
-                            _context.log("Function lifecycle complete.", LOG_LEVEL.LEVEL_INFO,
-                                         "BaseFunction.execute(context)");
-                            _context.done();
+                            this._context.log("Function lifecycle complete.", LOG_LEVEL.LEVEL_INFO,
+                                "BaseFunction.execute(context)");
+                            this._context.done();
                         })
                         .catch((exception) => {
-                            _context.log("Exception Lifecycle.", LOG_LEVEL.LEVEL_ERROR,
-                                         "BaseFunction.execute(context)");
+                            this._context.log("Critical Exception Lifecycle.", LOG_LEVEL.LEVEL_ERROR,
+                                "BaseFunction.execute(context)");
                             this._unhandled(context, exception);
                         });
                 })
                 .catch((exception) => {
-                    context.log.error("[BaseFunction.execute(context)]:Critical unhandled exception, done.");
+                    context.log.error("[BaseFunction.execute(context)]: Critical unhandled exception, done.");
                     this._unhandled(context, exception);
                 });
         }
@@ -1266,10 +1984,8 @@ class BaseFunction {
 
     /**
      * @brief Determines the class of exceptions an sends the appropriate message to the calling end-pont.
-     *
      * @param {_AzureFunctionContext} context
      * @param {*} exception
-     *
      * @private
      */
     _unhandled(context, exception) {
@@ -1284,7 +2000,7 @@ class BaseFunction {
         }
 
         context.log.error("[BaseFunction._unhandled(context, exception)][exception](NAME:" +
-                          ex.cause.name + ") (MESSAGE:" + ex.cause.message + ") (STACK:" + ex.cause.stack + ")");
+            ex.cause.name + ") (MESSAGE:" + ex.cause.message + ") (STACK:" + ex.cause.stack + ")");
 
         if(ex.drop)
             context.done();
@@ -1292,15 +2008,27 @@ class BaseFunction {
             context.done(ex);
     }
 }
-
+/*
+ * *********************************************************************************************************************
+ * EXPORTS
+ * *********************************************************************************************************************
+ */
 module.exports = {
-    LOG_LEVEL:                    LOG_LEVEL,
-    MonitorResponse:              MonitorResponse,
-    DefaultSecurePropertyHandler: DefaultSecurePropertyHandler,
-    VaultPropertyHandler:         VaultPropertyHandler,
-    BaseContext:                  BaseContext,
-    BaseUser:                     BaseUser,
-    BaseFunction:                 BaseFunction
+    Property:                   Property,
+    JsonProperty:               JsonProperty,
+    StringProperty:             StringProperty,
+    BooleanProperty:            BooleanProperty,
+    NumericProperty:            NumericProperty,
+    ApplicationAuthorization:   ApplicationAuthorization,
+    ValueMatch:                 ValueMatch,
+    MatchAny:                   MatchAny,
+    MatchAll:                   MatchAll,
+    MatchNone:                  MatchNone,
+    SubjectEnrollmentAssertion: SubjectEnrollmentAssertion,
+    Configuration:              Configuration,
+    LOG_LEVEL:                  LOG_LEVEL,
+    BaseSubject:                BaseSubject,
+    BaseSentry:                 BaseSentry,
+    BaseContext:                BaseContext,
+    BaseFunction:               BaseFunction
 };
-
-

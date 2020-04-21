@@ -8,6 +8,7 @@ lerna-debug.log*
 
 # Webstorm IDE.
 .idea
+
 #npm artifacts.
 # Dependency directories
 node_modules/
@@ -106,3 +107,6 @@ dist
 
 # TernJS port file
 .tern-port
+
+# Test stuffs
+test/

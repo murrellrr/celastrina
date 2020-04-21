@@ -63,14 +63,7 @@ const {JSONHTTPContext, JSONHTTPFunction} = require("./HTTPFunction");
  * @property {Vault} vault
  * @property {boolean} overridden
  */
-/**
- * @typedef _ManagedResourceToken
- * @property {string} access_token
- * @property {string} expires_on
- * @property {string} resource
- * @property {string} token_type
- * @property {string} client_id
- */
+
 /**
  * @brief
  *
@@ -98,6 +91,13 @@ const MATCH_TYPE = {
  *         _issued: null|moment.Moment, _expires: null|moment.Moment}}
  */
 class JwtUser extends BaseUser {
+    #_nonce;
+    #_audience;
+    #_issuer;
+    #_issued;
+    #_expires;
+    #_token;
+
     /**
      * @brief
      *
@@ -111,61 +111,66 @@ class JwtUser extends BaseUser {
      */
     constructor(sub, aud, iss, iat, exp, nonce, token) {
         super(sub);
-        this._nonce    = nonce;
-        this._audience = aud;
-        this._issuer   = iss;
-        this._issued   = moment.unix(iat);
-        this._expires  = moment.unix(exp);
-        this._token    = token;
-    }
-
-    get nonce() {
-        return this._nonce;
+        this.#_nonce    = nonce;
+        this.#_audience = aud;
+        this.#_issuer   = iss;
+        this.#_issued   = moment.unix(iat);
+        this.#_expires  = moment.unix(exp);
+        this.#_token    = token;
     }
 
     /**
      * @brief
      *
-     * @returns {null|string}
+     * @returns {string}
+     */
+    get nonce() {
+        return this.#_nonce;
+    }
+
+    /**
+     * @brief
+     *
+     * @returns {string}
      */
     get audience() {
-        return this._audience;
+        return this.#_audience;
     }
 
     /**
      * @brief
      *
-     * @returns {null|string}
+     * @returns {string}
      */
     get issuer() {
-        return this._issuer;
+        return this.#_issuer;
     }
 
     /**
      * @brief
      *
-     * @returns {null|moment.Moment}
+     * @returns {moment.Moment}
      */
     get issued() {
-        return this._issued;
+        return this.#_issued;
     }
 
     /**
      * @brief
      *
-     * @returns {null|moment.Moment}
+     * @returns {moment.Moment}
      */
     get expires() {
-        return this._expires;
+        return this.#_expires;
     }
 
     /**
      * @brief
      *
-     * @returns {null|string}
+     * @returns {string}
      */
     get token() {
-        return this._token;
+        return this.#_token;
     }
 
     /**
@@ -181,16 +186,16 @@ class JwtUser extends BaseUser {
     /**
      * @brief
      *
-     * @returns {{_subject: null|string, _roles: string[], _audience: null|string, _issuer: null|string,
-     *            _issued: null|string, _expires: null|string}}
+     * @returns {{_subject: string, _roles: string[], _audience: string, _issuer: string,
+     *            _issued: string, _expires: string}}
      */
     toJSON() {
         let json = super.toJSON();
-        json._nonce    = this._nonce;
-        json._audience = this._audience;
-        json._issuer   = this._issuer;
-        json._issued   = this._issued.format();
-        json._expires  = this._expires.format();
+        json._nonce    = this.#_nonce;
+        json._audience = this.#_audience;
+        json._issuer   = this.#_issuer;
+        json._issued   = this.#_issued.format();
+        json._expires  = this.#_expires.format();
         return json;
     }
 
@@ -202,8 +207,8 @@ class JwtUser extends BaseUser {
     copy(source) {
         //sub, aud, iss, iat, exp, nonce, token
         if(source instanceof JwtUser)
-            return new JwtUser(source._subject, source._audience, source._issuer, source._issued.unix(),
-                               source._expires.unix(), source._nonce, source._token);
+            return new JwtUser(source.#_subject, source.#_audience, source.#_issuer, source.#_issued.unix(),
+                               source.#_expires.unix(), source.#_nonce, source.#_token);
         else
             throw CelastrinaError.newError("Source must be an instance of JwtUser.")
     }

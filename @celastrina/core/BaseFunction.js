@@ -186,13 +186,12 @@ class Property {
     /**
      * @brief
      * @param {string} name
-     * @param {string} [type]
      * @param {boolean} [secure]
      * @param {null|*} [defaultValue]
      */
-    constructor(name, type = "string", secure = false, defaultValue = null) {
+    constructor(name, secure = false, defaultValue = null) {
         this._name         = name;
-        this._type         = type;
+        this._type         = "Property";
         this._secure       = secure;
         this._defaultValue = defaultValue;
     }
@@ -234,33 +233,37 @@ class Property {
      * @param {PropertyHandler} handler
      * @returns {Promise<null|Object|string|boolean|number>}
      */
+    async lookup(handler) {
+        if(this._secure)
+            return handler.getSecureEnvironmentProperty(this._name, this._defaultValue);
+        else
+            return handler.getEnvironmentProperty(this._name, this._defaultValue);
+    }
+
+    /**
+     * @brief
+     * @param {string} value
+     * @returns {Promise<null|Object|string|boolean|number>}
+     */
+    async resolve(value) {
+        return new Promise((reject) => {
+            reject(CelastrinaError.newError("Property not supported."));
+        });
+    }
+
+    /**
+     * @brief
+     * @param {PropertyHandler} handler
+     * @returns {Promise<null|Object|string|boolean|number>}
+     */
     load(handler) {
         return new Promise((resolve, reject) => {
-            let promise;
-            if(this._secure)
-                promise = handler.getSecureEnvironmentProperty(this._name, this._defaultValue);
-            else
-                promise = handler.getEnvironmentProperty(this._name, this._defaultValue);
-
-            promise
+            this.lookup(handler)
                 .then((local) => {
-                    switch(this._type) {
-                        case "json":
-                            resolve(JSON.parse(local));
-                            break;
-                        case "string":
-                            resolve(local);
-                            break;
-                        case "boolean":
-                            resolve((local.toLowerCase() === "true"));
-                            break;
-                        case "number":
-                            resolve(Number(local));
-                            break;
-                        default:
-                            reject(CelastrinaError.newError("Unsupported type '" + this._type +
-                                                            "' in property '" + this._name + "'."));
-                    }
+                    return this.resolve(local);
+                })
+                .then((value) => {
+                    resolve(value);
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -281,7 +284,24 @@ class JsonProperty extends Property {
      * @param {null|string} defaultValue
      */
     constructor(name, secure = false, defaultValue = null) {
-        super(name, "json", secure, defaultValue);
+        super(name, secure, defaultValue);
+        this._type = "json";
+    }
+
+    /**
+     * @brief
+     * @param {string} value
+     * @returns {Promise<null|Object>}
+     */
+    async resolve(value) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(JSON.parse(value));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
 }
 /**
@@ -297,7 +317,24 @@ class StringProperty extends Property {
      * @param {null|string} defaultValue
      */
     constructor(name, secure = false, defaultValue = null) {
-        super(name, "string", secure, defaultValue);
+        super(name, secure, defaultValue);
+        this._type = "string";
+    }
+
+    /**
+     * @brief
+     * @param {string} value
+     * @returns {Promise<null|string>}
+     */
+    async resolve(value) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(value);
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
 }
 /**
@@ -313,7 +350,24 @@ class BooleanProperty extends Property {
      * @param {null|boolean} defaultValue
      */
     constructor(name, secure = false, defaultValue = null) {
-        super(name, "boolean", secure, defaultValue);
+        super(name, secure, defaultValue);
+        this._type = "boolean";
+    }
+
+    /**
+     * @brief
+     * @param {string} value
+     * @returns {Promise<null|boolean>}
+     */
+    async resolve(value) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve((value.toLowerCase() === "true"));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
 }
 /**
@@ -329,7 +383,24 @@ class NumericProperty extends Property {
      * @param {null|number} defaultValue
      */
     constructor(name, secure = false, defaultValue = null) {
-        super(name, "number", secure, defaultValue);
+        super(name, secure, defaultValue);
+        this._type = "number";
+    }
+
+    /**
+     * @brief
+     * @param {string} value
+     * @returns {Promise<null|number>}
+     */
+    async resolve(value) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(Number(value));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
 }
 /*
@@ -871,76 +942,9 @@ class MatchNone extends ValueMatch {
         });
     }
 }
-/**
- * @brief
- * @author Robert R Murrell
- */
-class SubjectEnrollmentAssertion {
-    /**
-     * @brief
-     * @param {StringProperty|string} role
-     * @param {JsonProperty|Array.<string>} values
-     * @param {JsonProperty|ValueMatch} [matcher]
-     */
-    constructor(role, values, matcher = new MatchAny()) {
-        this._role    = role;
-        this._values  = values;
-        this._matcher = matcher;
-    }
 
-    /**
-     * @brief
-     * @returns {string}
-     */
-    get role() {
-        return this._role
-    }
 
-    /**
-     * @brief
-     * @returns {Array.<string>}
-     */
-    get values() {
-        return this._values;
-    }
 
-    /**
-     * @brief
-     * @returns {ValueMatch}
-     */
-    get matcher() {
-        return this._matcher;
-    }
-
-    /**
-     * @brief
-     * @param subject
-     * @returns {Promise<boolean>}
-     */
-    async assertRole(subject) {
-        return new Promise((resolve, reject) => {
-            this._matcher.isMatch(this._getSubjectValue(subject), this._values)
-                .then((result) => {
-                    if(result)
-                        subject.addRole(this._role);
-                    resolve(result);
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
-        });
-    }
-
-    /**
-     * @brief
-     * @param subject
-     * @returns {*}
-     * @private
-     */
-    _getSubjectValue(subject) {
-        return subject.id;
-    }
-}
 /*
  * *********************************************************************************************************************
  * CONFIGURATION
@@ -999,11 +1003,11 @@ class Configuration {
 
     /**
      * @brief
-     * @param {JsonProperty|ApplicationAuthorization} registration
+     * @param {JsonProperty|ApplicationAuthorization} application
      * @returns {Configuration}
      */
-    addApplicationAuthorization(registration) {
-        this._appauth.unshift(registration);
+    addApplicationAuthorization(application) {
+        this._appauth.unshift(application);
         return this;
     }
 
@@ -1040,24 +1044,6 @@ class Configuration {
      */
     get resourceAuthorizations() {
         return this._resauth;
-    }
-
-    /**
-     * @brief
-     * @param {JsonProperty|SubjectEnrollmentAssertion} assertion
-     * @returns {Configuration}
-     */
-    addEnrollmentAssertion(assertion) {
-        this._roleenroll.unshift(assertion);
-        return this;
-    }
-
-    /**
-     * @brief
-     * @returns {Array.<SubjectEnrollmentAssertion>}
-     */
-    get enrollmentAssertions() {
-        return this._roleenroll;
     }
 
     /**
@@ -1348,7 +1334,6 @@ class BaseSentry {
             this._localAppId = process.env["CELASTRINA_MSI_OBJECT_ID"];
             if(typeof this._localAppId !== "string")
                 this._localAppId = configuration.context.invocationId;
-
             this._loadResourceAuthorizations(configuration);
             this._loadApplicationAuthorizations(configuration.applicationAuthorizations)
                 .then(() => {

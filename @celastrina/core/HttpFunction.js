@@ -55,22 +55,60 @@ const {LOG_LEVEL, JSONProperty, Configuration, BaseSubject, BaseSentry, BaseCont
  * @property {string} issuer
  */
 
-
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
 class Issuer {
-    constructor(name, audiance) {
+    /**
+     * @brief
+     * @param {string} name
+     * @param {string} audience
+     */
+    constructor(name, audience) {
         this._name     = name;
-        this._audiance = audiance;
+        this._audience = audience;
     }
 
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get name() {
+        return this._name;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get audience() {
+        return this._audience;
+    }
+
+    /**
+     * @brief
+     * @param {object} source
+     * @returns {Issuer}
+     */
     static create(source) {
-        //
+        if(typeof source === "undefined" || source == null)
+            throw CelastrinaError.newError("Invalid Issuer, cannot be null or undefined.");
+        if(!source.hasOwnProperty("_name"))
+            throw CelastrinaError.newError("Invalid Issuer, _name required.");
+        if(!source.hasOwnProperty("_audience"))
+            throw CelastrinaError.newError("Invalid Issuer, _audience required.");
+        return new Issuer(source._name, source._audience);
     }
 }
 
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
 class JwtSubject extends BaseSubject {
     /**
      * @brief
-     *
      * @param {string} sub
      * @param {string} aud
      * @param {string} iss
@@ -93,7 +131,6 @@ class JwtSubject extends BaseSubject {
 
     /**
      * @brief
-     *
      * @returns {string}
      */
     get nonce() {
@@ -102,7 +139,6 @@ class JwtSubject extends BaseSubject {
 
     /**
      * @brief
-     *
      * @returns {string}
      */
     get audience() {
@@ -111,7 +147,6 @@ class JwtSubject extends BaseSubject {
 
     /**
      * @brief
-     *
      * @returns {string}
      */
     get issuer() {
@@ -120,7 +155,6 @@ class JwtSubject extends BaseSubject {
 
     /**
      * @brief
-     *
      * @returns {moment.Moment}
      */
     get issued() {
@@ -129,7 +163,6 @@ class JwtSubject extends BaseSubject {
 
     /**
      * @brief
-     *
      * @returns {moment.Moment}
      */
     get expires() {
@@ -138,7 +171,6 @@ class JwtSubject extends BaseSubject {
 
     /**
      * @brief
-     *
      * @returns {string}
      */
     get token() {
@@ -147,7 +179,6 @@ class JwtSubject extends BaseSubject {
 
     /**
      * @brief
-     *
      * @param {string[]} headers
      */
     setAuthorizationHeader(headers) {
@@ -157,7 +188,6 @@ class JwtSubject extends BaseSubject {
 
     /**
      * @brief
-     *
      * @returns {{subject:string, roles: Array.<string>, nounce:string, audience: string, issuer: string,
      *            issued: string, expires: string}}
      */
@@ -173,7 +203,6 @@ class JwtSubject extends BaseSubject {
 
     /**
      * @brief
-     *
      * @param {JwtSubject} source
      */
     copy(source) {
@@ -187,9 +216,7 @@ class JwtSubject extends BaseSubject {
 
     /**
      * @brief
-     *
      * @param {string} bearerToken
-     *
      * @return {Promise<JwtSubject>}
      */
     static async decode(bearerToken) {
@@ -212,10 +239,13 @@ class JwtSubject extends BaseSubject {
     }
 }
 
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
 class JwtConfiguration extends Configuration {
     /**
      * @brief
-     *
      * @param {StringProperty|string} name
      * @param {BooleanProperty|boolean} managed
      */
@@ -226,9 +256,8 @@ class JwtConfiguration extends Configuration {
     }
 
     /**
-     *
+     * @brief
      * @param {JSONProperty|Issuer} issuer
-     *
      * @returns {JwtConfiguration}
      */
     addIssuer(issuer) {
@@ -237,7 +266,7 @@ class JwtConfiguration extends Configuration {
     }
 
     /**
-     *
+     * @brief
      * @returns {Array<Issuer>}
      */
     get issuers() {
@@ -247,17 +276,13 @@ class JwtConfiguration extends Configuration {
 
 /**
  * @brief Base context for an HTTP Request/Response.
- *
  * @description Used with the {HTTPFunction}
- *
  * @author Robert R Murrell
- *
  * @see HTTPFunction
  */
 class HTTPContext extends BaseContext {
     /**
      * @brief
-     *
      * @param {_AzureFunctionContext} context
      * @param {string} name
      * @param {PropertyHandler} properties
@@ -281,7 +306,7 @@ class HTTPContext extends BaseContext {
                 this._requestId = id;
 
             // Checking to see if we are in monitoring mode
-            let monitor = false;
+            let monitor;
             if(this.method === "trace")
                 monitor = true;
             else {
@@ -304,7 +329,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Returns the HTTP request method used.
-     *
      * @returns {string}
      */
     get method() {
@@ -313,7 +337,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Returns the url request.
-     *
      * @returns {string}
      */
     get url() {
@@ -322,7 +345,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Gets the request
-     *
      * @returns {_AzureFunctionRequest}
      */
     get request() {
@@ -331,7 +353,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Gets the response.
-     *
      * @returns {_AzureFunctionResponse}
      */
     get response() {
@@ -340,7 +361,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief
-     *
      * @returns {Object}
      */
     get params() {
@@ -349,7 +369,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief
-     *
      * @returns {Object}
      */
     get query() {
@@ -358,7 +377,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief The RAW request body.
-     *
      * @returns {string}
      */
     get raw() {
@@ -367,10 +385,8 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Gets a query string.
-     *
      * @param {string} name The name of the header.
      * @param {null|string} [defaultValue] The value to return if the header was undefined, null, or empty.
-     *
      * @return {null|string}
      */
     getQuery(name, defaultValue = null) {
@@ -383,10 +399,8 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Gets a request header.
-     *
      * @param {string} name The name of the header.
      * @param {null|string} [defaultValue] The value to return if the header was undefined, null, or empty.
-     *
      * @return {null|string}
      */
     getRequestHeader(name, defaultValue = null) {
@@ -399,10 +413,8 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Gets a response header.
-     *
      * @param {string} name The name of the header.
      * @param {null|string} [defaultValue] The value to return if the header was undefined, null, or empty.
-     *
      * @return {string}
      */
     getResponseHeader(name, defaultValue = null) {
@@ -415,7 +427,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Sets a response header.
-     *
      * @param {string} name The name of the header.
      * @param {string} value The value to set.
      */
@@ -425,7 +436,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Returns the request body.
-     *
      * @returns {_Body}
      */
     get requestBody() {
@@ -434,7 +444,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Returns the response body.
-     *
      * @returns {_Body}
      */
     get responseBody() {
@@ -443,7 +452,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Sets the body of the response and invoked done on the context.
-     *
      * @param {*} [body]
      * @param {number} [status] The HTTP status code, default is 200.
      */
@@ -467,7 +475,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Sends an HTTP 400 error from an {CelastrinaValidationError}.
-     *
      * @param {null|CelastrinaValidationError} [error]
      */
     sendValidationError(error = null) {
@@ -478,7 +485,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Sends a redirect to the calling end-point.
-     *
      * @param {string} url
      * @param {null|Object} [body]
      */
@@ -489,7 +495,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Sends a redirect to the calling end-point and places the request bodt in the response body.
-     *
      * @param {string} url
      */
     sendRedirectForwardBody(url) {
@@ -498,7 +503,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Sends an HTTP 400 error from an {CelastrinaValidationError}.
-     *
      * @param {null|CelastrinaError} [error]
      */
     sendServerError(error = null) {
@@ -509,7 +513,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Sends an HTTP 4001error from an {CelastrinaValidationError}.
-     *
      * @param {null|CelastrinaError} [error]
      */
     sendNotAuthorizedError(error= null) {
@@ -520,7 +523,6 @@ class HTTPContext extends BaseContext {
 
     /**
      * @brief Sends an HTTP 400 error from an {CelastrinaValidationError}.
-     *
      * @param {null|CelastrinaError} [error]
      */
     sendForbiddenError(error = null) {
@@ -532,9 +534,7 @@ class HTTPContext extends BaseContext {
 
 /**
  * @brief
- *
  * @description
- *
  * @author Robert R Murrell
  */
 class JwtSentry extends BaseSentry {
@@ -546,17 +546,26 @@ class JwtSentry extends BaseSentry {
 
     /**
      * @brief
-     *
-     * @param {Configuration} configuration
-     *
-     * @returns {Promise<BaseSentry>}
+     * @param {Configuration | JwtConfiguration} configuration
+     * @returns {Promise<BaseSentry & JwtSentry>}
      */
     async initialize(configuration) {
         return new Promise((resolve, reject) => {
             super.initialize(configuration)
                 .then((sentry) => {
-                    // Going to initialize the acceptable issuers.
-
+                    try {
+                        // Going to initialize the acceptable issuers.
+                        let itr = configuration.issuers[Symbol.iterator]();
+                        for(let issuer of itr) {
+                            if(!(issuer instanceof Issuer))
+                                issuer = Issuer.create(issuer);
+                            this._issuers.unshift(issuer);
+                        }
+                        resolve(sentry);
+                    }
+                    catch(exception) {
+                        reject(exception);
+                    }
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -565,37 +574,41 @@ class JwtSentry extends BaseSentry {
     }
 
     /**
-     *
+     * @brief
      * @param {BaseContext | HTTPContext} context
-     *
      * @returns {Promise<BaseSubject>}
      */
     async authenticate(context) {
         return new Promise((resolve, reject) => {
-            let auth = context.getRequestHeader("authorization");
-            if(typeof auth !== "string")
-                auth = context.getRequestHeader("x-celastrina-authorization");
-            if(typeof auth !== "string")
-                auth = context.getQuery("authorization");
+            try {
+                let auth = context.getRequestHeader("authorization");
+                if (typeof auth !== "string")
+                    auth = context.getRequestHeader("x-celastrina-authorization");
+                if (typeof auth !== "string")
+                    auth = context.getQuery("authorization");
 
-            if(typeof auth !== "string")
-                reject(CelastrinaError.newError("Not Authorized.", 401));
-            else {
-                // Checking to see if it starts with bearer
-                if(auth.startsWith("Bearer "))
-                    auth = auth.slice(7);
+                if (typeof auth !== "string")
+                    reject(CelastrinaError.newError("Not Authorized.", 401));
+                else {
+                    // Checking to see if it starts with bearer
+                    if (auth.startsWith("Bearer "))
+                        auth = auth.slice(7);
 
-                let jwtsubject = JwtSubject.decode(auth);
+                    let jwtsubject = JwtSubject.decode(auth);
 
-                // No we check the issuers.
+                    // No we check the issuers to see if we match any.
+
+                }
+            }
+            catch(exception) {
+                reject(exception);
             }
         });
     }
 
     /**
-     *
+     * @brief
      * @param {BaseContext} context
-     *
      * @returns {Promise<void>}
      */
     async authorize(context) {
@@ -624,18 +637,14 @@ class JwtSentry extends BaseSentry {
 
 /**
  * @brief Extension of the {BaseFunction} that handles HTTP triggers.
- *
  * @description Implementors must create a httpTrigger input binding named <code>red</code> and an output binding named
  *              res to handle the HTTP request and response objects respectively.
- *
  * @author Robert R Murrell
- *
  * @see BaseFunction
  */
 class HTTPFunction extends BaseFunction {
     /**
      * @brief
-     *
      * @param {Configuration} configuration
      */
     constructor(configuration) {
@@ -644,11 +653,9 @@ class HTTPFunction extends BaseFunction {
 
     /**
      * @brief Converts an Azure function context to an {HTTPContext}.
-     *
      * @param {_AzureFunctionContext} context
      * @param {string} name
      * @param {PropertyHandler} properties
-     *
      * @returns {Promise<BaseContext & HTTPContext>}
      */
     async createContext(context, name, properties) {
@@ -665,11 +672,8 @@ class HTTPFunction extends BaseFunction {
 
     /**
      * @brief Handles an HTTP GET request.
-     *
      * @description Override this function to handle an HTTP GET request. Sends response 204 by default.
-     *
      * @param {HTTPContext} context
-     *
      * @returns {Promise<void>}
      */
     async _get(context) {
@@ -682,11 +686,8 @@ class HTTPFunction extends BaseFunction {
 
     /**
      * @brief Handles an HTTP PATCH request.
-     *
      * @description Override this function to handle an HTTP PATCH request. Sends response 501 by default.
-     *
      * @param {HTTPContext} context
-     *
      * @returns {Promise<void>}
      */
     async _patch(context) {
@@ -698,11 +699,8 @@ class HTTPFunction extends BaseFunction {
 
     /**
      * @brief Handles an HTTP PUT request.
-     *
      * @description Override this function to handle an HTTP PUT request. Sends response 501 by default.
-     *
      * @param {HTTPContext} context
-     *
      * @returns {Promise<void>}
      */
     async _put(context) {
@@ -714,11 +712,8 @@ class HTTPFunction extends BaseFunction {
 
     /**
      * @brief Handles an HTTP POST request.
-     *
      * @description Override this function to handle an HTTP POST request. Sends response 501 by default.
-     *
      * @param {HTTPContext} context
-     *
      * @returns {Promise<void>}
      */
     async _post(context) {
@@ -730,11 +725,8 @@ class HTTPFunction extends BaseFunction {
 
     /**
      * @brief Handles an HTTP DELETE request.
-     *
      * @description Override this function to handle an HTTP DELETE request. Sends response 501 by default.
-     *
      * @param {HTTPContext} context
-     *
      * @returns {Promise<void>}
      */
     async _delete(context) {
@@ -746,11 +738,8 @@ class HTTPFunction extends BaseFunction {
 
     /**
      * @brief Handles an HTTP OPTOINS request.
-     *
      * @description Override this function to handle an HTTP OPTOINS request. Sends response 501 by default.
-     *
      * @param {HTTPContext} context
-     *
      * @returns {Promise<void>}
      */
     async _options(context) {
@@ -762,11 +751,8 @@ class HTTPFunction extends BaseFunction {
 
     /**
      * @brief Handles an HTTP HEAD request.
-     *
      * @description Override this function to handle an HTTP HEAD request. Sends response 501 by default.
-     *
      * @param {HTTPContext} context
-     *
      * @returns {Promise<void>}
      */
     async _head(context) {
@@ -779,15 +765,11 @@ class HTTPFunction extends BaseFunction {
 
     /**
      * @brief Handles an HTTP TRACE request.
-     *
      * @description <p>Override this function to handle an HTTP TRACE request. Sends response 501 by default. This function
      *              is also called by {HTTPFunction.monitor(context)} function if a monitoring message is received.</p>
-     *
      *              <p>Do not invoke the {HTTPContext.send()} function from this promise. The monitor object will be
      *                 sent in the {HTTPFunction.monitor(context)} method.</p>
-     *
      * @param {BaseContext | HTTPContext} context
-     *
      * @returns {Promise<void>}
      */
     async _trace(context) {
@@ -801,9 +783,7 @@ class HTTPFunction extends BaseFunction {
 
     /**
      * @brief Calls {HTTPFunction._trace(context)}
-     *
      * @param {BaseContext | HTTPContext} context
-     *
      * @returns {Promise<void>}
      */
     async monitor(context) {
@@ -823,10 +803,8 @@ class HTTPFunction extends BaseFunction {
 
     /**
      * @brief HTTP Exception handler.
-     *
      * @param {BaseContext | HTTPContext} context
      * @param {*} exception
-     *
      * @returns {Promise<void>}
      */
     async exception(context, exception) {
@@ -859,12 +837,9 @@ class HTTPFunction extends BaseFunction {
 
     /**
      * @brief Rejects this promoise with a HTTP Bad Request Response.
-     *
      * @description Override this method to handle and HTTP methods not handled by this Function. The default behavior
      *              is to respond with an HTTP 400.
-     *
      * @param {BaseContext & HTTPContext} context
-     *
      * @returns {Promise<void>}
      */
     async unhandledRequestMethod(context) {
@@ -875,9 +850,7 @@ class HTTPFunction extends BaseFunction {
 
     /**
      * @brief Dispatches the HTTP request to the corresponding handler method.
-     *
      * @param {BaseContext | HTTPContext} context
-     *
      * @returns {Promise<void>}
      */
     async process(context) {
@@ -893,11 +866,14 @@ class HTTPFunction extends BaseFunction {
     }
 }
 
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
 class JwtHTTPFunction extends HTTPFunction {
     /**
      * @brief
-     *
-     * @param {Configuration} configuration
+     * @param {JwtConfiguration} configuration
      */
     constructor(configuration) {
         super(configuration);
@@ -918,13 +894,11 @@ class JwtHTTPFunction extends HTTPFunction {
 
 /**
  * @brief
- *
  * @author Robert R Murrell
  */
 class JSONHTTPContext extends HTTPContext {
     /**
      * @brief
-     *
      * @param {_AzureFunctionContext} context
      * @param {string} name
      * @param {PropertyHandler} properties
@@ -936,7 +910,6 @@ class JSONHTTPContext extends HTTPContext {
 
     /**
      * @brief Sets the body of the response and invoked done on the context.
-     *
      * @param {*} [body]
      * @param {number} [status] The HTTP status code, default is 200.
      */
@@ -949,18 +922,14 @@ class JSONHTTPContext extends HTTPContext {
 
 /**
  * @brief Implementation of the HTTPFunction designed to handle JSON.
- *
  * @description Uses the {JSONHTTPContext} object to ensure the response Content-Type header is "application/json".
- *
  * @author Robert R Murrell
- *
  * @see HTTPFunction
  * @see JSONHTTPContext
  */
 class JSONHTTPFunction extends HTTPFunction {
     /**
      * @brief
-     *
      * @param {Configuration} configuration
      */
     constructor(configuration) {
@@ -969,11 +938,9 @@ class JSONHTTPFunction extends HTTPFunction {
 
     /**
      * @brief Returns a {JSONHTTPContext}
-     *
      * @param {_AzureFunctionContext} context
      * @param {string} name
      * @param {PropertyHandler} properties
-     *
      * @returns {Promise<HTTPContext & JSONHTTPContext>}
      */
     async createContext(context, name, properties) {
@@ -989,11 +956,14 @@ class JSONHTTPFunction extends HTTPFunction {
     }
 }
 
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
 class JwtJSONHTTPFunction extends JSONHTTPFunction {
     /**
      * @brief
-     *
-     * @param {Configuration} configuration
+     * @param {JwtConfiguration} configuration
      */
     constructor(configuration) {
         super(configuration);

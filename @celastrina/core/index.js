@@ -24,20 +24,41 @@
 
 const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
 const {Vault} = require("./Vault");
-const {PropertyType, Property, JsonProperty, StringProperty, BooleanProperty, NumericProperty, Role, Configuration,
-       ApplicationRegistration, ResourceRegistration} = require("./BaseFunction");
+const {Property, JsonProperty, StringProperty, BooleanProperty, NumericProperty, ApplicationAuthorization, ValueMatch,
+       MatchAny, MatchAll, MatchNone, FunctionRole, Configuration, LOG_LEVEL, BaseSubject, BaseSentry, BaseContext,
+       BaseFunction} = require("./BaseFunction");
+const {JwtSubject, Issuer, JwtConfiguration, HTTPContext, JwtSentry, HTTPFunction, JwtHTTPFunction, JSONHTTPContext,
+       JSONHTTPFunction, JwtJSONHTTPFunction} = require("HttpFunction");
 
 module.exports = {
-    CelastrinaError: CelastrinaError,
-    CelastrinaValidationError: CelastrinaValidationError,
-    Vault: Vault,
-    PropertyType: PropertyType,
-    Property: Property,
-    JsonProperty: JsonProperty,
-    StringProperty: StringProperty,
-    BooleanProperty: BooleanProperty,
-    NumericProperty: NumericProperty,
-    ApplicationRegistration: ApplicationRegistration,
-    ResourceRegistration: ResourceRegistration,
-    Configuration: Configuration
+    CelastrinaError:            CelastrinaError,
+    CelastrinaValidationError:  CelastrinaValidationError,
+    Vault:                      Vault,
+    Property:                   Property,
+    JsonProperty:               JsonProperty,
+    StringProperty:             StringProperty,
+    BooleanProperty:            BooleanProperty,
+    NumericProperty:            NumericProperty,
+    ApplicationAuthorization:   ApplicationAuthorization,
+    ValueMatch:                 ValueMatch,
+    MatchAny:                   MatchAny,
+    MatchAll:                   MatchAll,
+    MatchNone:                  MatchNone,
+    FunctionRole:               FunctionRole,
+    Configuration:              Configuration,
+    LOG_LEVEL:                  LOG_LEVEL,
+    BaseSubject:                BaseSubject,
+    BaseSentry:                 BaseSentry,
+    BaseContext:                BaseContext,
+    BaseFunction:               BaseFunction,
+    JwtSubject:                 JwtSubject,
+    Issuer:                     Issuer,
+    JwtConfiguration:           JwtConfiguration,
+    HTTPContext:                HTTPContext,
+    JwtSentry:                  JwtSentry,
+    HTTPFunction:               HTTPFunction,
+    JwtHTTPFunction:            JwtHTTPFunction,
+    JSONHTTPContext:            JSONHTTPContext,
+    JSONHTTPFunction:           JSONHTTPFunction,
+    JwtJSONHTTPFunction:        JwtJSONHTTPFunction
 };

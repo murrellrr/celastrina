@@ -59,53 +59,6 @@ const {LOG_LEVEL, JSONProperty, Configuration, BaseSubject, BaseSentry, BaseCont
  * @brief
  * @author Robert R Murrell
  */
-class Issuer {
-    /**
-     * @brief
-     * @param {string} name
-     * @param {string} audience
-     */
-    constructor(name, audience) {
-        this._name     = name;
-        this._audience = audience;
-    }
-
-    /**
-     * @brief
-     * @returns {string}
-     */
-    get name() {
-        return this._name;
-    }
-
-    /**
-     * @brief
-     * @returns {string}
-     */
-    get audience() {
-        return this._audience;
-    }
-
-    /**
-     * @brief
-     * @param {object} source
-     * @returns {Issuer}
-     */
-    static create(source) {
-        if(typeof source === "undefined" || source == null)
-            throw CelastrinaError.newError("Invalid Issuer, cannot be null or undefined.");
-        if(!source.hasOwnProperty("_name"))
-            throw CelastrinaError.newError("Invalid Issuer, _name required.");
-        if(!source.hasOwnProperty("_audience"))
-            throw CelastrinaError.newError("Invalid Issuer, _audience required.");
-        return new Issuer(source._name, source._audience);
-    }
-}
-
-/**
- * @brief
- * @author Robert R Murrell
- */
 class JwtSubject extends BaseSubject {
     /**
      * @brief
@@ -243,6 +196,89 @@ class JwtSubject extends BaseSubject {
  * @brief
  * @author Robert R Murrell
  */
+class Issuer {
+    /**
+     * @brief
+     * @param {string} name
+     * @param {string} audience
+     * @param {Array.<string>} [roles]
+     */
+    constructor(name, audience, roles = []) {
+        this._name     = name;
+        this._audience = audience;
+        this._roles    = roles;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get name() {
+        return this._name;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get audience() {
+        return this._audience;
+    }
+
+    /**
+     * @brief
+     * @returns {Array<string>}
+     */
+    get roles() {
+        return this._roles;
+    }
+
+    /**
+     * @brief
+     * @param {JwtSubject} subject
+     * @returns {Promise<boolean>}
+     */
+    async authenticate(subject) {
+        return new Promise((resolve, reject) => {
+            try {
+                if (subject.issuer === this._name && subject.audience === this._audience) {
+                    // Add roles to the subject if there are any specified.
+                    subject.addRoles(this._roles);
+                    resolve(true);
+                }
+                else
+                    resolve(false);
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+
+    /**
+     * @brief
+     * @param {object} source
+     * @returns {Issuer}
+     */
+    static create(source) {
+        if(typeof source === "undefined" || source == null)
+            throw CelastrinaError.newError("Invalid Issuer, cannot be null or undefined.");
+        if(!source.hasOwnProperty("_name"))
+            throw CelastrinaError.newError("Invalid Issuer, _name required.");
+        if(!source.hasOwnProperty("_audience"))
+            throw CelastrinaError.newError("Invalid Issuer, _audience required.");
+        if(!source.hasOwnProperty("_roles"))
+            throw CelastrinaError.newError("Invalid Issuer, _roles required.");
+        else if(!Array.isArray(source._roles))
+            throw CelastrinaError.newError("Invalid Issuer, _roles must be an Array.");
+        return new Issuer(source._name, source._audience, source._roles);
+    }
+}
+
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
 class JwtConfiguration extends Configuration {
     /**
      * @brief
@@ -294,6 +330,7 @@ class HTTPContext extends BaseContext {
             headers: {"Content-Type": "text/html; charset=ISO-8859-1"},
             body: "<html lang=\"en\"><head><title>" + this._name +
                 "</title></head><body>200, Success</body></html>"};
+        this._action = this._context.req.method.toLowerCase();
     }
 
     async initialize(configuration) {
@@ -332,7 +369,7 @@ class HTTPContext extends BaseContext {
      * @returns {string}
      */
     get method() {
-        return this._context.req.method.toLowerCase();
+        return this._action;
     }
 
     /**
@@ -575,45 +612,62 @@ class JwtSentry extends BaseSentry {
 
     /**
      * @brief
+     * @description <p><strong>WARNING:</strong>This function DOES NOT validate the JWT token, it only decodes it.
+     *              Token validation should be performed by API Manager or Azure Front Door, prior to invoking this
+     *              function.</p>
      * @param {BaseContext | HTTPContext} context
      * @returns {Promise<BaseSubject>}
      */
     async authenticate(context) {
         return new Promise((resolve, reject) => {
             try {
+                let subject = null;
                 let auth = context.getRequestHeader("authorization");
-                if (typeof auth !== "string")
+                if(typeof auth !== "string")
                     auth = context.getRequestHeader("x-celastrina-authorization");
-                if (typeof auth !== "string")
+                if(typeof auth !== "string")
                     auth = context.getQuery("authorization");
 
-                if (typeof auth !== "string")
+                if(typeof auth !== "string")
                     reject(CelastrinaError.newError("Not Authorized.", 401));
                 else {
                     // Checking to see if it starts with bearer
-                    if (auth.startsWith("Bearer "))
+                    if(auth.startsWith("Bearer "))
                         auth = auth.slice(7);
 
-                    let jwtsubject = JwtSubject.decode(auth);
-
-                    // No we check the issuers to see if we match any.
-
+                    // WARNING: Only decodes, does not validate!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    JwtSubject.decode(auth)
+                        .then((jwtsub) => {
+                            subject = jwtsub;
+                            // No we check the issuers to see if we match any.
+                            /** @type {Array.<Promise<boolean>>} */
+                            let promises = [];
+                            let irt = this._issuers[Symbol.iterator]();
+                            for(let issuer of irt) {
+                                promises.unshift(issuer.authenticate(subject)); // Performs the role escalations too.
+                            }
+                            return Promise.all(promises);
+                        })
+                        .then((results) => {
+                            let authenticated = false;
+                            let ritr = results[Symbol.iterator]();
+                            for(let result of ritr) {
+                                if((authenticated = result))
+                                    break;
+                            }
+                            if(authenticated)
+                                resolve(subject);
+                            else
+                                reject(CelastrinaError.newError("Not Authorized.", 401));
+                        })
+                        .catch((exception) => {
+                            reject(exception);
+                        });
                 }
             }
             catch(exception) {
                 reject(exception);
             }
-        });
-    }
-
-    /**
-     * @brief
-     * @param {BaseContext} context
-     * @returns {Promise<void>}
-     */
-    async authorize(context) {
-        return new Promise((resolve, reject) => {
-            resolve();
         });
     }
 
@@ -981,3 +1035,16 @@ class JwtJSONHTTPFunction extends JSONHTTPFunction {
             });
     }
 }
+
+module.exports = {
+    JwtSubject:          JwtSubject,
+    Issuer:              Issuer,
+    JwtConfiguration:    JwtConfiguration,
+    HTTPContext:         HTTPContext,
+    JwtSentry:           JwtSentry,
+    HTTPFunction:        HTTPFunction,
+    JwtHTTPFunction:     JwtHTTPFunction,
+    JSONHTTPContext:     JSONHTTPContext,
+    JSONHTTPFunction:    JSONHTTPFunction,
+    JwtJSONHTTPFunction: JwtJSONHTTPFunction
+};

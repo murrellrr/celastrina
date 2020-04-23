@@ -229,7 +229,9 @@ class Property {
     }
 
     /**
-     * @brief
+     * @brief Lookup a value based on a key.
+     * @description Default behavior is to retrieve the value from the {PropertyHandler} instance. Override this method
+     *              to get property values from other locations.
      * @param {PropertyHandler} handler
      * @returns {Promise<null|Object|string|boolean|number>}
      */
@@ -241,8 +243,10 @@ class Property {
     }
 
     /**
-     * @brief
-     * @param {string} value
+     * @brief Convert from a string value to the desired property type.
+     * @description. Default behavior is to throw an error. Override this method to convert a string to the desired
+     *               type.
+     * @param {string} value The string value to convert.
      * @returns {Promise<null|Object|string|boolean|number>}
      */
     async resolve(value) {
@@ -881,14 +885,30 @@ class BaseSubject {
 class ValueMatch {
     /**
      * @brief
-     * @param {string} assertion
+     * @param {string} [type]
+     */
+    constructor(type = "ValueMatch") {
+        this._type = type
+    }
+
+    /**
+     * @brief
+     * @param {Array.<string>} assertion
      * @param {Array.<string>} values
      * @returns {Promise<boolean>}
      */
     async isMatch(assertion, values) {
         return new Promise((resolve) => {
-            resolve(false);
+            resolve(true);
         });
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get type() {
+        return this._type;
     }
 }
 /**
@@ -896,15 +916,19 @@ class ValueMatch {
  * @author Robert R Murrell
  */
 class MatchAny extends ValueMatch {
+    constructor() {
+        super("MatchAny");
+    }
+
     /**
      * @brief
-     * @param {string} assertion
+     * @param {Array.<string>} assertion
      * @param {Array.<string>} values
      * @returns {Promise<boolean>}
      */
     async isMatch(assertion, values) {
         return new Promise((resolve) => {
-            resolve(false);
+            resolve(values.includes(assertion));
         });
     }
 }
@@ -913,9 +937,13 @@ class MatchAny extends ValueMatch {
  * @author Robert R Murrell
  */
 class MatchAll extends ValueMatch {
+    constructor() {
+        super("MatchAll");
+    }
+
     /**
      * @brief
-     * @param {string} assertion
+     * @param {Array.<string>} assertion
      * @param {Array.<string>} values
      * @returns {Promise<boolean>}
      */
@@ -930,20 +958,128 @@ class MatchAll extends ValueMatch {
  * @author Robert R Murrell
  */
 class MatchNone extends ValueMatch {
+    constructor() {
+        super("MatchNone");
+    }
+
     /**
      * @brief
-     * @param {string} assertion
+     * @param {Array.<string>} assertion
      * @param {Array.<string>} values
      * @returns {Promise<boolean>}
      */
     async isMatch(assertion, values) {
         return new Promise((resolve) => {
-            resolve(false);
+            resolve(!values.includes(assertion));
         });
     }
 }
 
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class FunctionRole {
+    /**
+     * @brief
+     * @param {string} [action]
+     * @param {Array.<string>} roles
+     * @param {ValueMatch} [match]
+     */
+    constructor(action = "process", roles = [], match = new MatchAny()) {
+        this._roles = roles;
+        this._action = action.toLowerCase();
+        this._match  = match;
+    }
 
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get action() {
+        return this._action;
+    }
+
+    /**
+     * @brief
+     * @param {string} role
+     * @returns {FunctionRole}
+     */
+    addRole(role) {
+        this._roles.unshift(role);
+        return this;
+    }
+
+    /**
+     * @brief
+     * @returns {Array<string>}
+     */
+    get roles() {
+        return this._roles;
+    }
+
+    /**
+     * @brief
+     * @param {string} action
+     * @param {BaseSubject} subject
+     * @returns {Promise<boolean>}
+     */
+    async authorize(action, subject) {
+        return new Promise((resolve, reject) => {
+            if(action === this._action) {
+                this._match.isMatch(subject.roles, this._roles)
+                    .then((inrole) => {
+                        resolve(inrole);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            else
+                resolve(false);
+        });
+    }
+
+    /**
+     * @brief
+     * @param {object} source
+     * @return {FunctionRole}
+     */
+    static create(source) {
+        if(typeof source === "undefined" || source == null)
+            throw CelastrinaError.newError("Invalid FunctionRole, cannot be null or undefined.");
+        if(!source.hasOwnProperty("_roles"))
+            throw CelastrinaError.newError("Invalid FunctionRole, _roles required.");
+        else if(!Array.isArray(source._roles))
+            throw CelastrinaError.newError("Invalid FunctionRole, _values must be an array.");
+        if(!source.hasOwnProperty("_action"))
+            throw CelastrinaError.newError("Invalid FunctionRole, _action required.");
+        if(!source.hasOwnProperty("_match"))
+            throw CelastrinaError.newError("Invalid FunctionRole, _match required.");
+        if(!source._match.hasOwnProperty("_type"))
+            throw CelastrinaError.newError("Invalid FunctionRole.ValueMatch, _type required.");
+
+        let match;
+        switch(source._match._type) {
+            case "ValueMatch":
+                match = new ValueMatch();
+                break;
+            case "MatchAny":
+                match = new MatchAny();
+                break;
+            case "MatchAll":
+                match = new MatchAll();
+                break;
+            case "MatchNone":
+                match = new MatchNone();
+                break;
+            default:
+                throw CelastrinaError.newError("Invalid Match Type.");
+        }
+
+        return new FunctionRole(source._action, source._roles, source._match);
+    }
+}
 
 /*
  * *********************************************************************************************************************
@@ -969,11 +1105,11 @@ class Configuration {
         this._appauth = [];
         /** @type {Array.<StringProperty|string>} **/
         this._resauth = [];
-        /** @type {Array.<JsonProperty|SubjectEnrollmentAssertion>} */
-        this._roleenroll = [];
+        /** @type {Array.<JsonProperty|FunctionRole>} */
+        this._roles   = [];
         /** @type {null|PropertyHandler} */
         this._handler = new PropertyHandler();
-        /** @type {_AzureFunctionContext|null} */
+        /** @type {null|_AzureFunctionContext} */
         this._context = null;
     }
 
@@ -1013,7 +1149,7 @@ class Configuration {
 
     /**
      * @brief
-     * @returns {Array<ApplicationAuthorization>}
+     * @returns {Array<Object|ApplicationAuthorization>}
      */
     get applicationAuthorizations() {
         return this._appauth;
@@ -1044,6 +1180,24 @@ class Configuration {
      */
     get resourceAuthorizations() {
         return this._resauth;
+    }
+
+    /**
+     * @brief
+     * @param {JsonProperty|FunctionRole} role
+     * @returns {Configuration}
+     */
+    addFunctionRole(role) {
+        this._roles.unshift(role);
+        return this;
+    }
+
+    /**
+     * @brief
+     * @returns {Array<Object|FunctionRole>}
+     */
+    get roles() {
+        return this._roles;
     }
 
     /**
@@ -1256,6 +1410,7 @@ class MonitorResponse {
 class BaseSentry {
     constructor() {
         this._appauth    = {};
+        this._roles      = {};
         this._localAppId = null;
     }
 
@@ -1265,6 +1420,14 @@ class BaseSentry {
      */
     get localApplicationId() {
         return this._localAppId;
+    }
+
+    /**
+     * @brief
+     * @returns {Object}
+     */
+    get roles() {
+        return this._roles;
     }
 
     /**
@@ -1307,41 +1470,67 @@ class BaseSentry {
      */
     async authorize(context) {
         return new Promise((resolve, reject) => {
-            resolve();
+            try {
+                let funcrole = this._roles[context.action];
+                if (typeof funcrole === "undefined" || funcrole == null)
+                    resolve();
+                else {
+                    funcrole.authorize(context.action, context.subjcet)
+                        .then((auth) => {
+                            if(auth)
+                                resolve();
+                            else
+                                reject(CelastrinaError.newError("Forbidden.", 403));
+                        })
+                        .catch((exception) => {
+                            reject(exception);
+                        });
+                }
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 
     /**
      * @brief
      * @param {BaseContext} context
-     * @param {BaseSubject} subject
      * @returns {Promise<BaseSubject>}
      */
-    async setRoles(context, subject) {
+    async setRoles(context) {
         return new Promise((resolve, reject) => {
-            resolve(subject);
+            resolve(context.subjcet);
         });
     }
 
     /**
      * @brief
-     * @param {Configuration} configuration
-     * @returns {Promise<BaseSentry>}
+     * @param {Object|ApplicationAuthorization} authorization
+     * @returns {Promise<void>}
+     * @private
      */
-    async initialize(configuration) {
+    async _loadApplicationAuthorization(authorization) {
         return new Promise((resolve, reject) => {
-            // Set up the local application id.
-            this._localAppId = process.env["CELASTRINA_MSI_OBJECT_ID"];
-            if(typeof this._localAppId !== "string")
-                this._localAppId = configuration.context.invocationId;
-            this._loadResourceAuthorizations(configuration);
-            this._loadApplicationAuthorizations(configuration.applicationAuthorizations)
-                .then(() => {
-                    resolve(this);
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            try {
+                // First we convert it to an authorization if its not already.
+                if (!(authorization instanceof ApplicationAuthorization)) {
+                    /** @type {ApplicationAuthorization} */
+                    authorization = ApplicationAuthorization.create(authorization);
+                }
+
+                authorization.initialize()
+                    .then(() => {
+                        this._appauth[authorization.id] = authorization;
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 
@@ -1357,7 +1546,7 @@ class BaseSentry {
                 let promises = [];
                 let itr = applications[Symbol.iterator]();
                 for (let appobj of itr) {
-                    promises.unshift(this._loadAppAuthorization(appobj));
+                    promises.unshift(this._loadApplicationAuthorization(appobj));
                 }
                 Promise.all(promises)
                     .then(() => {
@@ -1387,22 +1576,72 @@ class BaseSentry {
 
     /**
      * @brief
-     * @param {Object|ApplicationAuthorization} authorization
+     * @param {Object|FunctionRole} role
      * @returns {Promise<void>}
      * @private
      */
-    async _loadAppAuthorization(authorization) {
+    async _loadFunctionRole(role) {
         return new Promise((resolve, reject) => {
-            // First we convert it to an authorization if its not already.
-            if(!(authorization instanceof ApplicationAuthorization)) {
-                /** @type {ApplicationAuthorization} */
-                authorization = ApplicationAuthorization.create(authorization);
+            try {
+                if (!(role instanceof FunctionRole)) {
+                    /** @type {FunctionRole} */
+                    role = FunctionRole.create(role);
+                }
+                this._roles[role.action] = role;
+                resolve();
             }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
 
-            authorization.initialize()
+    /**
+     * @brief
+     * @param {Array.<Object|FunctionRole>} roles
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _loadFunctionRoles(roles) {
+        return new Promise((resolve, reject) => {
+            if(roles.length > 0) {
+                /** @type {Array.<Promise<void>>} */
+                let promises = [];
+                let itr = roles[Symbol.iterator]();
+                for(let roleobj of itr) {
+                    promises.unshift(this._loadFunctionRole(roleobj));
+                }
+                Promise.all(promises)
+                    .then(() => {
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            else
+                resolve(); // Do nothing. Default behavior is open.
+        });
+    }
+
+    /**
+     * @brief
+     * @param {Configuration} configuration
+     * @returns {Promise<BaseSentry>}
+     */
+    async initialize(configuration) {
+        return new Promise((resolve, reject) => {
+            // Set up the local application id.
+            this._localAppId = process.env["CELASTRINA_MSI_OBJECT_ID"];
+            if(typeof this._localAppId !== "string")
+                this._localAppId = configuration.context.invocationId;
+            this._loadResourceAuthorizations(configuration);
+            this._loadApplicationAuthorizations(configuration.applicationAuthorizations)
                 .then(() => {
-                    this._appauth[authorization.id] = authorization;
-                    resolve();
+                    return this._loadFunctionRoles(configuration.roles);
+                })
+                .then(() => {
+                    resolve(this);
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -1432,6 +1671,7 @@ class BaseContext {
         this._name            = name;
         /** @type {null|BaseSubject} */
         this._subject         = null;
+        this._action          = "process";
     }
 
     /**
@@ -1517,6 +1757,14 @@ class BaseContext {
      */
     set subject(subject) {
         this._subject = subject;
+    }
+
+    /**
+     * @brief Returns the action being performed by this context. Default is "process".
+     * @returns {string}
+     */
+    get action() {
+        return this._action;
     }
 
     /**
@@ -2009,7 +2257,7 @@ module.exports = {
     MatchAny:                   MatchAny,
     MatchAll:                   MatchAll,
     MatchNone:                  MatchNone,
-    SubjectEnrollmentAssertion: SubjectEnrollmentAssertion,
+    FunctionRole:               FunctionRole,
     Configuration:              Configuration,
     LOG_LEVEL:                  LOG_LEVEL,
     BaseSubject:                BaseSubject,

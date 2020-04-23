@@ -921,14 +921,25 @@ class MatchAny extends ValueMatch {
     }
 
     /**
-     * @brief
+     * @brief A role in assertion can match a role in values and pass.
      * @param {Array.<string>} assertion
      * @param {Array.<string>} values
      * @returns {Promise<boolean>}
      */
     async isMatch(assertion, values) {
-        return new Promise((resolve) => {
-            resolve(values.includes(assertion));
+        return new Promise((resolve, reject) => {
+            try {
+                let match = false;
+                let itr = assertion[Symbol.iterator]();
+                for(let role of itr) {
+                    if((match = values.includes(role)))
+                        break; // We have matched one, we are good.
+                }
+                resolve(match);
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
@@ -942,14 +953,25 @@ class MatchAll extends ValueMatch {
     }
 
     /**
-     * @brief
+     * @brief All roles in assertion must match all roles in values.
      * @param {Array.<string>} assertion
      * @param {Array.<string>} values
      * @returns {Promise<boolean>}
      */
     async isMatch(assertion, values) {
-        return new Promise((resolve) => {
-            resolve(false);
+        return new Promise((resolve, reject) => {
+            try {
+                let match = false;
+                let itr = values[Symbol.iterator]();
+                for(let role of itr) {
+                    if(!(match = assertion.includes(role)))
+                        break; // We have matched one, we are good.
+                }
+                resolve(match);
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
@@ -963,14 +985,25 @@ class MatchNone extends ValueMatch {
     }
 
     /**
-     * @brief
+     * @brief No role in assertion must match a role in values.
      * @param {Array.<string>} assertion
      * @param {Array.<string>} values
      * @returns {Promise<boolean>}
      */
     async isMatch(assertion, values) {
-        return new Promise((resolve) => {
-            resolve(!values.includes(assertion));
+        return new Promise((resolve, reject) => {
+            try {
+                let match = false;
+                let itr = values[Symbol.iterator]();
+                for(let role of itr) {
+                    if((match = assertion.includes(role)))
+                        break; // We have matched one, we are good.
+                }
+                resolve(!match);
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
@@ -1077,7 +1110,7 @@ class FunctionRole {
                 throw CelastrinaError.newError("Invalid Match Type.");
         }
 
-        return new FunctionRole(source._action, source._roles, source._match);
+        return new FunctionRole(source._action, source._roles, match);
     }
 }
 

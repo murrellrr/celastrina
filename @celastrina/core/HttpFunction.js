@@ -191,7 +191,6 @@ class JwtSubject extends BaseSubject {
         });
     }
 }
-
 /**
  * @brief
  * @author Robert R Murrell
@@ -274,7 +273,6 @@ class Issuer {
         return new Issuer(source._name, source._audience, source._roles);
     }
 }
-
 /**
  * @brief
  * @author Robert R Murrell
@@ -309,7 +307,6 @@ class JwtConfiguration extends Configuration {
         return this._issuers;
     }
 }
-
 /**
  * @brief Base context for an HTTP Request/Response.
  * @description Used with the {HTTPFunction}
@@ -568,7 +565,6 @@ class HTTPContext extends BaseContext {
         this.send(error, 403);
     }
 }
-
 /**
  * @brief
  * @description
@@ -688,7 +684,6 @@ class JwtSentry extends BaseSentry {
         });
     }
 }
-
 /**
  * @brief Extension of the {BaseFunction} that handles HTTP triggers.
  * @description Implementors must create a httpTrigger input binding named <code>red</code> and an output binding named
@@ -919,7 +914,6 @@ class HTTPFunction extends BaseFunction {
         return promise;
     }
 }
-
 /**
  * @brief
  * @author Robert R Murrell
@@ -945,7 +939,6 @@ class JwtHTTPFunction extends HTTPFunction {
             });
     }
 }
-
 /**
  * @brief
  * @author Robert R Murrell
@@ -973,7 +966,6 @@ class JSONHTTPContext extends HTTPContext {
         this._context.res.body = body;
     }
 }
-
 /**
  * @brief Implementation of the HTTPFunction designed to handle JSON.
  * @description Uses the {JSONHTTPContext} object to ensure the response Content-Type header is "application/json".
@@ -1009,7 +1001,6 @@ class JSONHTTPFunction extends HTTPFunction {
             });
     }
 }
-
 /**
  * @brief
  * @author Robert R Murrell
@@ -1035,7 +1026,11 @@ class JwtJSONHTTPFunction extends JSONHTTPFunction {
             });
     }
 }
-
+/*
+ * *********************************************************************************************************************
+ * EXPORTS
+ * *********************************************************************************************************************
+ */
 module.exports = {
     JwtSubject:          JwtSubject,
     Issuer:              Issuer,

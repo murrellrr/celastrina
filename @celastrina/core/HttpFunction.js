@@ -285,8 +285,23 @@ class JwtConfiguration extends Configuration {
      */
     constructor(name, managed = true) {
         super(name, managed);
+        /** @type {string} @const */
+        this.CONFIGURATION_JWT_ISS    = "celatsrinajs_jwt_iss";
+        /** @type {string} @const */
+        this.CONFIGURATION_JWT_HEADER = "celatsrinajs_jwt_userHeader";
+        /** @type {string} @const */
+        this.CONFIGURATION_JWT_SCHEME = "celatsrinajs_jwt_scheme";
+        /** @type {string} @const */
+        this.CONFIGURATION_JWT_KEY    = "celatsrinajs_jwt_key";
+
         /** @type {Array.<Issuer>} */
-        this._issuers = [];
+        this._config[this.CONFIGURATION_JWT_ISS]    = [];
+        /** @type {boolean|BooleanProperty} */
+        this._config[this.CONFIGURATION_JWT_HEADER] = true; // Header or query param
+        /** @type {string|StringProperty} */
+        this._config[this.CONFIGURATION_JWT_SCHEME] = "Bearer ";
+        /** @type {string|StringProperty} */
+        this._config[this.CONFIGURATION_JWT_KEY]    = "authorization";
     }
 
     /**
@@ -295,7 +310,7 @@ class JwtConfiguration extends Configuration {
      * @returns {JwtConfiguration}
      */
     addIssuer(issuer) {
-        this._issuers.unshift(issuer);
+        this._config[this.CONFIGURATION_JWT_ISS].unshift(issuer);
         return this;
     }
 
@@ -304,7 +319,55 @@ class JwtConfiguration extends Configuration {
      * @returns {Array<Issuer>}
      */
     get issuers() {
-        return this._issuers;
+        return this._config[this.CONFIGURATION_JWT_ISS];
+    }
+
+    /**
+     * @brief
+     * @param {boolean|BooleanProperty} useHeader
+     */
+    set useHeader(useHeader) {
+        this._config[this.CONFIGURATION_JWT_HEADER] = useHeader;
+    }
+
+    /**
+     * @brief
+     * @returns {boolean}
+     */
+    get useHeader() {
+        return this._config[this.CONFIGURATION_JWT_HEADER]
+    }
+
+    /**
+     * @brief
+     * @param {string|StringProperty} scheme
+     */
+    set scheme(scheme) {
+        this._config[this.CONFIGURATION_JWT_SCHEME] = scheme;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get scheme() {
+        return this._config[this.CONFIGURATION_JWT_SCHEME];
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get key() {
+        return this._config[this.CONFIGURATION_JWT_KEY];
+    }
+
+    /**
+     * @brief
+     * @param {string|StringProperty} key
+     */
+    set key(key) {
+        this._config[this.CONFIGURATION_JWT_KEY] = key;
     }
 }
 /**
@@ -575,6 +638,10 @@ class JwtSentry extends BaseSentry {
         super();
         /** @type {Array.<Issuer>} */
         this._issuers = [];
+
+        this._useHeader = true; // Header or query param
+        this._scheme    = "Bearer ";
+        this._tokenKey  = "authorization";
     }
 
     /**
@@ -594,6 +661,12 @@ class JwtSentry extends BaseSentry {
                                 issuer = Issuer.create(issuer);
                             this._issuers.unshift(issuer);
                         }
+
+                        // Load the Jwt config
+                        this._useHeader = configuration.useHeader;
+                        this._scheme    = configuration.scheme;
+                        this._tokenKey  = configuration.key;
+
                         resolve(sentry);
                     }
                     catch(exception) {
@@ -603,6 +676,36 @@ class JwtSentry extends BaseSentry {
                 .catch((exception) => {
                     reject(exception);
                 });
+        });
+    }
+
+    /**
+     * @brief
+     * @param {HTTPContext} context
+     * @returns {Promise<string>}
+     * @private
+     */
+    async _getToken(context) {
+        return new Promise((resolve, reject) => {
+            let auth;
+            if(this._useHeader)
+                auth = context.getRequestHeader(this._tokenKey);
+            else
+                auth = context.getQuery(this._tokenKey);
+
+            if(typeof auth !== "string")
+                reject(CelastrinaError.newError("Not Authorized.", 401));
+            else {
+                // Checking to see if it starts with bearer
+                if(this._scheme.length > 0) {
+                    if (auth.startsWith(this._scheme))
+                        resolve(auth.slice(this._scheme.length));
+                    else
+                        reject(CelastrinaError.newError("Not Authorized.", 401));
+                }
+                else
+                    resolve(auth);
+            }
         });
     }
 
@@ -618,48 +721,37 @@ class JwtSentry extends BaseSentry {
         return new Promise((resolve, reject) => {
             try {
                 let subject = null;
-                let auth = context.getRequestHeader("authorization");
-                if(typeof auth !== "string")
-                    auth = context.getRequestHeader("x-celastrina-authorization");
-                if(typeof auth !== "string")
-                    auth = context.getQuery("authorization");
-
-                if(typeof auth !== "string")
-                    reject(CelastrinaError.newError("Not Authorized.", 401));
-                else {
-                    // Checking to see if it starts with bearer
-                    if(auth.startsWith("Bearer "))
-                        auth = auth.slice(7);
-
-                    // WARNING: Only decodes, does not validate!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                    JwtSubject.decode(auth)
-                        .then((jwtsub) => {
-                            subject = jwtsub;
-                            // No we check the issuers to see if we match any.
-                            /** @type {Array.<Promise<boolean>>} */
-                            let promises = [];
-                            let irt = this._issuers[Symbol.iterator]();
-                            for(let issuer of irt) {
-                                promises.unshift(issuer.authenticate(subject)); // Performs the role escalations too.
-                            }
-                            return Promise.all(promises);
-                        })
-                        .then((results) => {
-                            let authenticated = false;
-                            let ritr = results[Symbol.iterator]();
-                            for(let result of ritr) {
-                                if((authenticated = result))
-                                    break;
-                            }
-                            if(authenticated)
-                                resolve(subject);
-                            else
-                                reject(CelastrinaError.newError("Not Authorized.", 401));
-                        })
-                        .catch((exception) => {
-                            reject(exception);
-                        });
-                }
+                this._getToken(context)
+                    .then((auth) => {
+                        // WARNING: Only decodes, does not validate!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                        return JwtSubject.decode(auth);
+                    })
+                    .then((jwtsub) => {
+                        subject = jwtsub;
+                        // No we check the issuers to see if we match any.
+                        /** @type {Array.<Promise<boolean>>} */
+                        let promises = [];
+                        let irt = this._issuers[Symbol.iterator]();
+                        for(let issuer of irt) {
+                            promises.unshift(issuer.authenticate(subject)); // Performs the role escalations too.
+                        }
+                        return Promise.all(promises);
+                    })
+                    .then((results) => {
+                        let authenticated = false;
+                        let ritr = results[Symbol.iterator]();
+                        for(let result of ritr) {
+                            if((authenticated = result))
+                                break;
+                        }
+                        if(authenticated)
+                            resolve(subject);
+                        else
+                            reject(CelastrinaError.newError("Not Authorized.", 401));
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
             }
             catch(exception) {
                 reject(exception);

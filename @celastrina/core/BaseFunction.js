@@ -125,14 +125,13 @@ class PropertyHandler {
     }
 }
 /**
- * @brief
+ * @brief Handler class to load properties from process.env or Azure Vault as secrets.
  * @author Robert R Murrell
  * @type {{_vault: Vault}}
  */
 class VaultPropertyHandler extends PropertyHandler {
     /**
      * @prief
-     *
      * @param {Vault} vault
      */
     constructor(vault) {
@@ -178,9 +177,12 @@ class VaultPropertyHandler extends PropertyHandler {
     }
 }
 /**
- * @brief
+ * @brief Base class for Configuration a configuration Property
+ * @description A Configuration Property is a key=value pair that can be loaded from process.env or a secret in
+ *              Azure Vault.
  * @author Robert R Murrell
  * @type {{_name:string, _type:string, _secure:boolean, _defaultValue:null|*}}
+ * @abstract
  */
 class Property {
     /**
@@ -276,7 +278,7 @@ class Property {
     }
 }
 /**
- * @brief
+ * @brief Loads an Object from a string property containing JSON.
  * @author Robert R Murrell
  * @type {Property}
  */
@@ -309,7 +311,7 @@ class JsonProperty extends Property {
     }
 }
 /**
- * @brief
+ * @brief Loads a string.
  * @author Robert R Murrell
  * @type {Property}
  */
@@ -342,7 +344,9 @@ class StringProperty extends Property {
     }
 }
 /**
- * @brief
+ * @brief Loads a boolean from a string.
+ * @description Derrives the boolean value from <code>value.toLowerCase() === "true"</code> where the value "value"
+ *              equates to <code>true</code> and any other value to <code>false</code>.
  * @author Robert R Murrell
  * @type {Property}
  */
@@ -375,7 +379,8 @@ class BooleanProperty extends Property {
     }
 }
 /**
- * @brief
+ * @brief Loads a number from a string.
+ * @description Derrives the number from <code>Number(value)</code>.
  * @author Robert R Murrell
  * @type {Property}
  */
@@ -413,7 +418,7 @@ class NumericProperty extends Property {
  * *********************************************************************************************************************
  */
 /**
- * @brief Application credential configuration
+ * @brief Application authorization for MSAL client configuration
  * @description An {ApplicationAuthorization} is a configuration for an Azure Application credential. This allows
  *              functions to perform actions as the application identity, granting access to resources provided to the
  *              application.
@@ -783,7 +788,10 @@ class ApplicationAuthorization {
  * *********************************************************************************************************************
  */
 /**
- * @brief
+ * @brief Loads a property asynchronously.
+ * @description Simple Factory class for creating a promise that will load a {Property} and set it asynchrounously. This
+ *              is to facillitate concurrent property loading on start-up, improving performance.
+ * @author Robert R Murrell
  */
 class PropertyLoader {
     /**
@@ -813,7 +821,7 @@ class PropertyLoader {
  * *********************************************************************************************************************
  */
 /**
- * @brief
+ * @brief Base Subject for authentication and authorization.
  * @author Robert R Murrell
  */
 class BaseSubject {
@@ -879,8 +887,9 @@ class BaseSubject {
     }
 }
 /**
- * @brief
+ * @brief Base class for matching roles to assertions.
  * @author Robert R Murrell
+ * @abstract
  */
 class ValueMatch {
     /**
@@ -912,7 +921,7 @@ class ValueMatch {
     }
 }
 /**
- * @brief
+ * @brief Checks that any assertions matches any values.
  * @author Robert R Murrell
  */
 class MatchAny extends ValueMatch {
@@ -944,7 +953,7 @@ class MatchAny extends ValueMatch {
     }
 }
 /**
- * @brief
+ * @brief Checks that all assertions match all values.
  * @author Robert R Murrell
  */
 class MatchAll extends ValueMatch {
@@ -976,7 +985,7 @@ class MatchAll extends ValueMatch {
     }
 }
 /**
- * @brief
+ * @brief Checks that no assertions match any values.
  * @author Robert R Murrell
  */
 class MatchNone extends ValueMatch {
@@ -1007,9 +1016,8 @@ class MatchNone extends ValueMatch {
         });
     }
 }
-
 /**
- * @brief
+ * @brief A role that is allowed to use this Function.
  * @author Robert R Murrell
  */
 class FunctionRole {
@@ -1094,9 +1102,6 @@ class FunctionRole {
 
         let match;
         switch(source._match._type) {
-            case "ValueMatch":
-                match = new ValueMatch();
-                break;
             case "MatchAny":
                 match = new MatchAny();
                 break;
@@ -1120,7 +1125,7 @@ class FunctionRole {
  * *********************************************************************************************************************
  */
 /**
- * @brief
+ * @brief The base configuration for Celastrina.
  * @author Robert R Murrell
  * @type {{_name:StringProperty|string, managed:BooleanProperty|boolean}}
  */
@@ -1131,19 +1136,27 @@ class Configuration {
      * @param {BooleanProperty|boolean} managed
      */
     constructor(name, managed = true) {
+        /** @type {string} @const  */
+        this.CONFIGURATION_APP_AUTH = "celatsrinajs_app_auth";
+        /** @type {string} @const  */
+        this.CONFIGURATION_RES_AUTH = "celatsrinajs_res_auth";
+        /** @type {string} @const  */
+        this.CONFIGURATION_ROLES    = "celatsrinajs_roles";
+
         this._name    = name;
         this._managed = managed;
-
-        /** @type {Array.<JsonProperty|ApplicationAuthorization>} **/
-        this._appauth = [];
-        /** @type {Array.<StringProperty|string>} **/
-        this._resauth = [];
-        /** @type {Array.<JsonProperty|FunctionRole>} */
-        this._roles   = [];
-        /** @type {null|PropertyHandler} */
-        this._handler = new PropertyHandler();
+        this._config  = {};
         /** @type {null|_AzureFunctionContext} */
         this._context = null;
+        /** @type {null|PropertyHandler} */
+        this._handler = new PropertyHandler();
+
+        /** @type {Array.<JsonProperty|ApplicationAuthorization>} **/
+        this._config[this.CONFIGURATION_APP_AUTH] = [];
+        /** @type {Array.<StringProperty|string>} **/
+        this._config[this.CONFIGURATION_RES_AUTH] = [];
+        /** @type {Array.<JsonProperty|FunctionRole>} */
+        this._config[this.CONFIGURATION_ROLES]    = [];
     }
 
     /**
@@ -1172,11 +1185,31 @@ class Configuration {
 
     /**
      * @brief
+     * @param {string} key
+     * @param {*} value
+     * @returns {Configuration}
+     */
+    addValue(key , value) {
+        this._config[key] = value;
+        return this;
+    }
+
+    /**
+     * @brief
+     * @param key
+     * @returns {*}
+     */
+    getValue(key) {
+        return this._config[key];
+    }
+
+    /**
+     * @brief
      * @param {JsonProperty|ApplicationAuthorization} application
      * @returns {Configuration}
      */
     addApplicationAuthorization(application) {
-        this._appauth.unshift(application);
+        this._config[this.CONFIGURATION_APP_AUTH].unshift(application);
         return this;
     }
 
@@ -1185,7 +1218,7 @@ class Configuration {
      * @returns {Array<Object|ApplicationAuthorization>}
      */
     get applicationAuthorizations() {
-        return this._appauth;
+        return this._config[this.CONFIGURATION_APP_AUTH];
     }
 
     /**
@@ -1203,7 +1236,7 @@ class Configuration {
                                            "managed (managed = true) to use resource authorizations. If " +
                                            "attempting to assign resources to an application, please use " +
                                            "ApplicationRegistration.");
-        this._resauth.unshift(resource);
+        this._config[this.CONFIGURATION_RES_AUTH].unshift(resource);
         return this;
     }
 
@@ -1212,7 +1245,7 @@ class Configuration {
      * @returns {Array<string>}
      */
     get resourceAuthorizations() {
-        return this._resauth;
+        return this._config[this.CONFIGURATION_RES_AUTH];
     }
 
     /**
@@ -1221,7 +1254,7 @@ class Configuration {
      * @returns {Configuration}
      */
     addFunctionRole(role) {
-        this._roles.unshift(role);
+        this._config[this.CONFIGURATION_ROLES].unshift(role);
         return this;
     }
 
@@ -1230,7 +1263,7 @@ class Configuration {
      * @returns {Array<Object|FunctionRole>}
      */
     get roles() {
-        return this._roles;
+        return this._config[this.CONFIGURATION_ROLES];
     }
 
     /**
@@ -1367,7 +1400,7 @@ class Configuration {
  * *********************************************************************************************************************
  */
 /**
- * @brief
+ * @brief Logging level for the context logger.
  * @author Robert R Murrell
  * @type {{LEVEL_TRACE: number, LEVEL_INFO: number, LEVEL_VERBOSE: number, LEVEL_WARN: number, LEVEL_ERROR: number}}
  */
@@ -1379,7 +1412,7 @@ const LOG_LEVEL = {
     LEVEL_ERROR:   4
 };
 /**
- * @brief
+ * @brief Response object to hold the results of test run during a monitoring request.
  * @author Robert R Murrell
  * @type {{_topic: string, _passed: Object, _failed: Object, failed: boolean}}
  */
@@ -1437,7 +1470,7 @@ class MonitorResponse {
     }
 }
 /**
- * @brief
+ * @brief Base class for handling credentialling, authentication, and authorization.
  * @type {{_appauth:Object}}
  */
 class BaseSentry {
@@ -1683,7 +1716,7 @@ class BaseSentry {
     }
 }
 /**
- * @brief
+ * @brief The base class for representing the context of a function invocation.
  * @author Robert R Murrell
  */
 class BaseContext {
@@ -1889,7 +1922,7 @@ class BaseContext {
     }
 }
 /**
- * @brief
+ * @brief Basic lifecycle for a function invocation.
  * @author Robert R Murrell
  */
 class BaseFunction {
@@ -2024,7 +2057,7 @@ class BaseFunction {
         return new Promise((resolve, reject) => {
             this._sentry.authenticate(context)
                 .then((subject) => {
-                    return this._sentry.setRoles(context, subject);
+                    return this._sentry.setRoles(context);
                 })
                 .then((subject) => {
                     resolve(subject);

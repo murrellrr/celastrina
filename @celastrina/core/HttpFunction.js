@@ -28,7 +28,7 @@ const moment = require("moment");
 const jwt    = require("jsonwebtoken");
 
 const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
-const {LOG_LEVEL, JSONProperty, Configuration, BaseSubject, BaseSentry, BaseContext,
+const {LOG_LEVEL, JsonProperty, Configuration, BaseSubject, BaseSentry, BaseContext,
        BaseFunction} = require("./BaseFunction");
 
 /**
@@ -54,7 +54,6 @@ const {LOG_LEVEL, JSONProperty, Configuration, BaseSubject, BaseSentry, BaseCont
  * @property {string} subject
  * @property {string} issuer
  */
-
 /**
  * @brief
  * @author Robert R Murrell
@@ -175,7 +174,7 @@ class JwtSubject extends BaseSubject {
     static async decode(bearerToken) {
         return new Promise((resolve, reject) => {
             if(typeof bearerToken !== "string" || bearerToken.trim().length === 0)
-                reject(CelastrinaError.newError(""));
+                reject(CelastrinaError.newError("Not Authorized.", 401));
             else {
                 try {
                     /** @type {_jwt} */
@@ -253,24 +252,255 @@ class Issuer {
             }
         });
     }
+}
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class IssuerProperty extends JsonProperty {
+    /**
+     * @brief
+     * @param {string} name
+     * @param {boolean} secure
+     * @param {null|string} defaultValue
+     */
+    constructor(name, secure = false, defaultValue = null) {
+        super(name, secure, defaultValue);
+        this._type = "Issuer";
+    }
 
     /**
      * @brief
-     * @param {object} source
-     * @returns {Issuer}
+     * @param {string} value
+     * @returns {Promise<null|Object>}
      */
-    static create(source) {
-        if(typeof source === "undefined" || source == null)
-            throw CelastrinaError.newError("Invalid Issuer, cannot be null or undefined.");
-        if(!source.hasOwnProperty("_name"))
-            throw CelastrinaError.newError("Invalid Issuer, _name required.");
-        if(!source.hasOwnProperty("_audience"))
-            throw CelastrinaError.newError("Invalid Issuer, _audience required.");
-        if(!source.hasOwnProperty("_roles"))
-            throw CelastrinaError.newError("Invalid Issuer, _roles required.");
-        else if(!Array.isArray(source._roles))
-            throw CelastrinaError.newError("Invalid Issuer, _roles must be an Array.");
-        return new Issuer(source._name, source._audience, source._roles);
+    async resolve(value) {
+        return new Promise((resolve, reject) => {
+            try {
+                super.resolve(value)
+                    .then((source) => {
+                        if(source != null) {
+                            if(!source.hasOwnProperty("_name"))
+                                reject(CelastrinaError.newError("Invalid Issuer, _name required."));
+                            else if(!source.hasOwnProperty("_audience"))
+                                reject(CelastrinaError.newError("Invalid Issuer, _audience required."));
+                            else if(!source.hasOwnProperty("_roles"))
+                                reject(CelastrinaError.newError("Invalid Issuer, _roles required."));
+                            else if(!Array.isArray(source._roles))
+                                reject(CelastrinaError.newError("Invalid Issuer, _roles must be an Array."));
+                            else
+                                resolve(new Issuer(source._name, source._audience, source._roles));
+                        }
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+}
+/**
+ * @brief Gets a Parameter value from an HTTP Header, Query, or Body.
+ * @author Robert R Murrell
+ * @abstract
+ */
+class HTTPParameterFetch {
+    /**
+     * @brief
+     * @param {string} [type]
+     */
+    constructor(type = "HTTPParameterFetch") {
+        this._type = type;
+    }
+
+    /**
+     * @brief
+     * @param {HTTPContext} context
+     * @param {string} key
+     * @param {null|string} [defaultValue]
+     * @returns {Promise<null|string>}
+     */
+    async fetch(context, key, defaultValue = null) {
+        return new Promise((resolve) => {
+            resolve(defaultValue);
+        });
+    }
+
+    /**
+     * @brief
+     * @param {HTTPContext} context
+     * @param {string} key
+     * @param {null|string} [defaultValue]
+     * @returns {Promise<null|string>}
+     */
+    async get(context, key, defaultValue = null) {
+        return new Promise((resolve, reject) => {
+            try {
+                this.fetch(context, key, defaultValue)
+                    .then((value) => {
+                        resolve(value);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+}
+/**
+ * @brief Gets a Header Parameter.
+ * @author Robert R Murrell
+ */
+class HeaderParameterFetch extends HTTPParameterFetch {
+    /**
+     * @brief
+     */
+    constructor() {
+        super("header");
+    }
+
+    /**
+     * @brief
+     * @param {HTTPContext} context
+     * @param {string} key
+     * @param {null|string} [defaultValue
+     * @returns {Promise<null|string>}
+     */
+    async fetch(context, key, defaultValue = null) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(context.getRequestHeader(key, defaultValue));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+}
+/**
+ * @brief Gets a Query Parameter.
+ * @author Robert R Murrell
+ */
+class QueryParameterFetch extends HTTPParameterFetch {
+    /**
+     * @brief
+     */
+    constructor() {
+        super("query");
+    }
+
+    /**
+     * @brief
+     * @param {HTTPContext} context
+     * @param {string} key
+     * @param {null|string} [defaultValue
+     * @returns {Promise<null|string>}
+     */
+    async fetch(context, key, defaultValue = null) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(context.getQuery(key, defaultValue));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+}
+/**
+ * @brief Gets an attribute of a Body object.
+ * @author Robert R Murrell
+ */
+class BodyParameterFetch extends HTTPParameterFetch {
+    /**
+     * @brief
+     */
+    constructor(key) {
+        super("body");
+    }
+
+    /**
+     * @brief
+     * @param {HTTPContext} context
+     * @param {string} key
+     * @param {null|string} [defaultValue
+     * @returns {Promise<null|string>}
+     */
+    async fetch(context, key, defaultValue = null) {
+        return new Promise((resolve, reject) => {
+            try {
+                let body = context.requestBody;
+                let value = body[key];
+                if(typeof value === "undefined" || value == null)
+                    value = defaultValue;
+                resolve(value);
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+}
+/**
+ * @brief
+ * @author
+ */
+class HTTPParameterFetchProperty extends JsonProperty {
+    /**
+     * @brief
+     * @param {string} name
+     * @param {boolean} secure
+     * @param {null|string} defaultValue
+     */
+    constructor(name, secure = false, defaultValue = null) {
+        super(name, secure, defaultValue);
+    }
+
+    /**
+     * @brief
+     * @param {string} value
+     * @returns {Promise<null|Object>}
+     */
+    async resolve(value) {
+        return new Promise((resolve, reject) => {
+            try {
+                super.resolve(value)
+                    .then((source) => {
+                        if(source != null) {
+                            if(!source.hasOwnProperty("_type"))
+                                reject(CelastrinaError.newError(
+                                    "Invalid HTTPParameterFetch, _type required."));
+                            else {
+                                switch(source._type) {
+                                    case "header":
+                                        resolve(new HeaderParameterFetch());
+                                        break;
+                                    case "query":
+                                        resolve(new MatchAll());
+                                        break;
+                                    case "body":
+                                        resolve(new MatchNone());
+                                        break;
+                                    default:
+                                        reject(CelastrinaError.newError("Invalid Match Type."));
+                                }
+                            }
+                        }
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
 }
 /**
@@ -285,57 +515,50 @@ class JwtConfiguration extends Configuration {
      */
     constructor(name, managed = true) {
         super(name, managed);
-        /** @type {string} @const */
-        this.CONFIGURATION_JWT_ISS    = "celatsrinajs_jwt_iss";
-        /** @type {string} @const */
-        this.CONFIGURATION_JWT_HEADER = "celatsrinajs_jwt_userHeader";
-        /** @type {string} @const */
-        this.CONFIGURATION_JWT_SCHEME = "celatsrinajs_jwt_scheme";
-        /** @type {string} @const */
-        this.CONFIGURATION_JWT_KEY    = "celatsrinajs_jwt_key";
-
-        /** @type {Array.<Issuer>} */
-        this._config[this.CONFIGURATION_JWT_ISS]    = [];
+        /** @type {Array.<IssuerProperty|Issuer>} */
+        this._config["celastrinajs.jwt.issure"] = [];
+        /** @type {HTTPParameterFetchProperty|HTTPParameterFetch} */
+        this._config["celastrinajs.jwt.param"]  = new HeaderParameterFetch(); // Header or query param
+        /** @type {string|StringProperty} */
+        this._config["celastrinajs.jwt.scheme"] = "Bearer ";
         /** @type {boolean|BooleanProperty} */
-        this._config[this.CONFIGURATION_JWT_HEADER] = true; // Header or query param
+        this._config["celastrinajs.jwt.scheme.remove"] = true;
         /** @type {string|StringProperty} */
-        this._config[this.CONFIGURATION_JWT_SCHEME] = "Bearer ";
-        /** @type {string|StringProperty} */
-        this._config[this.CONFIGURATION_JWT_KEY]    = "authorization";
+        this._config["celastrinajs.jwt.token"]  = "authorization";
     }
 
     /**
      * @brief
-     * @param {JSONProperty|Issuer} issuer
+     * @param {IssuerProperty|Issuer} issuer
      * @returns {JwtConfiguration}
      */
     addIssuer(issuer) {
-        this._config[this.CONFIGURATION_JWT_ISS].unshift(issuer);
+        this._config["celastrinajs.jwt.issure"].unshift(issuer);
         return this;
     }
 
     /**
      * @brief
-     * @returns {Array<Issuer>}
+     * @returns {Array.<Issuer>}
      */
     get issuers() {
-        return this._config[this.CONFIGURATION_JWT_ISS];
+        return this._config["celastrinajs.jwt.issure"];
     }
 
     /**
      * @brief
-     * @param {boolean|BooleanProperty} useHeader
+     * @param {HTTPParameterFetchProperty|HTTPParameterFetch} param
      */
-    set useHeader(useHeader) {
-        this._config[this.CONFIGURATION_JWT_HEADER] = useHeader;
+    set param(param) {
+        this._config["celastrinajs.jwt.param"] = param;
     }
 
     /**
      * @brief
-     * @returns {boolean}
+     * @returns {HTTPParameterFetch}
      */
-    get useHeader() {
-        return this._config[this.CONFIGURATION_JWT_HEADER]
+    get param() {
+        return this._config["celastrinajs.jwt.param"];
     }
 
     /**
@@ -343,7 +566,7 @@ class JwtConfiguration extends Configuration {
      * @param {string|StringProperty} scheme
      */
     set scheme(scheme) {
-        this._config[this.CONFIGURATION_JWT_SCHEME] = scheme;
+        this._config["celastrinajs.jwt.scheme"] = scheme;
     }
 
     /**
@@ -351,7 +574,23 @@ class JwtConfiguration extends Configuration {
      * @returns {string}
      */
     get scheme() {
-        return this._config[this.CONFIGURATION_JWT_SCHEME];
+        return this._config["celastrinajs.jwt.scheme"];
+    }
+
+    /**
+     * @brief
+     * @param {booleam|BooleanProperty} remove
+     */
+    set removeScheme(remove) {
+        this._config["celastrinajs.jwt.scheme.remove"] = remove;
+    }
+
+    /**
+     * @brief
+     * @returns {boolean}
+     */
+    get removeScheme() {
+        return this._config["celastrinajs.jwt.scheme.remove"];
     }
 
     /**
@@ -359,7 +598,7 @@ class JwtConfiguration extends Configuration {
      * @returns {string}
      */
     get key() {
-        return this._config[this.CONFIGURATION_JWT_KEY];
+        return this._config["celastrinajs.jwt.token"];
     }
 
     /**
@@ -367,7 +606,7 @@ class JwtConfiguration extends Configuration {
      * @param {string|StringProperty} key
      */
     set key(key) {
-        this._config[this.CONFIGURATION_JWT_KEY] = key;
+        this._config["celastrinajs.jwt.token"] = key;
     }
 }
 /**
@@ -636,18 +875,22 @@ class HTTPContext extends BaseContext {
 class JwtSentry extends BaseSentry {
     constructor() {
         super();
-        /** @type {Array.<Issuer>} */
-        this._issuers = [];
-
-        this._useHeader = true; // Header or query param
-        this._scheme    = "Bearer ";
-        this._tokenKey  = "authorization";
+        /** @type {null|Array.<Issuer>} */
+        this._issuers = null;
+        /** @type {(null|HTTPParameterFetch)} */
+        this._param     = null;
+        /** @param {(null|string)} */
+        this._scheme    = null;
+        /** @param {(null|string)} */
+        this._tokenKey  = null;
+        /** @param {(null|boolean)} */
+        this._removeScheme = null;
     }
 
     /**
      * @brief
-     * @param {Configuration | JwtConfiguration} configuration
-     * @returns {Promise<BaseSentry & JwtSentry>}
+     * @param {Configuration} configuration
+     * @returns {Promise<(BaseSentry & JwtSentry)>}
      */
     async initialize(configuration) {
         return new Promise((resolve, reject) => {
@@ -655,17 +898,15 @@ class JwtSentry extends BaseSentry {
                 .then((sentry) => {
                     try {
                         // Going to initialize the acceptable issuers.
-                        let itr = configuration.issuers[Symbol.iterator]();
-                        for(let issuer of itr) {
-                            if(!(issuer instanceof Issuer))
-                                issuer = Issuer.create(issuer);
-                            this._issuers.unshift(issuer);
-                        }
+                        this._issuers = this._issuers.concat(configuration.getValue("celastrinajs.jwt.issuers", []));
 
                         // Load the Jwt config
-                        this._useHeader = configuration.useHeader;
-                        this._scheme    = configuration.scheme;
-                        this._tokenKey  = configuration.key;
+                        this._param    = configuration.getValue("celastrinajs.jwt.param");
+                        if(this._param == null)
+                            this._param = new HeaderParameterFetch();
+                        this._scheme   = configuration.getValue("celastrinajs.jwt.sceme", "Bearer ");
+                        this._tokenKey = configuration.getValue("celastrinajs.jwt.token", "authorization");
+                        this._removeScheme = configuration.getValue("celastrinajs.jwt.sceme.remove", true);
 
                         resolve(sentry);
                     }
@@ -688,24 +929,34 @@ class JwtSentry extends BaseSentry {
     async _getToken(context) {
         return new Promise((resolve, reject) => {
             let auth;
-            if(this._useHeader)
-                auth = context.getRequestHeader(this._tokenKey);
-            else
-                auth = context.getQuery(this._tokenKey);
-
-            if(typeof auth !== "string")
-                reject(CelastrinaError.newError("Not Authorized.", 401));
-            else {
-                // Checking to see if it starts with bearer
-                if(this._scheme.length > 0) {
-                    if (auth.startsWith(this._scheme))
-                        resolve(auth.slice(this._scheme.length));
-                    else
+            this._param.fetch(context, this._tokenKey)
+                .then((token) => {
+                    if(typeof auth !== "string") {
+                        context.log("Expected JWT token but none was found.", LOG_LEVEL.LEVEL_WARN,
+                                     "JwtSentry._getToken(context)");
                         reject(CelastrinaError.newError("Not Authorized.", 401));
-                }
-                else
-                    resolve(auth);
-            }
+                    }
+                    else {
+                        // Checking to see if we need to validate the scheme
+                        if(typeof this._scheme === "string" && this._scheme.length > 0) {
+                            if(auth.startsWith(this._scheme)) { // and that it starts with the scheme...
+                                if(this._removeScheme)
+                                    auth.slice(this._scheme.length); // and remove it...
+                                resolve(auth);
+                            }
+                            else {
+                                context.log("Expected token scheme '" + this._scheme + "' but none was found.",
+                                             LOG_LEVEL.LEVEL_WARN, "JwtSentry._getToken(context)");
+                                reject(CelastrinaError.newError("Not Authorized.", 401));
+                            }
+                        }
+                        else
+                            resolve(auth);
+                    }
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
         });
     }
 
@@ -731,16 +982,14 @@ class JwtSentry extends BaseSentry {
                         // No we check the issuers to see if we match any.
                         /** @type {Array.<Promise<boolean>>} */
                         let promises = [];
-                        let irt = this._issuers[Symbol.iterator]();
-                        for(let issuer of irt) {
+                        for(const issuer of this._issuers) {
                             promises.unshift(issuer.authenticate(subject)); // Performs the role escalations too.
                         }
                         return Promise.all(promises);
                     })
                     .then((results) => {
                         let authenticated = false;
-                        let ritr = results[Symbol.iterator]();
-                        for(let result of ritr) {
+                        for(const result of results) {
                             if((authenticated = result))
                                 break;
                         }
@@ -758,23 +1007,6 @@ class JwtSentry extends BaseSentry {
             }
         });
     }
-
-    _loadIssuers(promises) {
-        for(let index = 0; index < this._issuers.length; ++index) {
-            promises.unshift(this._loadIssuer(this._issuers[index]));
-        }
-    }
-
-    async _loadIssuer(issuer) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(Issuer.create(issuer));
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
 }
 /**
  * @brief Extension of the {BaseFunction} that handles HTTP triggers.
@@ -782,6 +1014,7 @@ class JwtSentry extends BaseSentry {
  *              res to handle the HTTP request and response objects respectively.
  * @author Robert R Murrell
  * @see BaseFunction
+ * @abstract
  */
 class HTTPFunction extends BaseFunction {
     /**
@@ -1009,6 +1242,7 @@ class HTTPFunction extends BaseFunction {
 /**
  * @brief
  * @author Robert R Murrell
+ * @abstract
  */
 class JwtHTTPFunction extends HTTPFunction {
     /**
@@ -1064,6 +1298,7 @@ class JSONHTTPContext extends HTTPContext {
  * @author Robert R Murrell
  * @see HTTPFunction
  * @see JSONHTTPContext
+ * @abstract
  */
 class JSONHTTPFunction extends HTTPFunction {
     /**
@@ -1096,6 +1331,7 @@ class JSONHTTPFunction extends HTTPFunction {
 /**
  * @brief
  * @author Robert R Murrell
+ * @abstract
  */
 class JwtJSONHTTPFunction extends JSONHTTPFunction {
     /**
@@ -1124,14 +1360,20 @@ class JwtJSONHTTPFunction extends JSONHTTPFunction {
  * *********************************************************************************************************************
  */
 module.exports = {
-    JwtSubject:          JwtSubject,
-    Issuer:              Issuer,
-    JwtConfiguration:    JwtConfiguration,
-    HTTPContext:         HTTPContext,
-    JwtSentry:           JwtSentry,
-    HTTPFunction:        HTTPFunction,
-    JwtHTTPFunction:     JwtHTTPFunction,
-    JSONHTTPContext:     JSONHTTPContext,
-    JSONHTTPFunction:    JSONHTTPFunction,
+    JwtSubject: JwtSubject,
+    Issuer: Issuer,
+    IssuerProperty: IssuerProperty,
+    JwtConfiguration: JwtConfiguration,
+    HTTPContext: HTTPContext,
+    HTTPParameterFetch: HTTPParameterFetch,
+    HeaderParameterFetch: HeaderParameterFetch,
+    QueryParameterFetch: QueryParameterFetch,
+    BodyParameterFetch: BodyParameterFetch,
+    HTTPParameterFetchProperty: HTTPParameterFetchProperty,
+    JwtSentry: JwtSentry,
+    HTTPFunction: HTTPFunction,
+    JwtHTTPFunction: JwtHTTPFunction,
+    JSONHTTPContext: JSONHTTPContext,
+    JSONHTTPFunction: JSONHTTPFunction,
     JwtJSONHTTPFunction: JwtJSONHTTPFunction
 };

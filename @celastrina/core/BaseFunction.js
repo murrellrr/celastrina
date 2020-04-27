@@ -190,12 +190,13 @@ class Property {
      * @param {string} name
      * @param {boolean} [secure]
      * @param {null|*} [defaultValue]
+     * @param {null} [factory]
      */
-    constructor(name, secure = false, defaultValue = null) {
+    constructor(name, secure = false, defaultValue = null, factory = null) {
         this._name         = name;
-        this._type         = "Property";
         this._secure       = secure;
         this._defaultValue = defaultValue;
+        this._factory      = factory;
     }
 
     /**
@@ -204,14 +205,6 @@ class Property {
      */
     get name() {
         return this._name;
-    }
-
-    /**
-     * @brief
-     * @returns {string}
-     */
-    get type() {
-        return this._type;
     }
 
     /**
@@ -291,7 +284,6 @@ class JsonProperty extends Property {
      */
     constructor(name, secure = false, defaultValue = null) {
         super(name, secure, defaultValue);
-        this._type = "json";
     }
 
     /**
@@ -324,7 +316,6 @@ class StringProperty extends Property {
      */
     constructor(name, secure = false, defaultValue = null) {
         super(name, secure, defaultValue);
-        this._type = "string";
     }
 
     /**
@@ -359,7 +350,6 @@ class BooleanProperty extends Property {
      */
     constructor(name, secure = false, defaultValue = null) {
         super(name, secure, defaultValue);
-        this._type = "boolean";
     }
 
     /**
@@ -393,7 +383,6 @@ class NumericProperty extends Property {
      */
     constructor(name, secure = false, defaultValue = null) {
         super(name, secure, defaultValue);
-        this._type = "number";
     }
 
     /**
@@ -615,8 +604,7 @@ class ApplicationAuthorization {
     async _setResourceTokens(tokens) {
         return new Promise((resolve, reject) => {
             try {
-                let ritr = tokens[Symbol.iterator]();
-                for (let token of ritr) {
+                for(let token of tokens) {
                     this._tokens[token.resource] = token;
                 }
                 resolve();
@@ -663,8 +651,7 @@ class ApplicationAuthorization {
 
             /** @type {Array.<Promise<_CelastrinaToken>>} */
             let promises = [];
-            let itr = this._resources[Symbol.iterator]();
-            for(let resource of itr) {
+            for(const resource of this._resources) {
                 promises.unshift(this._initializeManagedResource(config, resource));
             }
 
@@ -714,8 +701,7 @@ class ApplicationAuthorization {
                 let adContext = new AuthenticationContext(this._authority + "/" + this._tenant);
                 /** @type {Array.<Promise<_CelastrinaToken>>} */
                 let promises = [];
-                let itr = this._resources[Symbol.iterator]();
-                for (let resource of itr) {
+                for(const resource of this._resources) {
                     promises.unshift(this._initializeAppResource(adContext, resource));
                 }
 
@@ -760,26 +746,66 @@ class ApplicationAuthorization {
             }
         });
     }
+}
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class ApplicationAuthorizationProperty extends JsonProperty {
+    /**
+     * @brief
+     * @param {string} name
+     * @param {boolean} secure
+     * @param {null|string} defaultValue
+     */
+    constructor(name, secure = false, defaultValue = null) {
+        super(name, secure, defaultValue);
+        this._type = "ApplicationAuthorization";
+    }
 
     /**
      * @brief
-     * @param {Object} source
+     * @param {string} value
+     * @returns {Promise<null|Object>}
      */
-    static create(source) {
-        if(typeof source === "undefined" || source == null)
-            throw CelastrinaError.newError("Invalid ApplicationAuthorization, cannot be null or undefined.");
-        if(!source.hasOwnProperty("_authority"))
-            throw CelastrinaError.newError("Invalid ApplicationAuthorization, _authority required.");
-        if(!source.hasOwnProperty("_tenant"))
-            throw CelastrinaError.newError("Invalid ApplicationAuthorization, _tenant required.");
-        if(!source.hasOwnProperty("_id"))
-            throw CelastrinaError.newError("Invalid ApplicationAuthorization, _id required.");
-        if(!source.hasOwnProperty("_secret"))
-            throw CelastrinaError.newError("Invalid ApplicationAuthorization, _secret required.");
-        if(!source.hasOwnProperty("_resources") || !Array.isArray(source._resources))
-            throw CelastrinaError.newError("Invalid ApplicationAuthorization, _resources required.");
-        return new ApplicationAuthorization(source._authority, source._tenant, source._id, source._secret,
-                                            source._resources);
+    async resolve(value) {
+        return new Promise((resolve, reject) => {
+            try {
+                super.resolve(value)
+                    .then((source) => {
+                        if(source != null) {
+                            if(!source.hasOwnProperty("_authority"))
+                                reject(CelastrinaError.newError(
+                                    "Invalid ApplicationAuthorization, _authority required."));
+                            else if(!source.hasOwnProperty("_tenant"))
+                                reject(CelastrinaError.newError(
+                                    "Invalid ApplicationAuthorization, _tenant required."));
+                            else if(!source.hasOwnProperty("_id"))
+                                reject(CelastrinaError.newError(
+                                    "Invalid ApplicationAuthorization, _id required."));
+                            else if(!source.hasOwnProperty("_secret"))
+                                reject(CelastrinaError.newError(
+                                    "Invalid ApplicationAuthorization, _secret required."));
+                            else if(!source.hasOwnProperty("_resources"))
+                                reject(CelastrinaError.newError(
+                                    "Invalid ApplicationAuthorization, _resources required."));
+                            else if (!Array.isArray(source._resources))
+                                reject(CelastrinaError.newError(
+                                    "Invalid ApplicationAuthorization, _resources must be array."));
+                            else
+                                source = new ApplicationAuthorization(source._authority, source._tenant, source._id,
+                                                                     source._secret, source._resources);
+                        }
+                        resolve(source);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
 }
 /*
@@ -939,8 +965,7 @@ class MatchAny extends ValueMatch {
         return new Promise((resolve, reject) => {
             try {
                 let match = false;
-                let itr = assertion[Symbol.iterator]();
-                for(let role of itr) {
+                for(const role of assertion) {
                     if((match = values.includes(role)))
                         break; // We have matched one, we are good.
                 }
@@ -971,8 +996,7 @@ class MatchAll extends ValueMatch {
         return new Promise((resolve, reject) => {
             try {
                 let match = false;
-                let itr = values[Symbol.iterator]();
-                for(let role of itr) {
+                for(const role of values) {
                     if(!(match = assertion.includes(role)))
                         break; // We have matched one, we are good.
                 }
@@ -1003,8 +1027,7 @@ class MatchNone extends ValueMatch {
         return new Promise((resolve, reject) => {
             try {
                 let match = false;
-                let itr = values[Symbol.iterator]();
-                for(let role of itr) {
+                for(const role of values) {
                     if((match = assertion.includes(role)))
                         break; // We have matched one, we are good.
                 }
@@ -1030,7 +1053,7 @@ class FunctionRole {
     constructor(action = "process", roles = [], match = new MatchAny()) {
         this._roles = roles;
         this._action = action.toLowerCase();
-        this._match  = match;
+        this._match = match;
     }
 
     /**
@@ -1067,7 +1090,7 @@ class FunctionRole {
      */
     async authorize(action, subject) {
         return new Promise((resolve, reject) => {
-            if(action === this._action) {
+            if (action === this._action) {
                 this._match.isMatch(subject.roles, this._roles)
                     .then((inrole) => {
                         resolve(inrole);
@@ -1075,47 +1098,95 @@ class FunctionRole {
                     .catch((exception) => {
                         reject(exception);
                     });
-            }
-            else
+            } else
                 resolve(false);
+        });
+    }
+}
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class FunctionRoleProperty extends JsonProperty {
+    /**
+     * @brief
+     * @param {string} name
+     * @param {boolean} secure
+     * @param {null|string} defaultValue
+     */
+    constructor(name, secure = false, defaultValue = null) {
+        super(name, secure, defaultValue);
+    }
+
+    /**
+     * @brief
+     * @param type
+     * @returns {Promise<ValueMatch>}
+     * @private
+     */
+    async _getMatchType(type) {
+        return new Promise((resolve, reject) => {
+            switch (type) {
+                case "MatchAny":
+                    resolve(new MatchAny());
+                    break;
+                case "MatchAll":
+                    resolve(new MatchAll());
+                    break;
+                case "MatchNone":
+                    resolve(new MatchNone());
+                    break;
+                default:
+                    reject(CelastrinaError.newError("Invalid Match Type."));
+            }
         });
     }
 
     /**
      * @brief
-     * @param {object} source
-     * @return {FunctionRole}
+     * @param {string} value
+     * @returns {Promise<null|Object>}
      */
-    static create(source) {
-        if(typeof source === "undefined" || source == null)
-            throw CelastrinaError.newError("Invalid FunctionRole, cannot be null or undefined.");
-        if(!source.hasOwnProperty("_roles"))
-            throw CelastrinaError.newError("Invalid FunctionRole, _roles required.");
-        else if(!Array.isArray(source._roles))
-            throw CelastrinaError.newError("Invalid FunctionRole, _values must be an array.");
-        if(!source.hasOwnProperty("_action"))
-            throw CelastrinaError.newError("Invalid FunctionRole, _action required.");
-        if(!source.hasOwnProperty("_match"))
-            throw CelastrinaError.newError("Invalid FunctionRole, _match required.");
-        if(!source._match.hasOwnProperty("_type"))
-            throw CelastrinaError.newError("Invalid FunctionRole.ValueMatch, _type required.");
-
-        let match;
-        switch(source._match._type) {
-            case "MatchAny":
-                match = new MatchAny();
-                break;
-            case "MatchAll":
-                match = new MatchAll();
-                break;
-            case "MatchNone":
-                match = new MatchNone();
-                break;
-            default:
-                throw CelastrinaError.newError("Invalid Match Type.");
-        }
-
-        return new FunctionRole(source._action, source._roles, match);
+    async resolve(value) {
+        return new Promise((resolve, reject) => {
+            try {
+                super.resolve(value)
+                    .then((source) => {
+                        if(source != null) {
+                            if(!source.hasOwnProperty("_roles"))
+                                reject(CelastrinaError.newError(
+                                    "Invalid FunctionRole, _roles required."));
+                            else if(!Array.isArray(source._roles))
+                                reject(CelastrinaError.newError(
+                                    "Invalid FunctionRole, _values must be an array."));
+                            else if(!source.hasOwnProperty("_action"))
+                                reject(CelastrinaError.newError(
+                                    "Invalid FunctionRole, _action required."));
+                            else if(!source.hasOwnProperty("_match"))
+                                reject(CelastrinaError.newError(
+                                    "Invalid FunctionRole, _match required."));
+                            else if(!source._match.hasOwnProperty("_type"))
+                                reject(CelastrinaError.newError(
+                                    "Invalid FunctionRole.ValueMatch, _type required."));
+                            else {
+                                this._getMatchType(source._match._type)
+                                    .then((match) => {
+                                        resolve(new FunctionRole(source._action, source._roles, match));
+                                    })
+                                    .catch((exception) => {
+                                        reject(exception);
+                                    });
+                            }
+                        }
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
 }
 
@@ -1136,13 +1207,6 @@ class Configuration {
      * @param {BooleanProperty|boolean} managed
      */
     constructor(name, managed = true) {
-        /** @type {string} @const  */
-        this.CONFIGURATION_APP_AUTH = "celatsrinajs_app_auth";
-        /** @type {string} @const  */
-        this.CONFIGURATION_RES_AUTH = "celatsrinajs_res_auth";
-        /** @type {string} @const  */
-        this.CONFIGURATION_ROLES    = "celatsrinajs_roles";
-
         this._name    = name;
         this._managed = managed;
         this._config  = {};
@@ -1152,11 +1216,11 @@ class Configuration {
         this._handler = new PropertyHandler();
 
         /** @type {Array.<JsonProperty|ApplicationAuthorization>} **/
-        this._config[this.CONFIGURATION_APP_AUTH] = [];
+        this._config["celastrinajs.authorization.application"] = [];
         /** @type {Array.<StringProperty|string>} **/
-        this._config[this.CONFIGURATION_RES_AUTH] = [];
+        this._config["celastrinajs.authorization.resource"] = [];
         /** @type {Array.<JsonProperty|FunctionRole>} */
-        this._config[this.CONFIGURATION_ROLES]    = [];
+        this._config["celastrinajs.roles"]    = [];
     }
 
     /**
@@ -1196,29 +1260,33 @@ class Configuration {
 
     /**
      * @brief
-     * @param key
+     * @param {string} key
+     * @param {*} [defaultValue=null]
      * @returns {*}
      */
-    getValue(key) {
-        return this._config[key];
+    getValue(key, defaultValue = null) {
+        let value = this._config[key];
+        if(typeof value === "undefined" || value == null)
+            value = defaultValue;
+        return value;
     }
 
     /**
      * @brief
-     * @param {JsonProperty|ApplicationAuthorization} application
+     * @param {ApplicationAuthorizationProperty|ApplicationAuthorization} application
      * @returns {Configuration}
      */
     addApplicationAuthorization(application) {
-        this._config[this.CONFIGURATION_APP_AUTH].unshift(application);
+        this._config["celastrinajs.authorization.application"].unshift(application);
         return this;
     }
 
     /**
      * @brief
-     * @returns {Array<Object|ApplicationAuthorization>}
+     * @returns {Array<ApplicationAuthorization>}
      */
     get applicationAuthorizations() {
-        return this._config[this.CONFIGURATION_APP_AUTH];
+        return this._config["celastrinajs.authorization.application"];
     }
 
     /**
@@ -1236,7 +1304,7 @@ class Configuration {
                                            "managed (managed = true) to use resource authorizations. If " +
                                            "attempting to assign resources to an application, please use " +
                                            "ApplicationRegistration.");
-        this._config[this.CONFIGURATION_RES_AUTH].unshift(resource);
+        this._config["celastrinajs.authorization.resource"].unshift(resource);
         return this;
     }
 
@@ -1245,25 +1313,25 @@ class Configuration {
      * @returns {Array<string>}
      */
     get resourceAuthorizations() {
-        return this._config[this.CONFIGURATION_RES_AUTH];
+        return this._config["celastrinajs.authorization.resource"];
     }
 
     /**
      * @brief
-     * @param {JsonProperty|FunctionRole} role
+     * @param {FunctionRoleProperty|FunctionRole} role
      * @returns {Configuration}
      */
     addFunctionRole(role) {
-        this._config[this.CONFIGURATION_ROLES].unshift(role);
+        this._config["celastrinajs.roles"].unshift(role);
         return this;
     }
 
     /**
      * @brief
-     * @returns {Array<Object|FunctionRole>}
+     * @returns {Array<FunctionRole>}
      */
     get roles() {
-        return this._config[this.CONFIGURATION_ROLES];
+        return this._config["celastrinajs.roles"];
     }
 
     /**
@@ -1572,19 +1640,13 @@ class BaseSentry {
 
     /**
      * @brief
-     * @param {Object|ApplicationAuthorization} authorization
+     * @param {ApplicationAuthorization} authorization
      * @returns {Promise<void>}
      * @private
      */
     async _loadApplicationAuthorization(authorization) {
         return new Promise((resolve, reject) => {
             try {
-                // First we convert it to an authorization if its not already.
-                if (!(authorization instanceof ApplicationAuthorization)) {
-                    /** @type {ApplicationAuthorization} */
-                    authorization = ApplicationAuthorization.create(authorization);
-                }
-
                 authorization.initialize()
                     .then(() => {
                         this._appauth[authorization.id] = authorization;
@@ -1602,7 +1664,7 @@ class BaseSentry {
 
     /**
      * @brief
-     * @param {Array.<Object|ApplicationAuthorization>} applications
+     * @param {Array.<ApplicationAuthorization>} applications
      * @returns {Promise<void>}
      * @private
      */
@@ -1610,8 +1672,7 @@ class BaseSentry {
         return new Promise((resolve, reject) => {
             if(applications.length > 0) {
                 let promises = [];
-                let itr = applications[Symbol.iterator]();
-                for (let appobj of itr) {
+                for(let appobj of applications) {
                     promises.unshift(this._loadApplicationAuthorization(appobj));
                 }
                 Promise.all(promises)
@@ -1642,17 +1703,13 @@ class BaseSentry {
 
     /**
      * @brief
-     * @param {Object|FunctionRole} role
+     * @param {FunctionRole} role
      * @returns {Promise<void>}
      * @private
      */
     async _loadFunctionRole(role) {
         return new Promise((resolve, reject) => {
             try {
-                if (!(role instanceof FunctionRole)) {
-                    /** @type {FunctionRole} */
-                    role = FunctionRole.create(role);
-                }
                 this._roles[role.action] = role;
                 resolve();
             }
@@ -1664,7 +1721,7 @@ class BaseSentry {
 
     /**
      * @brief
-     * @param {Array.<Object|FunctionRole>} roles
+     * @param {Array.<FunctionRole>} roles
      * @returns {Promise<void>}
      * @private
      */
@@ -1674,7 +1731,7 @@ class BaseSentry {
                 /** @type {Array.<Promise<void>>} */
                 let promises = [];
                 let itr = roles[Symbol.iterator]();
-                for(let roleobj of itr) {
+                for(let roleobj of roles) {
                     promises.unshift(this._loadFunctionRole(roleobj));
                 }
                 Promise.all(promises)
@@ -1924,6 +1981,7 @@ class BaseContext {
 /**
  * @brief Basic lifecycle for a function invocation.
  * @author Robert R Murrell
+ * @abstract
  */
 class BaseFunction {
     /**
@@ -2313,21 +2371,23 @@ class BaseFunction {
  * *********************************************************************************************************************
  */
 module.exports = {
-    Property:                   Property,
-    JsonProperty:               JsonProperty,
-    StringProperty:             StringProperty,
-    BooleanProperty:            BooleanProperty,
-    NumericProperty:            NumericProperty,
-    ApplicationAuthorization:   ApplicationAuthorization,
-    ValueMatch:                 ValueMatch,
-    MatchAny:                   MatchAny,
-    MatchAll:                   MatchAll,
-    MatchNone:                  MatchNone,
-    FunctionRole:               FunctionRole,
-    Configuration:              Configuration,
-    LOG_LEVEL:                  LOG_LEVEL,
-    BaseSubject:                BaseSubject,
-    BaseSentry:                 BaseSentry,
-    BaseContext:                BaseContext,
-    BaseFunction:               BaseFunction
+    Property: Property,
+    JsonProperty: JsonProperty,
+    StringProperty: StringProperty,
+    BooleanProperty: BooleanProperty,
+    NumericProperty: NumericProperty,
+    ApplicationAuthorization: ApplicationAuthorization,
+    ApplicationAuthorizationProperty: ApplicationAuthorizationProperty,
+    ValueMatch: ValueMatch,
+    MatchAny: MatchAny,
+    MatchAll: MatchAll,
+    MatchNone: MatchNone,
+    FunctionRole: FunctionRole,
+    FunctionRoleProperty: FunctionRoleProperty,
+    Configuration: Configuration,
+    LOG_LEVEL: LOG_LEVEL,
+    BaseSubject: BaseSubject,
+    BaseSentry: BaseSentry,
+    BaseContext: BaseContext,
+    BaseFunction: BaseFunction
 };

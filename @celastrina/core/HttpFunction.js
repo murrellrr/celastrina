@@ -197,13 +197,16 @@ class JwtSubject extends BaseSubject {
 class Issuer {
     /**
      * @brief
-     * @param {string} name
-     * @param {string} audience
-     * @param {Array.<string>} [roles]
+     * @param {string|StringProperty} name
+     * @param {string|StringProperty} audience
+     * @param {JsonProperty|Array.<string>} [roles=[]]
+     * @param {(null|string|StringProperty)} [nonce=null]
      */
-    constructor(name, audience, roles = []) {
+    constructor(name, audience, roles = [],
+                nonce = null) {
         this._name     = name;
         this._audience = audience;
+        this._nonce    = nonce;
         this._roles    = roles;
     }
 
@@ -234,15 +237,27 @@ class Issuer {
     /**
      * @brief
      * @param {JwtSubject} subject
+     * @param {boolean} [validateNonce=false]
      * @returns {Promise<boolean>}
      */
-    async authenticate(subject) {
+    async authenticate(subject, validateNonce = false) {
         return new Promise((resolve, reject) => {
             try {
-                if (subject.issuer === this._name && subject.audience === this._audience) {
-                    // Add roles to the subject if there are any specified.
-                    subject.addRoles(this._roles);
-                    resolve(true);
+                if(subject.issuer === this._name && subject.audience === this._audience) {
+                    if(validateNonce) {
+                        if(this._nonce === subject.nonce) {
+                            // Add roles to the subject if there are any specified.
+                            subject.addRoles(this._roles);
+                            resolve(true);
+                        }
+                        else
+                            reject(false);
+                    }
+                    else {
+                        // Add roles to the subject if there are any specified.
+                        subject.addRoles(this._roles);
+                        resolve(true);
+                    }
                 }
                 else
                     resolve(false);
@@ -266,7 +281,6 @@ class IssuerProperty extends JsonProperty {
      */
     constructor(name, secure = false, defaultValue = null) {
         super(name, secure, defaultValue);
-        this._type = "Issuer";
     }
 
     /**
@@ -289,7 +303,7 @@ class IssuerProperty extends JsonProperty {
                             else if(!Array.isArray(source._roles))
                                 reject(CelastrinaError.newError("Invalid Issuer, _roles must be an Array."));
                             else
-                                resolve(new Issuer(source._name, source._audience, source._roles));
+                                resolve(new Issuer(source._name, source._audience, source._roles, source._nonce));
                         }
                     })
                     .catch((exception) => {
@@ -321,7 +335,7 @@ class HTTPParameterFetch {
      * @param {HTTPContext} context
      * @param {string} key
      * @param {null|string} [defaultValue]
-     * @returns {Promise<null|string>}
+     * @returns {Promise<string>}
      */
     async fetch(context, key, defaultValue = null) {
         return new Promise((resolve) => {
@@ -507,24 +521,33 @@ class HTTPParameterFetchProperty extends JsonProperty {
  * @brief
  * @author Robert R Murrell
  */
-class JwtConfiguration extends Configuration {
+class JwtConfiguration {
+    /** @type {string} */
+    static CELASTRINAJS_CONFIG_JWT = "celastrinajs.core.jwt";
+
     /**
      * @brief
-     * @param {StringProperty|string} name
-     * @param {BooleanProperty|boolean} managed
+     * @param {Array.<IssuerProperty|Issuer>} [issures=[]]
+     * @param {(HTTPParameterFetchProperty|HTTPParameterFetch)} [param={HeaderParameterFetch}]
+     * @param {(string|StringProperty)} [scheme="Bearer "]
+     * @param {(boolean|BooleanProperty)} [remove=true]
+     * @param {(string|StringProperty)} [token="authorization"]
+     * @param {(boolean|BooleanProperty)} [validateNonce=false]
      */
-    constructor(name, managed = true) {
-        super(name, managed);
-        /** @type {Array.<IssuerProperty|Issuer>} */
-        this._config["celastrinajs.jwt.issure"] = [];
-        /** @type {HTTPParameterFetchProperty|HTTPParameterFetch} */
-        this._config["celastrinajs.jwt.param"]  = new HeaderParameterFetch(); // Header or query param
+    constructor(issures = [], param = new HeaderParameterFetch(), scheme = "Bearer ",
+                remove = true, token = "authorization", validateNonce = false) {
+        /** @type {Array.<(IssuerProperty|Issuer)>} */
+        this._issuers = issures;
+        /** @type {null|HTTPParameterFetchProperty|HTTPParameterFetch} */
+        this._param  = param; // Header or query param
         /** @type {string|StringProperty} */
-        this._config["celastrinajs.jwt.scheme"] = "Bearer ";
+        this._scheme = scheme;
         /** @type {boolean|BooleanProperty} */
-        this._config["celastrinajs.jwt.scheme.remove"] = true;
+        this._remove = remove;
         /** @type {string|StringProperty} */
-        this._config["celastrinajs.jwt.token"]  = "authorization";
+        this._token  = "authorization";
+        /** @type {boolean|BooleanProperty} */
+        this._validateNonce = validateNonce;
     }
 
     /**
@@ -533,7 +556,17 @@ class JwtConfiguration extends Configuration {
      * @returns {JwtConfiguration}
      */
     addIssuer(issuer) {
-        this._config["celastrinajs.jwt.issure"].unshift(issuer);
+        this._issuers.unshift(issuer);
+        return this;
+    }
+
+    /**
+     * @brief
+     * @param {Array.<(IssuerProperty|Issuer)>} [issuers=[]]
+     * @returns {JwtConfiguration}
+     */
+    setIssuers(issuers = []) {
+        this._issuers = issuers;
         return this;
     }
 
@@ -542,15 +575,17 @@ class JwtConfiguration extends Configuration {
      * @returns {Array.<Issuer>}
      */
     get issuers() {
-        return this._config["celastrinajs.jwt.issure"];
+        return this._issuers;
     }
 
     /**
      * @brief
-     * @param {HTTPParameterFetchProperty|HTTPParameterFetch} param
+     * @param {HTTPParameterFetchProperty|HTTPParameterFetch} [param={HeaderParameterFetch}]
+     * @return {JwtConfiguration}
      */
-    set param(param) {
-        this._config["celastrinajs.jwt.param"] = param;
+    setParam(param= new HeaderParameterFetch()) {
+        this._param = param;
+        return this;
     }
 
     /**
@@ -558,15 +593,17 @@ class JwtConfiguration extends Configuration {
      * @returns {HTTPParameterFetch}
      */
     get param() {
-        return this._config["celastrinajs.jwt.param"];
+        return this._param;
     }
 
     /**
      * @brief
-     * @param {string|StringProperty} scheme
+     * @param {string|StringProperty} [scheme="Bearer "]
+     * @return {JwtConfiguration}
      */
-    set scheme(scheme) {
-        this._config["celastrinajs.jwt.scheme"] = scheme;
+    setScheme(scheme = "Bearer ") {
+        this._scheme = scheme;
+        return this;
     }
 
     /**
@@ -574,15 +611,17 @@ class JwtConfiguration extends Configuration {
      * @returns {string}
      */
     get scheme() {
-        return this._config["celastrinajs.jwt.scheme"];
+        return this._scheme;
     }
 
     /**
      * @brief
-     * @param {booleam|BooleanProperty} remove
+     * @param {boolean|BooleanProperty} [remove=true]
+     * @return {JwtConfiguration}
      */
-    set removeScheme(remove) {
-        this._config["celastrinajs.jwt.scheme.remove"] = remove;
+    setRemoveScheme(remove = true) {
+        this._remove = remove;
+        return this;
     }
 
     /**
@@ -590,23 +629,43 @@ class JwtConfiguration extends Configuration {
      * @returns {boolean}
      */
     get removeScheme() {
-        return this._config["celastrinajs.jwt.scheme.remove"];
+        return this._remove;
     }
 
     /**
      * @brief
      * @returns {string}
      */
-    get key() {
-        return this._config["celastrinajs.jwt.token"];
+    get token() {
+        return this._token;
     }
 
     /**
      * @brief
-     * @param {string|StringProperty} key
+     * @param {string|StringProperty} [token="authorization"]
+     * @return {JwtConfiguration}
      */
-    set key(key) {
-        this._config["celastrinajs.jwt.token"] = key;
+    setToken(token = "authorization") {
+        this._token = token;
+        return this;
+    }
+
+    /**
+     * @brief
+     * @returns {boolean}
+     */
+    get validateNonce() {
+        return this._validateNonce;
+    }
+
+    /**
+     * @brief
+     * @param {(boolean|BooleanProperty)} [validateNonce=false]
+     * @returns {JwtConfiguration}
+     */
+    setValidateNonce(validateNonce = false) {
+        this._validateNonce = validateNonce;
+        return this;
     }
 }
 /**
@@ -875,16 +934,8 @@ class HTTPContext extends BaseContext {
 class JwtSentry extends BaseSentry {
     constructor() {
         super();
-        /** @type {null|Array.<Issuer>} */
-        this._issuers = null;
-        /** @type {(null|HTTPParameterFetch)} */
-        this._param     = null;
-        /** @param {(null|string)} */
-        this._scheme    = null;
-        /** @param {(null|string)} */
-        this._tokenKey  = null;
-        /** @param {(null|boolean)} */
-        this._removeScheme = null;
+        /** @type {null|JwtConfiguration} */
+        this._config = null;
     }
 
     /**
@@ -898,17 +949,13 @@ class JwtSentry extends BaseSentry {
                 .then((sentry) => {
                     try {
                         // Going to initialize the acceptable issuers.
-                        this._issuers = this._issuers.concat(configuration.getValue("celastrinajs.jwt.issuers", []));
-
-                        // Load the Jwt config
-                        this._param    = configuration.getValue("celastrinajs.jwt.param");
-                        if(this._param == null)
-                            this._param = new HeaderParameterFetch();
-                        this._scheme   = configuration.getValue("celastrinajs.jwt.sceme", "Bearer ");
-                        this._tokenKey = configuration.getValue("celastrinajs.jwt.token", "authorization");
-                        this._removeScheme = configuration.getValue("celastrinajs.jwt.sceme.remove", true);
-
-                        resolve(sentry);
+                        this._config = configuration.getValue(JwtConfiguration.CELASTRINAJS_CONFIG_JWT);
+                        if(this._config == null) {
+                            configuration.context.log("JwtConfiguration missing or invalid."); // Azure level log as Celastrina not bootstrspped yet.
+                            reject(CelastrinaError.newError("Invalid configration."));
+                        }
+                        else
+                            resolve(sentry);
                     }
                     catch(exception) {
                         reject(exception);
@@ -929,7 +976,7 @@ class JwtSentry extends BaseSentry {
     async _getToken(context) {
         return new Promise((resolve, reject) => {
             let auth;
-            this._param.fetch(context, this._tokenKey)
+            this._config.param.fetch(context, this._config.token)
                 .then((token) => {
                     if(typeof auth !== "string") {
                         context.log("Expected JWT token but none was found.", LOG_LEVEL.LEVEL_WARN,
@@ -938,14 +985,15 @@ class JwtSentry extends BaseSentry {
                     }
                     else {
                         // Checking to see if we need to validate the scheme
-                        if(typeof this._scheme === "string" && this._scheme.length > 0) {
+                        let scheme = this._config.scheme;
+                        if(typeof scheme === "string" && scheme.length > 0) {
                             if(auth.startsWith(this._scheme)) { // and that it starts with the scheme...
-                                if(this._removeScheme)
-                                    auth.slice(this._scheme.length); // and remove it...
+                                if(this._config.removeScheme)
+                                    auth.slice(scheme.length); // and remove it...
                                 resolve(auth);
                             }
                             else {
-                                context.log("Expected token scheme '" + this._scheme + "' but none was found.",
+                                context.log("Expected token scheme '" + scheme + "' but none was found.",
                                              LOG_LEVEL.LEVEL_WARN, "JwtSentry._getToken(context)");
                                 reject(CelastrinaError.newError("Not Authorized.", 401));
                             }
@@ -982,7 +1030,8 @@ class JwtSentry extends BaseSentry {
                         // No we check the issuers to see if we match any.
                         /** @type {Array.<Promise<boolean>>} */
                         let promises = [];
-                        for(const issuer of this._issuers) {
+                        let issuers = this._config.issuers;
+                        for(const issuer of issuers) {
                             promises.unshift(issuer.authenticate(subject)); // Performs the role escalations too.
                         }
                         return Promise.all(promises);

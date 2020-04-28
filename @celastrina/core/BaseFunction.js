@@ -1201,26 +1201,33 @@ class FunctionRoleProperty extends JsonProperty {
  * @type {{_name:StringProperty|string, managed:BooleanProperty|boolean}}
  */
 class Configuration {
+    static CELASTRINA_CONFIG_APPLICATION_AUTHORIZATION = "celastrinajs.core.authorization.application";
+    static CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION    = "celastrinajs.core.authorization.resource";
+    static CELASTRINA_CONFIG_ROLES                     = "celastrinajs.core.function.roles";
+
     /**
      * @brief
      * @param {StringProperty|string} name
-     * @param {BooleanProperty|boolean} managed
+     * @param {BooleanProperty|boolean} [managed=true]
      */
     constructor(name, managed = true) {
+        if(typeof name == "string" && name.trim().length === 0)
+            throw CelastrinaError.newError("Invalid configuration. Name cannot be undefined, null or 0 length.");
+        else if(!(name instanceof StringProperty))
+            throw CelastrinaError.newError("Invalid configuration. Name must be string or StringProperty.");
         this._name    = name;
         this._managed = managed;
-        this._config  = {};
+        this._config  = {}; // Class for storing named configurations.
         /** @type {null|_AzureFunctionContext} */
         this._context = null;
         /** @type {null|PropertyHandler} */
         this._handler = new PropertyHandler();
-
         /** @type {Array.<JsonProperty|ApplicationAuthorization>} **/
-        this._config["celastrinajs.authorization.application"] = [];
+        this._config[Configuration.CELASTRINA_CONFIG_APPLICATION_AUTHORIZATION] = [];
         /** @type {Array.<StringProperty|string>} **/
-        this._config["celastrinajs.authorization.resource"] = [];
+        this._config[Configuration.CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION] = [];
         /** @type {Array.<JsonProperty|FunctionRole>} */
-        this._config["celastrinajs.roles"]    = [];
+        this._config[Configuration.CELASTRINA_CONFIG_ROLES] = [];
     }
 
     /**
@@ -1249,11 +1256,21 @@ class Configuration {
 
     /**
      * @brief
+     * @returns {object}
+     */
+    get values(){
+        return this._config;
+    }
+
+    /**
+     * @brief
      * @param {string} key
      * @param {*} value
      * @returns {Configuration}
      */
     addValue(key , value) {
+        if(typeof key !== "string" || key.trim().length === 0)
+            throw CelastrinaError.newError("Invalid configuration. Key cannot be undefined, null or 0 length.");
         this._config[key] = value;
         return this;
     }
@@ -1277,7 +1294,7 @@ class Configuration {
      * @returns {Configuration}
      */
     addApplicationAuthorization(application) {
-        this._config["celastrinajs.authorization.application"].unshift(application);
+        this._config[Configuration.CELASTRINA_CONFIG_APPLICATION_AUTHORIZATION].unshift(application);
         return this;
     }
 
@@ -1286,7 +1303,7 @@ class Configuration {
      * @returns {Array<ApplicationAuthorization>}
      */
     get applicationAuthorizations() {
-        return this._config["celastrinajs.authorization.application"];
+        return this._config[Configuration.CELASTRINA_CONFIG_APPLICATION_AUTHORIZATION];
     }
 
     /**
@@ -1304,7 +1321,7 @@ class Configuration {
                                            "managed (managed = true) to use resource authorizations. If " +
                                            "attempting to assign resources to an application, please use " +
                                            "ApplicationRegistration.");
-        this._config["celastrinajs.authorization.resource"].unshift(resource);
+        this._config[Configuration.CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION].unshift(resource);
         return this;
     }
 
@@ -1313,7 +1330,7 @@ class Configuration {
      * @returns {Array<string>}
      */
     get resourceAuthorizations() {
-        return this._config["celastrinajs.authorization.resource"];
+        return this._config[Configuration.CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION];
     }
 
     /**
@@ -1322,7 +1339,7 @@ class Configuration {
      * @returns {Configuration}
      */
     addFunctionRole(role) {
-        this._config["celastrinajs.roles"].unshift(role);
+        this._config[Configuration.CELASTRINA_CONFIG_ROLES].unshift(role);
         return this;
     }
 
@@ -1331,7 +1348,7 @@ class Configuration {
      * @returns {Array<FunctionRole>}
      */
     get roles() {
-        return this._config["celastrinajs.roles"];
+        return this._config[Configuration.CELASTRINA_CONFIG_ROLES];
     }
 
     /**
@@ -1438,7 +1455,7 @@ class Configuration {
         return new Promise(
             (resolve, reject) => {
                 try {
-                    // Set up the invocationId
+                    // Set up the Azure function context for the configuration.
                     this._context = context;
                     // Set up the properties loader
                     this._setManaged()
@@ -1450,7 +1467,12 @@ class Configuration {
                             return Promise.all(promises);
                         })
                         .then(() => {
-                            resolve();
+                            if(typeof this._name !== "string" || this._name.trim().length === 0) {
+                                context.log.error("Invalid Configuration. Name cannot be undefined, null, or 0 length."); // Low level logger.
+                                reject(CelastrinaError.newError("Invalid Configuration."));
+                            }
+                            else
+                                resolve();
                         })
                         .catch((exception) => {
                             reject(exception);

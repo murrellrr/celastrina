@@ -27,7 +27,9 @@
 const axios       = require("axios").default;
 const querystring = require("querystring");
 
-const {CelastrinaValidationError, CelastrinaError} = require("./CelastrinaError");
+const {CelastrinaValidationError, CelastrinaError} = require("../core/CelastrinaError");
+const {BaseContext, FunctionRole} = require("../core/BaseFunction");
+const {HTTPParameterFetch, HeaderParameterFetch, HTTPContext} = require("./HttpFunction");
 
 /**
  * @typedef {_Body} _RecaptchaBody
@@ -56,7 +58,6 @@ class Recaptcha {
                 timeout = 1500) {
         this._url     = url;
         this._secret  = secret;
-        this._score   = score;
         this._timeout = timeout;
     }
 
@@ -83,10 +84,7 @@ class Recaptcha {
                                     response: token
                                 }), config)
                         .then((response) => {
-                            if (response.data.success && response.data.score >= this._score)
-                                resolve(response.data.score);
-                            else
-                                reject(CelastrinaError.newError("You might be a bot, sorry.", 401));
+                            resolve(response.data.score);
                         })
                         .catch((exception) => {
                             reject(CelastrinaError.newError("Exception validating RECAPTCHA token."));
@@ -95,11 +93,68 @@ class Recaptcha {
             });
     }
 }
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class RecaptchaFunctionRole extends FunctionRole {
+    /**
+     * @brief
+     * @param {string} [action]
+     * @param {Array.<string>} roles
+     * @param {ValueMatch} [match]
+     */
+    constructor(action = "process", roles = [], match = new MatchAny()) {
+        super(action, roles, match);
+        /** @type {null|Recaptcha} */
+        this._recaptcha = null;
+        /** @type {null|HTTPParameterFetch} */
+        this._parameter = null;
+        this._key = "";
+        this._score = .8;
+    }
+
+    /**
+     * @brief
+     * @param {string} action
+     * @param {BaseContext | HTTPContext} context
+     * @returns {Promise<boolean>}
+     */
+    async authorize(action, context) {
+        return new Promise((resolve, reject) => {
+            try {
+                super.authorize(action, context)
+                    .then((authorized) => {
+                        if(authorized)
+                            return this._parameter.fetch(context, this._key)
+                                .then((value) => {
+                                    return this._recaptcha.validateToken(value);
+                                })
+                                .then((score) => {
+                                    resolve(score >= this._score);
+                                })
+                                .catch((exception) => {
+                                    reject(exception);
+                                });
+                        else
+                            resolve(false);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+}
 /*
  * *********************************************************************************************************************
  * EXPORTS
  * *********************************************************************************************************************
  */
 module.exports = {
-    Recaptcha: Recaptcha
+    Recaptcha: Recaptcha,
+    RecaptchaFunctionRole: RecaptchaFunctionRole
 };

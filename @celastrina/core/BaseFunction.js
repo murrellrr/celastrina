@@ -1085,13 +1085,13 @@ class FunctionRole {
     /**
      * @brief
      * @param {string} action
-     * @param {BaseSubject} subject
+     * @param {BaseContext} context
      * @returns {Promise<boolean>}
      */
-    async authorize(action, subject) {
+    async authorize(action, context) {
         return new Promise((resolve, reject) => {
             if (action === this._action) {
-                this._match.isMatch(subject.roles, this._roles)
+                this._match.isMatch(context.subject.roles, this._roles)
                     .then((inrole) => {
                         resolve(inrole);
                     })
@@ -1124,7 +1124,7 @@ class FunctionRoleProperty extends JsonProperty {
      * @returns {Promise<ValueMatch>}
      * @private
      */
-    async _getMatchType(type) {
+    static async _getMatchType(type) {
         return new Promise((resolve, reject) => {
             switch (type) {
                 case "MatchAny":
@@ -1169,7 +1169,7 @@ class FunctionRoleProperty extends JsonProperty {
                                 reject(CelastrinaError.newError(
                                     "Invalid FunctionRole.ValueMatch, _type required."));
                             else {
-                                this._getMatchType(source._match._type)
+                                FunctionRoleProperty._getMatchType(source._match._type)
                                     .then((match) => {
                                         resolve(new FunctionRole(source._action, source._roles, match));
                                     })
@@ -1631,7 +1631,7 @@ class BaseSentry {
                 if (typeof funcrole === "undefined" || funcrole == null)
                     resolve();
                 else {
-                    funcrole.authorize(context.action, context.subjcet)
+                    funcrole.authorize(context.action, context)
                         .then((auth) => {
                             if(auth)
                                 resolve();
@@ -1892,7 +1892,7 @@ class BaseContext {
      * @brief
      * @returns {BaseSubject}
      */
-    get subjcet() {
+    get subject() {
         return this._subject;
     }
 

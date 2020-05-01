@@ -27,9 +27,8 @@
 const moment = require("moment");
 const jwt    = require("jsonwebtoken");
 
-const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
-const {LOG_LEVEL, JsonProperty, Configuration, BaseSubject, BaseSentry, BaseContext,
-       BaseFunction} = require("./BaseFunction");
+const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Configuration, BaseSubject, BaseSentry,
+       BaseContext, BaseFunction} = require("@celastrina/core");
 
 /**
  * @typedef _jwtpayload

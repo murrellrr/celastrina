@@ -27,13 +27,10 @@ const {Vault} = require("./Vault");
 const {Property, JsonProperty, StringProperty, BooleanProperty, NumericProperty, ApplicationAuthorization, ValueMatch,
        MatchAny, MatchAll, MatchNone, FunctionRole, Configuration, LOG_LEVEL, BaseSubject, BaseSentry, BaseContext,
        BaseFunction, ApplicationAuthorizationProperty, FunctionRoleProperty} = require("./BaseFunction");
-const {JwtSubject, Issuer, IssuerProperty, JwtConfiguration, HTTPContext, JwtSentry, HTTPFunction, JwtHTTPFunction,
-       JSONHTTPContext, HTTPParameterFetch, HeaderParameterFetch, BodyParameterFetch, HTTPParameterFetchProperty,
-       QueryParameterFetch, JSONHTTPFunction, JwtJSONHTTPFunction} = require("./HttpFunction");
-const {Recaptcha, RecaptchaJSONFunction} = require("./Recaptcha");
+const {Point} = require("Point");
 
 module.exports = {
-    CelastrinaError: CelastrinaError,
+    CelastrinaError:           CelastrinaError,
     CelastrinaValidationError: CelastrinaValidationError,
     Vault: Vault,
     Property: Property,
@@ -55,22 +52,5 @@ module.exports = {
     BaseSentry: BaseSentry,
     BaseContext: BaseContext,
     BaseFunction: BaseFunction,
-    JwtSubject: JwtSubject,
-    Issuer: Issuer,
-    IssuerProperty: IssuerProperty,
-    JwtConfiguration: JwtConfiguration,
-    HTTPContext: HTTPContext,
-    HTTPParameterFetch: HTTPParameterFetch,
-    HeaderParameterFetch: HeaderParameterFetch,
-    QueryParameterFetch: QueryParameterFetch,
-    BodyParameterFetch: BodyParameterFetch,
-    HTTPParameterFetchProperty: HTTPParameterFetchProperty,
-    JwtSentry: JwtSentry,
-    HTTPFunction: HTTPFunction,
-    JwtHTTPFunction: JwtHTTPFunction,
-    JSONHTTPContext: JSONHTTPContext,
-    JSONHTTPFunction: JSONHTTPFunction,
-    JwtJSONHTTPFunction: JwtJSONHTTPFunction,
-    Recaptcha: Recaptcha,
-    RecaptchaJSONFunction: RecaptchaJSONFunction
+    Point: Point
 };

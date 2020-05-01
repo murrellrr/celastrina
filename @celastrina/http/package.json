@@ -1,7 +1,7 @@
 {
-  "name": "@celastrina/core",
-  "version": "1.0.7beta-2",
-  "description": "Javascript Framework for simplifying Microsoft Azure Functions and supporting resources.",
+  "name": "@celastrina/http",
+  "version": "1.0.0beta-1",
+  "description": "HTTP Function Package for Celastrina",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -9,7 +9,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/murrellrr/celastrina.git",
-    "directory": "@celastrina/core"
+    "directory": "@celastrina/http"
   },
   "keywords": [
     "Microsoft",
@@ -28,12 +28,10 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
+    "@celastrina/core": "^1.0.7beta-2",
     "adal-node": "^0.2.1",
     "axios": "^0.19.2",
     "jsonwebtoken": "^8.5.1",
-    "querystring": "^0.2.0",
-    "moment": "^2.24.0",
-    "uuid": "^3.4.0",
-    "validator": "^11.1.0"
+    "moment": "^2.25.1"
   }
 }

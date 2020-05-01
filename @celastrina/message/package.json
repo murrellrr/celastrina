@@ -1,0 +1,23 @@
+{
+  "name": "@celastrina/message",
+  "version": "1.0.0",
+  "description": "Celastrina QStorage Function packages for Azure",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/murrellrr/celastrina.git"
+  },
+  "keywords": [
+    "Celastrina",
+    "Azure"
+  ],
+  "author": "Robert R Murrell",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/murrellrr/celastrina/issues"
+  },
+  "homepage": "https://github.com/murrellrr/celastrina#readme"
+}

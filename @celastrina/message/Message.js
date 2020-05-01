@@ -28,7 +28,7 @@ const moment    = require("moment");
 const validator = require("validator").default;
 const uuidv4    = require("uuid/v4");
 
-const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
+const {CelastrinaError, CelastrinaValidationError} = require("../core/CelastrinaError");
 
 /**
  * @brief

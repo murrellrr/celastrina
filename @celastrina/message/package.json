@@ -1,6 +1,6 @@
 {
   "name": "@celastrina/message",
-  "version": "1.0.0",
+  "version": "1.0.0beta-1",
   "description": "Celastrina QStorage Function packages for Azure",
   "main": "index.js",
   "scripts": {
@@ -8,11 +8,19 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/murrellrr/celastrina.git"
+    "url": "git+https://github.com/murrellrr/celastrina.git",
+    "directory": "@celastrina/message"
   },
   "keywords": [
-    "Celastrina",
-    "Azure"
+    "Microsoft",
+    "Azure",
+    "Function",
+    "Javascript",
+    "Node.js",
+    "Messaging",
+    "Async",
+    "Queue",
+    "Bus"
   ],
   "author": "Robert R Murrell",
   "license": "MIT",

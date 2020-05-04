@@ -1228,6 +1228,8 @@ class Configuration {
         this._config[Configuration.CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION] = [];
         /** @type {Array.<JsonProperty|FunctionRole>} */
         this._config[Configuration.CELASTRINA_CONFIG_ROLES] = [];
+
+        this._loaded = false;
     }
 
     /**
@@ -1455,28 +1457,37 @@ class Configuration {
         return new Promise(
             (resolve, reject) => {
                 try {
-                    // Set up the Azure function context for the configuration.
-                    this._context = context;
-                    // Set up the properties loader
-                    this._setManaged()
-                        .then(() => {
-                            // Scan for any property object then replace async.
-                            /** @type {Array.<Promise<void>>} */
-                            let promises = [];
-                            this._load(this, promises);
-                            return Promise.all(promises);
-                        })
-                        .then(() => {
-                            if(typeof this._name !== "string" || this._name.trim().length === 0) {
-                                context.log.error("Invalid Configuration. Name cannot be undefined, null, or 0 length."); // Low level logger.
-                                reject(CelastrinaError.newError("Invalid Configuration."));
-                            }
-                            else
-                                resolve();
-                        })
-                        .catch((exception) => {
-                            reject(exception);
-                        });
+                    if(!this._loaded) {
+                        // Set up the Azure function context for the configuration.
+                        this._context = context;
+                        // Set up the properties loader
+                        this._setManaged()
+                            .then(() => {
+                                // Scan for any property object then replace async.
+                                /** @type {Array.<Promise<void>>} */
+                                let promises = [];
+                                this._load(this, promises);
+                                return Promise.all(promises);
+                            })
+                            .then(() => {
+                                if (typeof this._name !== "string" || this._name.trim().length === 0) {
+                                    context.log.error("Invalid Configuration. Name cannot be undefined, null, or 0 length."); // Low level logger.
+                                    reject(CelastrinaError.newError("Invalid Configuration."));
+                                }
+                                else {
+                                    this._context.log.trace("Configuration loaded from source.");
+                                    this._loaded = true;
+                                    resolve();
+                                }
+                            })
+                            .catch((exception) => {
+                                reject(exception);
+                            });
+                    }
+                    else {
+                        this._context.log.trace("Configuration loaded from cache.");
+                        resolve();
+                    }
                 }
                 catch(exception) {
                     reject(exception);
@@ -1656,7 +1667,7 @@ class BaseSentry {
      */
     async setRoles(context) {
         return new Promise((resolve, reject) => {
-            resolve(context.subjcet);
+            resolve(context.subject);
         });
     }
 

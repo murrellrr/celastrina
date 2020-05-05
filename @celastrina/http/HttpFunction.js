@@ -170,17 +170,16 @@ class JwtSubject extends BaseSubject {
      * @param {string} bearerToken
      * @return {Promise<JwtSubject>}
      */
-    static async decode(bearerToken) {
+    static async decode(token) {
         return new Promise((resolve, reject) => {
-            if(typeof bearerToken !== "string" || bearerToken.trim().length === 0)
+            if(typeof token !== "string" || token.trim().length === 0)
                 reject(CelastrinaError.newError("Not Authorized.", 401));
             else {
                 try {
-                    /** @type {_jwt} */
-                    let token   = jwt.decode(bearerToken);
-                    let payload = token.payload;
+                    /** @type {_jwtpayload} */
+                    let payload = jwt.decode(token);
                     resolve(new JwtSubject(payload.sub, payload.aud, payload.iss, payload.iat, payload.exp,
-                                           payload.nonce, bearerToken));
+                                           payload.nonce, token));
                 }
                 catch (exception) {
                     reject(exception);
@@ -544,7 +543,7 @@ class JwtConfiguration {
         /** @type {boolean|BooleanProperty} */
         this._remove = remove;
         /** @type {string|StringProperty} */
-        this._token  = "authorization";
+        this._token  = token;
         /** @type {boolean|BooleanProperty} */
         this._validateNonce = validateNonce;
     }
@@ -974,9 +973,8 @@ class JwtSentry extends BaseSentry {
      */
     async _getToken(context) {
         return new Promise((resolve, reject) => {
-            let auth;
             this._config.param.fetch(context, this._config.token)
-                .then((token) => {
+                .then((auth) => {
                     if(typeof auth !== "string") {
                         context.log("Expected JWT token but none was found.", LOG_LEVEL.LEVEL_WARN,
                                      "JwtSentry._getToken(context)");
@@ -986,9 +984,9 @@ class JwtSentry extends BaseSentry {
                         // Checking to see if we need to validate the scheme
                         let scheme = this._config.scheme;
                         if(typeof scheme === "string" && scheme.length > 0) {
-                            if(auth.startsWith(this._scheme)) { // and that it starts with the scheme...
+                            if(auth.startsWith(scheme)) { // and that it starts with the scheme...
                                 if(this._config.removeScheme)
-                                    auth.slice(scheme.length); // and remove it...
+                                    auth = auth.slice(scheme.length); // and remove it...
                                 resolve(auth);
                             }
                             else {

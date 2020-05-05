@@ -159,11 +159,16 @@ class VaultPropertyHandler extends PropertyHandler {
             (resolve, reject) => {
                 let result = this._cache[key];
                 if(typeof result === "undefined") {
-                    super.getSecureEnvironmentProperty(key, defaultValue)
+                    this.getEnvironmentProperty(key)
                         .then((value) => {
-                            return this._vault.getSecret(value);
+                            if(typeof value !== "string" || value.trim().length === 0)
+                                reject(CelastrinaError.newError("No Key Vault URL set."));
+                            else
+                                return this._vault.getSecret(value);
                         })
                         .then((secret) => {
+                            if(typeof secret === "undefined" || secret == null)
+                                secret = defaultValue;
                             this._cache[key] = secret;
                             resolve(secret);
                         })
@@ -1373,13 +1378,13 @@ class Configuration {
         return new Promise((resolve, reject) => {
             let params = new URLSearchParams();
             params.append("resource", "https://vault.azure.net");
-            params.append("api-version", "2017-09-01");
+            params.append("api-version", "2019-08-01");
             let config = {params: params,
-                          headers: {"secret": secret}};
+                          headers: {"X-IDENTITY-HEADER": secret}};
 
             axios.get(endpoint, config)
                 .then((response) => {
-                    resolve(response.data.value);
+                    resolve(response.data.access_token);
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -1407,8 +1412,11 @@ class Configuration {
 
                 // Now we load the appropriate property handler
                 if(this._managed) {
-                    this._registerVaultResource(process.env["MSI_ENDPOINT"], process.env["MSI_SECRET"])
+                    this._context.log("[Configuration._setManaged()]: Loading configuration in managed mode, " +
+                                      "getting vault token from endpoint " + process.env["MSI_ENDPOINT"] + ".");
+                    this._registerVaultResource(process.env["IDENTITY_ENDPOINT"], process.env["IDENTITY_HEADER"])
                         .then((value) => {
+                            this._context.log("[Configuration._setManaged()]: Creating VaultPropertyHandler.");
                             this._handler = new VaultPropertyHandler(new Vault(value));
                             resolve();
                         })

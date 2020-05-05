@@ -28,296 +28,299 @@ const moment    = require("moment");
 const validator = require("validator").default;
 const uuidv4    = require("uuid/v4");
 
-const {CelastrinaError, CelastrinaValidationError} = require("../core/CelastrinaError");
+const {CelastrinaError, CelastrinaValidationError, BaseContext, BaseFunction} = require("@celastrina/core");
 
 /**
  * @brief
- *
  * @author Robert R Murrell
- *
- * @type {{uid:string, timestamp: moment.Moment, expires: moment.Moment, environment: string, type: string,
- *         topic: string, action: string}}
+ * @type {{_uid:string, _timestamp: moment.Moment, _expires: moment.Moment, _environment: string, _domain: string,
+ *         _topic: string, _action: string}}
  */
 class Header {
     /**
      * @brief
-     *
-     * @param {Object} source
-     */
-    constructor(source) {
-        this.uid          = null;
-        this.timestamp    = null;
-        this.expires      = null;
-        this.environment  = "development";
-        this.domain       = null; // The logical domain for this message, maybe you are multi-tenant.
-        this.topic        = null; // The Noun, what is this about.
-        this.action       = null; // The verb, what action to take.
-        Object.assign(this, source);
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {boolean}
-     */
-    isDevelopment() {
-        return this.environment === "development";
-    }
-
-    /**
-     * @brief
-     *
-     * @param {Object} source
-     *
-     * @returns {boolean}
-     */
-    static _isObject(source) {
-        if(typeof source !== "undefined" && source != null) {
-            if(!source.hasOwnProperty("uid"))
-                return false;
-            if(!source.hasOwnProperty("timestamp"))
-                return false;
-            if(!source.hasOwnProperty("expires"))
-                return false;
-            if(!source.hasOwnProperty("environment"))
-                return false;
-            if(!source.hasOwnProperty("domain"))
-                return false;
-            if(!source.hasOwnProperty("topic"))
-                return false;
-            if(!source.hasOwnProperty("action"))
-                return false;
-            return source.hasOwnProperty("signiture");
-        }
-        else
-            return false;
-    }
-
-    /**
-     * @brief
-     *
-     * @param source
-     */
-    static copy(source) {
-        if(typeof source == "undefined" || source == null)
-            throw CelastrinaValidationError.newValidationError("Source cannot be null.", "Message.copy.source");
-
-        if(!(source instanceof Header)) {
-            if (Header._isObject(source)) {
-                if (validator.isEmpty(source.type))
-                    throw CelastrinaValidationError.newValidationError("Profile ID is required.", "Header.type");
-                if (validator.isEmpty(source.topic))
-                    throw CelastrinaValidationError.newValidationError("Profile ID is required.", "Header.topic");
-                if (validator.isEmpty(source.action))
-                    throw CelastrinaValidationError.newValidationError("Profile ID is required.", "Header.action");
-            }
-            else
-                throw CelastrinaValidationError.newValidationError("source is not compatible with Header.",
-                    "Header.copy.source");
-        }
-
-        let header = new Header(source);
-
-        if(typeof source.timestamp === "string")
-            header.timestamp = moment(source.timestamp);
-        else
-            header.timestamp = source.timestamp.clone();
-        if(typeof source.expires === "string")
-            header.expires = moment(source.expires);
-        else
-            header.expires = source.expires.clone();
-
-        return header;
-    }
-
-    /**
-     * @brief
-     *
-     * @param {string} domain
      * @param {string} topic
      * @param {string} action
-     * @param {string} [uid]
-     * @param {string} [environment]
-     * @param {moment.Moment} [timestamp]
-     * @param {moment.Moment} [expires]
-     *
-     * @returns {Header}
+     * @param {null|string} [domain=null]
+     * @param {string} [uid=uuidv4()]
+     * @param {moment.Moment} [timestamp=moment()]
+     * @param {null|moment.Moment} [expires=null]
+     * @param {string} [environment="development"]
      */
-    static create(domain, topic, action, uid = uuidv4(), environment = "development",
-                  timestamp = moment(), expires = moment().add("30m")) {
-        let source = {
-            uid:         uid,
-            timestamp:   timestamp,
-            expires:     expires,
-            environment: environment,
-            type:        type,
-            topic:       topic,
-            action:      action
-        };
+    constructor(topic, action, domain = null, uid = uuidv4(),
+                timestamp = moment(), expires = null,
+                environment = "development") {
+        if(typeof topic !== "string" || topic.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Invalid Header. Topic is required.",
+                                                               "Header._topic");
+        if(typeof action !== "string" || action.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Invalid Header. Action is required.",
+                                                               "Header._action");
+        this._uid          = uid;
+        this._timestamp    = timestamp;
+        this._expires      = expires;
+        this._environment  = environment;
+        this._domain       = domain;
+        this._topic        = topic;
+        this._action       = action;
+    }
 
-        return Header.copy(source);
+    /**
+     * @brief
+     * @returns {boolean}
+     */
+    get development() {
+        return this._environment === "development";
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get uid() {
+        return this._uid;
+    }
+
+    /**
+     * @brief
+     * @returns {moment.Moment}
+     */
+    get timestam() {
+        return this._timestamp;
+    }
+
+    /**
+     * @brief
+     * @returns {null|moment.Moment}
+     */
+    get expires() {
+        return this._expires;
+    }
+
+    /**
+     * @brief
+     * @param {null|moment.Moment} expires
+     */
+    set expires(expires) {
+        this._expires = expires;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get environment() {
+        return this._environment;
+    }
+
+    /**
+     * @brief
+     * @returns {null|string}
+     */
+    get domain() {
+        return this._domain;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get topic() {
+        return this._topic;
+    }
+
+    /**
+     * @brief
+     * @returns {string}
+     */
+    get action() {
+        return this._action;
+    }
+
+    /**
+     * @brief
+     * @param {number} [amount=24]
+     * @param {string} [increment="h"]
+     */
+    setExpiresIn(amount = 24, increment = "h") {
+        if(this._expires == null)
+            this._expires = moment(); // Make it now if it was null.
+        this._expires.add(amount, increment);
+    }
+
+    /**
+     * @brief
+     * @returns {Promise<boolean>}
+     */
+    async isExpired() {
+        return new Promise((resolve, reject) => {
+            try {
+                let now = moment();
+                resolve(now.isSameOrAfter(this._expires));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+
+    /**
+     * @brief
+     * @param {null|string} domain
+     * @returns {Promise<boolean>}
+     */
+    async isInDomain(domain) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(domain === this._domain);
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+
+    /**
+     * @brief
+     * @param {null|string} topic
+     * @returns {Promise<boolean>}
+     */
+    async isTopic(topic) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(topic === this._topic);
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+
+    /**
+     * @brief
+     * @param {null|string} action
+     * @returns {Promise<boolean>}
+     */
+    async isAction(action) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(action === this._action);
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+
+    /**
+     * @brief
+     * @param {string} topic
+     * @param {string} action
+     * @param {null|string} [domain=null]
+     * @returns {Promise<boolean>}
+     */
+    async isMessage(topic, action, domain = null) {
+        return new Promise((resolve, reject) => {
+            Promise.all([this.isTopic(topic), this.isAction(action), this.isInDomain(domain)])
+                .then((results) => {
+                    resolve((results[0] && results[1] && results[2]));
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+
+    /**
+     * @brief
+     * @param {object} source
+     */
+    static create(source) {
+        if(typeof source === "undefined" || source == null)
+            throw CelastrinaValidationError.newValidationError("Invalid Header. Source is required.",
+                                                               "Header");
+        if(source instanceof Header)
+            return source;
+
+        if(source.hasOwnProperty("_action") && (typeof source._action !== "string"))
+            throw CelastrinaValidationError.newValidationError("Invalid Header. _action is required.",
+                                                               "Header._action");
+        if(source.hasOwnProperty("_topic") && (typeof source._topic !== "string"))
+            throw CelastrinaValidationError.newValidationError("Invalid Header. _topic is required.",
+                                                               "Header._topic");
+
+        return new Header(source._topic, source._action, source._action, source._uid, source._timestamp,
+                          source._expires, source._environment);
+    }
+}
+
+
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class Message {
+    constructor(body = null, header = null) {
+        this._body   = body;
+        this._header = header;
     }
 }
 
 /**
  * @brief
- *
  * @author Robert R Murrell
- *
- * @type {{header: Header, body: Object}}
  */
-class Message {
+class MessageContext extends BaseContext {
     /**
      * @brief
-     *
-     * @param {Object} source
+     * @param {_AzureFunctionContext} context
+     * @param {string} name
+     * @param {PropertyHandler} properties
      */
-    constructor(source) {
-        this.header = null;
-        this.body   = null;
-        Object.assign(this, source);
+    constructor(context, name, properties) {
+        super(context, name, properties);
     }
 
     /**
      * @brief
-     *
-     * @returns {string}
+     * @brief {Configuration} configration
+     * @returns {Promise<BaseContext>}
      */
-    get uid() {
-        return this.header.uid;
-    }
-
-    /**
-     * @brief
-     *
-     * @param {string} uid
-     */
-    set uid(uid) {
-        this.header.uid = uid;
-    }
-
-    /**
-     * @brief
-     *
-     * @return {boolean}
-     */
-    isExpired() {
-        return moment().isSameOrAfter(this.header.expires);
-    }
-
-    /**
-     * @brief
-     *
-     * @returns {boolean}
-     */
-    isDevelopment() {
-        return this.header.isDevelopment();
-    }
-
-    /**
-     * @brief
-     *
-     * @param {Object} source
-     *
-     * @returns {boolean}
-     */
-    static _isObject(source) {
-        if(typeof source !== "undefined" && source != null) {
-            if(!source.hasOwnProperty("header"))
-                return Header._isObject(source.header);
-            return source.hasOwnProperty("body");
-        }
-        else
-            return false;
-    }
-
-    /**
-     * @brief
-     *
-     * @param {Object} source
-     */
-    static copy(source) {
-        if(typeof source == "undefined" || source == null)
-            throw CelastrinaValidationError.newValidationError("Source cannot be null.", "Message.copy.source");
-
-        if(!(source instanceof Message)) {
-            if (Message._isObject(source)) {
-                if(typeof source.header === "undefined" || source.header == null)
-                    throw CelastrinaValidationError.newValidationError("Header is required.", "Message.header");
-            }
-            else
-                throw CelastrinaValidationError.newValidationError("source is not compatible with Message.",
-                    "Message.copy.source");
-        }
-
-        let message = new Message(source);
-
-        message.header = Header.copy(source.header);
-
-        return message;
-    }
-
-    /**
-     * @brief
-     *
-     * @param {string} type
-     * @param {string} topic
-     * @param {string} action
-     * @param {Object} [body]
-     * @param {string} [uid]
-     * @param {string} [environment]
-     * @param {moment.Moment} [timestamp]
-     * @param {moment.Moment} [expires]
-     *
-     * @returns {Message}
-     */
-    static create(type, topic, action, body = {}, uid = uuidv4(),
-                  environment = "dev", timestamp = moment(),
-                  expires = moment().add("24h")) {
-        let source = {
-            header: Header.create(type, topic, action, uid, environment, timestamp, expires),
-            body:   body
-        };
-
-        return Message.copy(source);
-    }
-
-    /**
-     * @brief
-     *
-     * @param {string} message The incoming message to decode and parse.
-     *
-     * @return {Message}
-     */
-    static unMarshall(message) {
-        if(typeof message !== "string" || message.trim().length === 0)
-            throw CelastrinaValidationError.newError("Message is required.");
-
-        let buff          = new Buffer(message, "base64");
-        let unmarshalled  = JSON.parse(buff.toString("ascii"));
-
-        if(!Message._isObject(unmarshalled))
-            throw CelastrinaValidationError.newError("Message is required.");
-
-        return Message.copy(unmarshalled);
-    }
-
-    /**
-     * @brief
-     *
-     * @param {Message} message The incoming message to decode and parse.
-     *
-     * @return {string}
-     */
-    static marshall(message) {
-        if(typeof message === "undefined" || message == null)
-            throw CelastrinaValidationError.newError("Argument message is undefined.");
-
-        return Buffer.from(JSON.stringify(message)).toString("base64");
+    async initialize(configuration) {
+        return new Promise((resolve, reject) => {
+            super.initialize(configuration)
+                .then((context) => {
+                    resolve(context);
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
     }
 }
 
-module.exports = {
-    Message: Message,
-    Header:  Header
-};
+/**
+ * @brief
+ * @author Robert R Murrell
+ */
+class MessageFunction extends BaseFunction {
+    /**
+     * @brief Creates an implementations of Base Context from the Azure Function context passed in.
+     * @description Override this function to create the instance of BaseContext required for your function.
+     * @param {_AzureFunctionContext} context
+     * @param {string} name
+     * @param {PropertyHandler} properties
+     * @returns {Promise<MessageContext & BaseContext>} The base context for this function.
+     */
+    async createContext(context, name, properties) {
+        return new Promise(
+            (resolve, reject) => {
+                try {
+                    resolve(new MessageContext(context, name, properties));
+                }
+                catch(exception) {
+                    reject(exception);
+                }
+            });
+    }
+}

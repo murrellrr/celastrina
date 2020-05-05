@@ -1375,9 +1375,9 @@ class Configuration {
             params.append("resource", "https://vault.azure.net");
             params.append("api-version", "2017-09-01");
             let config = {params: params,
-                          headers: {"secret": process.env["MSI_SECRET"]}};
+                          headers: {"secret": secret}};
 
-            axios.get(process.env["MSI_ENDPOINT"], config)
+            axios.get(endpoint, config)
                 .then((response) => {
                     resolve(response.data.value);
                 })
@@ -1437,7 +1437,7 @@ class Configuration {
                 let local = obj[prop];
                 if(typeof local !== "undefined" && local != null) {
                     if(local instanceof Property)
-                        if(local.secure !== this._managed)
+                        if(local.secure && !this._managed)
                             throw CelastrinaError.newError("Managed configuration required. Property '" +
                                 local.name + "' is secure.");
                         else

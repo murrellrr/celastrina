@@ -27,7 +27,7 @@ const {Vault} = require("./Vault");
 const {Property, JsonProperty, StringProperty, BooleanProperty, NumericProperty, ApplicationAuthorization, ValueMatch,
        MatchAny, MatchAll, MatchNone, FunctionRole, Configuration, LOG_LEVEL, BaseSubject, BaseSentry, BaseContext,
        BaseFunction, ApplicationAuthorizationProperty, FunctionRoleProperty} = require("./BaseFunction");
-const {Point} = require("Point");
+const {Point} = require("./Point");
 
 module.exports = {
     CelastrinaError:           CelastrinaError,

@@ -24,7 +24,7 @@
 
 const {JwtSubject, Issuer, IssuerProperty, JwtConfiguration, HTTPContext, HTTPParameterFetch, HeaderParameterFetch,
        QueryParameterFetch, BodyParameterFetch, HTTPParameterFetchProperty, JwtSentry, HTTPFunction, JwtHTTPFunction,
-       JSONHTTPContext, JSONHTTPFunction, JwtJSONHTTPFunction} = require("HttpFunction");
+       JSONHTTPContext, JSONHTTPFunction, JwtJSONHTTPFunction} = require("./HttpFunction");
 const {Recaptcha, RecaptchaFunctionRole} = require("./Recaptcha");
 
 module.exports = {

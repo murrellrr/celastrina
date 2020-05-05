@@ -1100,7 +1100,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _get(context) {
         return new Promise((resolve) => {
-            context.log("WARNING: GET Method not implemented.", this._topic, LOG_LEVEL.LEVEL_WARN);
+            context.log("WARNING: GET Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._get(context)");
             context.send(null, 204);
             resolve();
         });
@@ -1113,8 +1113,8 @@ class HTTPFunction extends BaseFunction {
      * @returns {Promise<void>}
      */
     async _patch(context) {
-        return new Promise((reject) => {
-            context.log("WARNING: PATCH Method not implemented.", this._topic, LOG_LEVEL.LEVEL_WARN);
+        return new Promise((resolve, reject) => {
+            context.log("WARNING: PATCH Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._patch(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -1126,8 +1126,8 @@ class HTTPFunction extends BaseFunction {
      * @returns {Promise<void>}
      */
     async _put(context) {
-        return new Promise((reject) => {
-            context.log("WARNING: PUT Method not implemented.", this._topic, LOG_LEVEL.LEVEL_WARN);
+        return new Promise((resolve, reject) => {
+            context.log("WARNING: PUT Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._put(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -1139,8 +1139,8 @@ class HTTPFunction extends BaseFunction {
      * @returns {Promise<void>}
      */
     async _post(context) {
-        return new Promise((reject) => {
-            context.log("WARNING: POST Method not implemented.", this._topic, LOG_LEVEL.LEVEL_WARN);
+        return new Promise((resolve, reject) => {
+            context.log("WARNING: POST Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._post(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -1152,8 +1152,8 @@ class HTTPFunction extends BaseFunction {
      * @returns {Promise<void>}
      */
     async _delete(context) {
-        return new Promise((reject) => {
-            context.log("WARNING: DELETE Method not implemented.", this._topic, LOG_LEVEL.LEVEL_WARN);
+        return new Promise((resolve, reject) => {
+            context.log("WARNING: DELETE Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._delete(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -1165,8 +1165,8 @@ class HTTPFunction extends BaseFunction {
      * @returns {Promise<void>}
      */
     async _options(context) {
-        return new Promise((reject) => {
-            context.log("WARNING: OPTOINS Method not implemented.", this._topic, LOG_LEVEL.LEVEL_WARN);
+        return new Promise((resolve, reject) => {
+            context.log("WARNING: OPTOINS Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._options(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -1178,8 +1178,8 @@ class HTTPFunction extends BaseFunction {
      * @returns {Promise<void>}
      */
     async _head(context) {
-        return new Promise((resolve) => {
-            context.log("WARNING: HEAD Method not implemented.", this._topic, LOG_LEVEL.LEVEL_WARN);
+        return new Promise((resolve, reject) => {
+            context.log("WARNING: HEAD Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._head(context)");
             context.send(null, 204);
             resolve();
         });
@@ -1195,8 +1195,8 @@ class HTTPFunction extends BaseFunction {
      * @returns {Promise<void>}
      */
     async _trace(context) {
-        return new Promise((resolve) => {
-            context.log("WARNING: TRACE Method not implemented.", this._topic, LOG_LEVEL.LEVEL_WARN);
+        return new Promise((resolve, reject) => {
+            context.log("WARNING: TRACE Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._trace(context)");
             context.monitorResponse.addPassedDiagnostic("Default HTTPFunction",
                 "HTTPFunction._trace(context): Not implemented.");
             resolve();
@@ -1231,7 +1231,7 @@ class HTTPFunction extends BaseFunction {
      */
     async exception(context, exception) {
         return new Promise(
-            (resolve) => {
+            (resolve, reject) => {
                 let ex = exception;
                 if(ex instanceof CelastrinaValidationError)
                     context.sendValidationError(ex);
@@ -1276,15 +1276,22 @@ class HTTPFunction extends BaseFunction {
      * @returns {Promise<void>}
      */
     async process(context) {
-        let httpMethodHandler = this["_" + context.method];
-        let promise;
+        return new Promise((resolve, reject) => {
+            let httpMethodHandler = this["_" + context.method];
+            let promise;
 
-        if(typeof httpMethodHandler === "undefined")
-            promise = this.unhandledRequestMethod(context);
-        else
-            promise = httpMethodHandler(context);
+            if(typeof httpMethodHandler === "undefined")
+                promise = this.unhandledRequestMethod(context);
+            else
+                promise = httpMethodHandler(context);
 
-        return promise;
+            promise.then(() => {
+                    resolve();
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
     }
 }
 /**
@@ -1295,7 +1302,7 @@ class HTTPFunction extends BaseFunction {
 class JwtHTTPFunction extends HTTPFunction {
     /**
      * @brief
-     * @param {JwtConfiguration} configuration
+     * @param {Configuration} configuration
      */
     constructor(configuration) {
         super(configuration);
@@ -1326,7 +1333,11 @@ class JSONHTTPContext extends HTTPContext {
      */
     constructor(context, name, properties) {
         super(context, name, properties);
-        this._context.res.headers["Content-Type"] = "application/json; charset=utf-8";
+        // Setting up the default response.
+        this._context.res = {status: 200,
+                             headers: {"Content-Type": "application/json; charset=utf-8",
+                                       "X-celastrina-requestId": this._requestId},
+                             body: {name: this._name, code: 200, message: "success"}};
     }
 
     /**
@@ -1384,7 +1395,7 @@ class JSONHTTPFunction extends HTTPFunction {
 class JwtJSONHTTPFunction extends JSONHTTPFunction {
     /**
      * @brief
-     * @param {JwtConfiguration} configuration
+     * @param {Configuration} configuration
      */
     constructor(configuration) {
         super(configuration);

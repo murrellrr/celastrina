@@ -106,7 +106,7 @@ class PropertyHandler {
      * @returns {Promise<string>}
      */
     async getEnvironmentProperty(key, defaultValue = null) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             let value = process.env[key];
             if(typeof value === "undefined" || value.trim().length === 0)
                 value = defaultValue;
@@ -245,7 +245,7 @@ class Property {
      * @returns {Promise<null|Object|string|boolean|number>}
      */
     async resolve(value) {
-        return new Promise((reject) => {
+        return new Promise((resolve, reject) => {
             reject(CelastrinaError.newError("Property not supported."));
         });
     }
@@ -933,7 +933,7 @@ class ValueMatch {
      * @returns {Promise<boolean>}
      */
     async isMatch(assertion, values) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             resolve(true);
         });
     }
@@ -1090,7 +1090,7 @@ class FunctionRole {
      */
     async authorize(action, context) {
         return new Promise((resolve, reject) => {
-            if (action === this._action) {
+            if(action === this._action) {
                 this._match.isMatch(context.subject.roles, this._roles)
                     .then((inrole) => {
                         resolve(inrole);
@@ -1098,7 +1098,8 @@ class FunctionRole {
                     .catch((exception) => {
                         reject(exception);
                     });
-            } else
+            }
+            else
                 resolve(false);
         });
     }
@@ -1158,7 +1159,7 @@ class FunctionRoleProperty extends JsonProperty {
                                     "Invalid FunctionRole, _roles required."));
                             else if(!Array.isArray(source._roles))
                                 reject(CelastrinaError.newError(
-                                    "Invalid FunctionRole, _values must be an array."));
+                                    "Invalid FunctionRole, _roles must be an array."));
                             else if(!source.hasOwnProperty("_action"))
                                 reject(CelastrinaError.newError(
                                     "Invalid FunctionRole, _action required."));
@@ -1167,7 +1168,7 @@ class FunctionRoleProperty extends JsonProperty {
                                     "Invalid FunctionRole, _match required."));
                             else if(!source._match.hasOwnProperty("_type"))
                                 reject(CelastrinaError.newError(
-                                    "Invalid FunctionRole.ValueMatch, _type required."));
+                                    "Invalid FunctionRole._match._type, _type required."));
                             else {
                                 FunctionRoleProperty._getMatchType(source._match._type)
                                     .then((match) => {
@@ -1457,9 +1458,9 @@ class Configuration {
         return new Promise(
             (resolve, reject) => {
                 try {
+                    // Set up the Azure function context for the configuration.
+                    this._context = context;
                     if(!this._loaded) {
-                        // Set up the Azure function context for the configuration.
-                        this._context = context;
                         // Set up the properties loader
                         this._setManaged()
                             .then(() => {
@@ -1470,12 +1471,12 @@ class Configuration {
                                 return Promise.all(promises);
                             })
                             .then(() => {
-                                if (typeof this._name !== "string" || this._name.trim().length === 0) {
+                                if(typeof this._name !== "string" || this._name.trim().length === 0) {
                                     context.log.error("Invalid Configuration. Name cannot be undefined, null, or 0 length."); // Low level logger.
                                     reject(CelastrinaError.newError("Invalid Configuration."));
                                 }
                                 else {
-                                    this._context.log.trace("Configuration loaded from source.");
+                                    this._context.log("[Configuration.load(context)]: Configuration loaded from source.");
                                     this._loaded = true;
                                     resolve();
                                 }
@@ -1485,7 +1486,7 @@ class Configuration {
                             });
                     }
                     else {
-                        this._context.log.trace("Configuration loaded from cache.");
+                        this._context.log("[Configuration.load(context)]: Configuration loaded from cache.");
                         resolve();
                     }
                 }
@@ -1828,6 +1829,8 @@ class BaseContext {
         /** @type {null|BaseSubject} */
         this._subject         = null;
         this._action          = "process";
+        /** @type {null|BaseSentry} */
+        this._sentry          = null;
     }
 
     /**
@@ -1897,6 +1900,22 @@ class BaseContext {
      */
     get requestId() {
         return this._requestId;
+    }
+
+    /**
+     * @brief
+     * @returns {BaseSentry}
+     */
+    get sentry() {
+        return this._sentry;
+    }
+
+    /**
+     * @brief
+     * @param {BaseSentry} sentry
+     */
+    set sentry(sentry) {
+        this._sentry = sentry;
     }
 
     /**
@@ -2023,26 +2042,8 @@ class BaseFunction {
      */
     constructor(configuration) {
         this._configuration = configuration;
-        /** @type {null|BaseSentry} */
-        this._sentry        = null;
         /** @type {null|BaseContext} */
         this._context       = null;
-    }
-
-    /**
-     * @brief
-     * @returns {Configuration}
-     */
-    get configuration() {
-        return this._configuration;
-    }
-
-    get sentry() {
-        return this._sentry;
-    }
-
-    get context() {
-        return this._context;
     }
 
     /**
@@ -2110,11 +2111,11 @@ class BaseFunction {
                     })
                     .then((results) => {
                         return Promise.all([results[0].initialize(this._configuration),
-                                                   results[1].initialize(this._configuration)]);
+                                                  results[1].initialize(this._configuration)]);
                     })
                     .then((results) => {
-                        this._sentry  = results[0];
                         this._context = results[1];
+                        this._context.sentry = results[0];
                         resolve();
                     })
                     .catch((exception) => {
@@ -2130,7 +2131,7 @@ class BaseFunction {
      * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
      */
     async initialize(context) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             resolve();
         });
     }
@@ -2146,9 +2147,10 @@ class BaseFunction {
      */
     async authenticate(context) {
         return new Promise((resolve, reject) => {
-            this._sentry.authenticate(context)
+            context.sentry.authenticate(context)
                 .then((subject) => {
-                    return this._sentry.setRoles(context);
+                    context.subject = subject;
+                    return context.sentry.setRoles(context);
                 })
                 .then((subject) => {
                     resolve(subject);
@@ -2170,7 +2172,7 @@ class BaseFunction {
      */
     async authorize(context) {
         return new Promise((resolve, reject) => {
-            this._sentry.authorize(context)
+            context.sentry.authorize(context)
                 .then(() => {
                     resolve();
                 })
@@ -2188,7 +2190,7 @@ class BaseFunction {
      * @throws {CelastrinaValidationError} if the input cannot be validated.
      */
     async validate(context) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             resolve();
         });
     }
@@ -2203,7 +2205,7 @@ class BaseFunction {
      */
     async monitor(context) {
         return new Promise(
-            (resolve) => {
+            (resolve, reject) => {
                 context.log("No monitoring checks performed, monitor not overridden.",
                     LOG_LEVEL.LEVEL_WARN, "BaseFunction.monitor(context)");
                 context.monitorResponse.addPassedDiagnostic("default", "Monitor not overridden.");
@@ -2219,7 +2221,7 @@ class BaseFunction {
      * @throws {CelastrinaError} if the load lifecycle fails for any reason.
      */
     async load(context) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             resolve();
         });
     }
@@ -2232,7 +2234,7 @@ class BaseFunction {
      * @throws {CelastrinaError} if the process lifecycle fails for any reason.
      */
     async process(context) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             resolve();
         });
     }
@@ -2245,7 +2247,7 @@ class BaseFunction {
      * @throws {CelastrinaError} if the save lifecycle fails for any reason.
      */
     async save(context) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             resolve();
         });
     }
@@ -2259,7 +2261,7 @@ class BaseFunction {
      * @throws {CelastrinaError} if the exception lifecycle fails for any reason.
      */
     async exception(context, exception) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             resolve();
         });
     }
@@ -2272,7 +2274,7 @@ class BaseFunction {
      * @throws {CelastrinaError} if the terminate lifecycle fails for any reason.
      */
     async terminate(context) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             resolve();
         });
     }
@@ -2329,7 +2331,8 @@ class BaseFunction {
                                 this._context.log("Monitor Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
                                     "BaseFunction.execute(context)");
                                 return this.monitor(this._context);
-                            } else {
+                            }
+                            else {
                                 this._context.log("Process Lifecycle.", LOG_LEVEL.LEVEL_TRACE,
                                     "BaseFunction.execute(context)");
                                 return this.process(this._context);

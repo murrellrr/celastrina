@@ -24,12 +24,13 @@
 
 "use strict";
 
-const axios             = require("axios").default;
-const moment            = require("moment");
-const uuid4v            = require("uuid/v4");
+const axios  = require("axios").default;
+const moment = require("moment");
+const uuid4v = require("uuid/v4");
+const crypto = require('crypto');
 const {TokenResponse, AuthenticationContext} = require("adal-node");
 const {CelastrinaError} = require("./CelastrinaError");
-const {Vault}           = require("./Vault");
+const {Vault} = require("./Vault");
 
 /**
  * @typedef _ManagedResourceToken
@@ -406,6 +407,11 @@ class NumericProperty extends Property {
         });
     }
 }
+
+
+
+
+
 /*
  * *********************************************************************************************************************
  * APPLICATION AUTHENTICATION AND AUTHORIZATION
@@ -1502,6 +1508,72 @@ class Configuration {
                     reject(exception);
                 }
             });
+    }
+}
+/*
+ * *********************************************************************************************************************
+ * CRYPTOGRAPHY
+ * *********************************************************************************************************************
+ */
+class Algorithm {
+    constructor(name) {
+        this._name = name;
+    }
+
+    /**
+     * @returns {string}
+     */
+    get name() {
+        return this._name;
+    }
+}
+class AES256Algorithm extends Algorithm {
+    /**
+     * @param {string} password
+     * @param {string} salt
+     * @param {string} iv
+     */
+    constructor(password, salt = "", iv) {
+        super("aes-256-cbc");
+    }
+}
+class Cryptography {
+    /**
+     * @param {Algorithm} algorithm
+     */
+    constructor(algorithm) {
+        this._cipher   = null;
+        this._decipher = null;
+    }
+
+    async initialize(configuration) {
+        return new Promise((resolve, reject) => {
+            reject(CelastrinaError.newError("Not supported."));
+        });
+    }
+
+    async encode(value) {
+        return new Promise((resolve, reject) => {
+            reject(CelastrinaError.newError("Not supported."));
+        });
+    }
+
+    async dencode(value) {
+        return new Promise((resolve, reject) => {
+            reject(CelastrinaError.newError("Not supported."));
+        });
+    }
+
+    async encrypt(value) {
+        return new Promise((resolve, reject) => {
+            reject(CelastrinaError.newError("Not supported."));
+        });
+    }
+
+    async decrypt(value) {
+        return new Promise((resolve, reject) => {
+            reject(CelastrinaError.newError("Not supported."));
+        });
     }
 }
 /*

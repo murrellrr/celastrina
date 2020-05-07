@@ -23,8 +23,8 @@
  */
 
 const {JwtSubject, Issuer, IssuerProperty, JwtConfiguration, HTTPContext, HTTPParameterFetch, HeaderParameterFetch,
-       QueryParameterFetch, BodyParameterFetch, HTTPParameterFetchProperty, JwtSentry, CookieRoleResolver,
-       CookieRoleResolverProperty, SecureCookieRoleResolver, SecureCookieRoleResolverProperty, HTTPFunction,
+       QueryParameterFetch, BodyParameterFetch, HTTPParameterFetchProperty, JwtSentry, CookieSessionResolver,
+       CookieSessionResolverProperty, SecureCookieSessionResolver, SecureCookieSessionResolverProperty, HTTPFunction,
        JwtHTTPFunction, JSONHTTPContext, JSONHTTPFunction, JwtJSONHTTPFunction} = require("./HttpFunction");
 const {Recaptcha, RecaptchaFunctionRole} = require("./Recaptcha");
 
@@ -39,10 +39,10 @@ module.exports = {
     QueryParameterFetch: QueryParameterFetch,
     BodyParameterFetch: BodyParameterFetch,
     HTTPParameterFetchProperty: HTTPParameterFetchProperty,
-    CookieRoleResolver: CookieRoleResolver,
-    CookieRoleResolverProperty: CookieRoleResolverProperty,
-    SecureCookieRoleResolver: SecureCookieRoleResolver,
-    SecureCookieRoleResolverProperty: SecureCookieRoleResolverProperty,
+    CookieSessionResolver: CookieSessionResolver,
+    CookieSessionResolverProperty: CookieSessionResolverProperty,
+    SecureCookieSessionResolver: SecureCookieSessionResolver,
+    SecureCookieSessionResolverProperty: SecureCookieSessionResolverProperty,
     JwtSentry: JwtSentry,
     HTTPFunction: HTTPFunction,
     JwtHTTPFunction: JwtHTTPFunction,

@@ -1404,12 +1404,27 @@ class Algorithm {
         return this._name;
     }
 
+    /**
+     * @returns {Promise<void>}
+     */
+    async initialize() {
+        return new Promise((resolve, reject) => {
+            resolve();
+        });
+    }
+
+    /**
+     * @returns {Promise<Cipher>}
+     */
     async createCipher() {
         return new Promise((resolve, reject) => {
             reject(CelastrinaError.newError("Not supported."));
         });
     }
 
+    /**
+     * @returns {Promise<Decipher>}
+     */
     async createDecipher() {
         return new Promise((resolve, reject) => {
             reject(CelastrinaError.newError("Not supported."));
@@ -1421,25 +1436,22 @@ class Algorithm {
  */
 class AES256Algorithm extends Algorithm {
     /**
-     * @param {string} password
+     * @param {string} key
      * @param {string} iv
-     * @param {string} salt
      */
-    constructor(password, iv, salt = "celastrina") {
+    constructor(key, iv) {
         super("aes-256-cbc");
-        this._password = password;
-        this._salt     = salt;
-        this._iv       = iv;
+        this._key = key;
+        this._iv  = iv;
     }
 
     /**
-     * @returns {Promise<string>}
-     * @private
+     * @returns {Promise<Cipher>}
      */
-    async _createKey() {
+    async createCipher() {
         return new Promise((resolve, reject) => {
             try {
-                resolve(crypto.scryptSync(this._password, this._salt, 24));
+                resolve(crypto.createCipheriv(this._name, this._key, this._iv));
             }
             catch(exception) {
                 reject(exception);
@@ -1448,42 +1460,16 @@ class AES256Algorithm extends Algorithm {
     }
 
     /**
-     * @returns {Promise<Cipher>}
-     */
-    async createCipher() {
-        return new Promise((resolve, reject) => {
-            this._createKey()
-                .then((key) => {
-                    try {
-                        resolve(crypto.createCipheriv(this._name, key, this._iv));
-                    }
-                    catch(exception) {
-                        reject(exception);
-                    }
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
-        });
-    }
-
-    /**
      * @returns {Promise<Decipher>}
      */
     async createDecipher() {
         return new Promise((resolve, reject) => {
-            this._createKey()
-                .then((key) => {
-                    try {
-                        resolve(crypto.createDecipheriv(this._name, key, this._iv));
-                    }
-                    catch(exception) {
-                        reject(exception);
-                    }
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            try {
+                resolve(crypto.createDecipheriv(this._name, this._key, this._iv));
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
@@ -1493,10 +1479,6 @@ class Cryptography {
      */
     constructor(algorithm) {
         this._algorithm = algorithm;
-        /** @type {Cipher} */
-        this._cipher     = null;
-        /** @type {Decipher} */
-        this._decipher   = null;
     }
 
     /**
@@ -1504,10 +1486,8 @@ class Cryptography {
      */
     async initialize() {
         return new Promise((resolve, reject) => {
-            Promise.all([this._algorithm.createCipher(), this._algorithm.createDecipher()])
-                .then((results) => {
-                    this._cipher   = results[0];
-                    this._decipher = results[1];
+            this._algorithm.initialize()
+                .then(() => {
                     resolve();
                 })
                 .catch((exception) => {
@@ -1517,16 +1497,22 @@ class Cryptography {
     }
 
     /**
-     * @param {string} value UTF8 string.
-     * @returns {Promise<string>} Base64 encded HEX string.
+     * @param {string} value
+     * @returns {Promise<string>}
      */
     async encrypt(value) {
         return new Promise((resolve, reject) => {
             try {
-                let encrypted = this._cipher.update(value, "utf8", "hex");
-                encrypted += this._cipher.final("hex");
-                encrypted  = Buffer.from(encrypted, "hex").toString("base64");
-                resolve(encrypted);
+                this._algorithm.createCipher()
+                    .then((cryp) => {
+                        let encrypted = cryp.update(value, "utf8", "hex");
+                        encrypted += cryp.final("hex");
+                        encrypted  = Buffer.from(encrypted, "hex").toString("base64");
+                        resolve(encrypted);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
             }
             catch(exception) {
                 reject(exception);
@@ -1541,10 +1527,16 @@ class Cryptography {
     async decrypt(value) {
         return new Promise((resolve, reject) => {
             try {
-                let encrypted = Buffer.from(value, "base64").toString("hex");
-                let decrypted = this._decipher.update(encrypted, "hex", "utf8");
-                decrypted += this._decipher.final("utf8");
-                resolve(decrypted);
+                this._algorithm.createDecipher()
+                    .then((cryp) => {
+                        let encrypted = Buffer.from(value, "base64").toString("hex");
+                        let decrypted = cryp.update(encrypted, "hex", "utf8");
+                        decrypted += cryp.final("utf8");
+                        resolve(decrypted);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
             }
             catch(exception) {
                 reject(exception);
@@ -1552,7 +1544,6 @@ class Cryptography {
         });
     }
 }
-
 /*
  * *********************************************************************************************************************
  * FUNCTION
@@ -1619,16 +1610,14 @@ class MonitorResponse {
             return "PASSED";
     }
 }
-
 /**
  * @abstract
  */
 class RoleResolver {
-    static CELASTRINA_CONFIG_SENTRY_ROLE_HANDLER = "celastrinajs.core.function.roles.resolver";
+    /** @type {string} */
+    static CELASTRINA_CONFIG_SENTRY_ROLE_RESOLVER = "celastrinajs.core.function.roles.resolver";
 
-    constructor() {
-        //
-    }
+    constructor() {}
 
     /**
      * @param {BaseContext} context
@@ -1644,7 +1633,7 @@ class RoleResolver {
 /**
  * @type {RoleResolver}
  */
-class BaseRoleResolver extends RoleResolver {
+class SessionRoleResolver extends RoleResolver {
     constructor() {
         super();
     }
@@ -1655,6 +1644,8 @@ class BaseRoleResolver extends RoleResolver {
      */
     async resolve(context) {
         return new Promise((resolve, reject) => {
+            let roles = context.getSessionProperty("roles", []);
+            context.subject.addRoles(roles);
             resolve(context.subject);
         });
     }
@@ -1874,10 +1865,10 @@ class BaseSentry {
             if(typeof this._localAppId !== "string")
                 this._localAppId = configuration.context.invocationId;
 
-            this._roleresolver = configuration.getValue(RoleResolver.CELASTRINA_CONFIG_SENTRY_ROLE_HANDLER,
+            this._roleresolver = configuration.getValue(RoleResolver.CELASTRINA_CONFIG_SENTRY_ROLE_RESOLVER,
                                                        null);
             if(this._roleresolver == null)
-                this._roleresolver = new BaseRoleResolver();
+                this._roleresolver = new SessionRoleResolver();
 
             this._loadResourceAuthorizations(configuration);
             this._loadApplicationAuthorizations(configuration.applicationAuthorizations)
@@ -1913,6 +1904,8 @@ class BaseContext {
         this._action          = "process";
         /** @type {null|BaseSentry} */
         this._sentry          = null;
+        /** @type {object} */
+        this._session         = {};
     }
 
     /**
@@ -2010,6 +2003,13 @@ class BaseContext {
     }
 
     /**
+     * @returns {object}
+     */
+    get session() {
+        return this._session;
+    }
+
+    /**
      * @param {string} name
      */
     getBinding(name) {
@@ -2022,6 +2022,38 @@ class BaseContext {
      */
     setBinding(name, value) {
         this._context.bindings[name] = value;
+    }
+
+    /**
+     * @param {string} name
+     * @param {*} [defaultValue=null]
+     * @returns {null|*}
+     */
+    getSessionProperty(name, defaultValue = null) {
+        let prop = this._session[name];
+        if(typeof prop === "undefined" || prop == null)
+            return defaultValue;
+        else
+            return prop;
+    }
+
+    /**
+     * @param {string} name
+     * @param {*} value
+     * @returns {BaseContext}
+     */
+    setSessionProperty(name, value) {
+        this._session[name] = value;
+        return this;
+    }
+
+    /**
+     * @param {object} source
+     * @returns {BaseContext}
+     */
+    loadSessionProperties(source) {
+        Object.assign(this._session, source);
+        return this;
     }
 
     /**

@@ -669,6 +669,7 @@ class HTTPContext extends BaseContext {
                     monitor = (typeof monitor === "string") ? (monitor === "true") : false;
                 }
                 this._monitor = monitor;
+                resolve();
             }
             catch(exception) {
                 reject(exception);
@@ -709,7 +710,19 @@ class HTTPContext extends BaseContext {
             Promise.all([super.initialize(configuration), this._setRequestId(), this._setMonitorMode(),
                                this._parseCookies()])
                 .then((results) => {
-                    resolve(results[0]);
+                    let sessioResolver = configuration.getValue(
+                        CookieSessionResolver.CELASTRINA_CONFIG_HTTP_SESSION_RESOLVER, null);
+                    if(sessioResolver instanceof CookieSessionResolver) {
+                        sessioResolver.resolve(/** @type {HTTPContext} */ results[0])
+                            .then((_context) => {
+                                resolve(_context);
+                            })
+                            .catch((exception) => {
+                                reject(exception);
+                            });
+                    }
+                    else
+                        resolve(results[0]);
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -1043,12 +1056,14 @@ class JwtSentry extends BaseSentry {
 /**
  * @type {RoleResolver}
  */
-class CookieRoleResolver extends RoleResolver {
+class CookieSessionResolver {
+    /** @type {string} */
+    static CELASTRINA_CONFIG_HTTP_SESSION_RESOLVER = "celastrinajs.core.function.http.session.resolver";
+
     /**
      * @param {string} [name="celastrina_session"]
      */
     constructor(name = "celastrina_session") {
-        super();
         this._name = name;
     }
 
@@ -1060,8 +1075,11 @@ class CookieRoleResolver extends RoleResolver {
     async _getCookie(context) {
         return new Promise((resolve, reject) => {
             let session = context.getCookie(this._name, null);
-            if(typeof session !== "string" || session.trim().length === 0)
+            if(typeof session !== "string" || session.trim().length === 0) {
+                context.log("Cookie '" + this._name + "' not found.", LOG_LEVEL.LEVEL_INFO,
+                            "CookieRoleResolver._getCookie(context)");
                 reject(CelastrinaError.newError("Not Authorized.", 401));
+            }
             else
                 resolve(session);
         });
@@ -1085,33 +1103,7 @@ class CookieRoleResolver extends RoleResolver {
 
     /**
      * @param {HTTPContext} context
-     * @param {object} session
-     * @returns {Promise<BaseSubject>}
-     * @private
-     */
-    async _setRoles(context, session) {
-        return new Promise((resolve, reject) => {
-            let roles = session.roles;
-            if(typeof roles === "undefined" || roles == null || !Array.isArray(roles)) {
-                context.log("Roles not found in session object.", LOG_LEVEL.LEVEL_ERROR,
-                            "CookieRoleResolver._setRoles(context, session)");
-                reject(CelastrinaError.newError("Not Authorized.", 401));
-            }
-            else {
-                context.subject.setRoles(roles)
-                    .then((subject) => {
-                        resolve(subject);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-        });
-    }
-
-    /**
-     * @param {BaseContext | HTTPContext} context
-     * @returns {Promise<BaseSubject>}
+     * @returns {Promise<HTTPContext>}
      */
     async resolve(context) {
         return new Promise((resolve, reject) => {
@@ -1120,10 +1112,8 @@ class CookieRoleResolver extends RoleResolver {
                     return this._getSession(context, cookie);
                 })
                 .then((session) => {
-                    return this._setRoles(context, session);
-                })
-                .then((subject) => {
-                    resolve(subject);
+                    context.loadSessionProperties(session);
+                    resolve(context);
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -1134,7 +1124,7 @@ class CookieRoleResolver extends RoleResolver {
 /**
  * @type {CookieRoleResolver}
  */
-class SecureCookieRoleResolver extends CookieRoleResolver {
+class SecureCookieSessionResolver extends CookieSessionResolver {
     /**
      * @param {Cryptography} crypto
      * @param {string} [name="celastrina_session"]
@@ -1168,7 +1158,7 @@ class SecureCookieRoleResolver extends CookieRoleResolver {
 /**
  * @type {JsonProperty}
  */
-class CookieRoleResolverProperty extends JsonProperty {
+class CookieSessionResolverProperty extends JsonProperty {
     /**
      * @param {string} name
      * @param {boolean} secure
@@ -1188,9 +1178,10 @@ class CookieRoleResolverProperty extends JsonProperty {
                 .then((obj) => {
                     if(!obj.hasOwnProperty("name"))
                         reject(CelastrinaValidationError.newValidationError(
-                            "Invalid CookieRoleResolver. _name is required.", "CookieRoleResolver._name"));
+                            "Invalid CookieSessionResolver. _name is required.",
+                                    "CookieSessionResolver._name"));
                     else
-                        resolve(new CookieRoleResolver(obj._name));
+                        resolve(new CookieSessionResolver(obj._name));
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -1202,7 +1193,7 @@ class CookieRoleResolverProperty extends JsonProperty {
 /**
  * @type {JsonProperty}
  */
-class SecureCookieRoleResolverProperty extends JsonProperty {
+class SecureCookieSessionResolverProperty extends JsonProperty {
     /**
      * @param {string} name
      * @param {boolean} secure
@@ -1222,19 +1213,26 @@ class SecureCookieRoleResolverProperty extends JsonProperty {
                 .then((obj) => {
                     if(!obj.hasOwnProperty("_name"))
                         reject(CelastrinaValidationError.newValidationError(
-                            "Invalid CookieRoleResolver. _name is required.", "CookieRoleResolver._name"));
-                    else if(!obj.hasOwnProperty("_password"))
+                            "Invalid SecureCookieSessionResolver. _name is required.",
+                            "SecureCookieSessionResolver._name"));
+                    else if(!obj.hasOwnProperty("_key"))
                         reject(CelastrinaValidationError.newValidationError(
-                            "Invalid CookieRoleResolver. _password is required.", "CookieRoleResolver._password"));
+                            "Invalid SecureCookieSessionResolver. _key is required.",
+                            "SecureCookieSessionResolver._key"));
                     else if(!obj.hasOwnProperty("_iv"))
                         reject(CelastrinaValidationError.newValidationError(
-                            "Invalid CookieRoleResolver. _iv is required.", "CookieRoleResolver._iv"));
-                    else if(!obj.hasOwnProperty("_salt"))
-                        reject(CelastrinaValidationError.newValidationError(
-                            "Invalid CookieRoleResolver. _salt is required.", "CookieRoleResolver._salt"));
-                    else
-                        resolve(new SecureCookieRoleResolver(new Cryptography(new AES256Algorithm(obj._password,
-                                                             obj._iv, obj._salt)), obj._name));
+                            "Invalid SecureCookieSessionResolver. _iv is required.",
+                            "SecureCookieSessionResolver._iv"));
+                    else {
+                        let crypto = new Cryptography(new AES256Algorithm(obj._key, obj._iv));
+                        crypto.initialize()
+                            .then(() => {
+                                resolve(new SecureCookieSessionResolver(crypto, obj._name));
+                            })
+                            .catch((exception) => {
+                                reject(exception);
+                            });
+                    }
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -1573,10 +1571,10 @@ module.exports = {
     QueryParameterFetch: QueryParameterFetch,
     BodyParameterFetch: BodyParameterFetch,
     HTTPParameterFetchProperty: HTTPParameterFetchProperty,
-    CookieRoleResolver: CookieRoleResolver,
-    CookieRoleResolverProperty: CookieRoleResolverProperty,
-    SecureCookieRoleResolver: SecureCookieRoleResolver,
-    SecureCookieRoleResolverProperty: SecureCookieRoleResolverProperty,
+    CookieSessionResolver: CookieSessionResolver,
+    CookieSessionResolverProperty: CookieSessionResolverProperty,
+    SecureCookieSessionResolver: SecureCookieSessionResolver,
+    SecureCookieSessionResolverProperty: SecureCookieSessionResolverProperty,
     JwtSentry: JwtSentry,
     HTTPFunction: HTTPFunction,
     JwtHTTPFunction: JwtHTTPFunction,

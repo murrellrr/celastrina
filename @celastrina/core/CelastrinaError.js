@@ -22,17 +22,16 @@
  * SOFTWARE.
  */
 
+/**
+ * @author Robert R Murrell
+ * @copyright Robert R Murrell
+ * @license MIT
+ */
+
 "use strict";
 
-/**
- * @brief
- *
- * @author Robert R Murrell
- */
 class CelastrinaError {
     /**
-     * @brief
-     *
      * @param {Error} cause
      * @param {int} code
      * @param {boolean} drop
@@ -44,8 +43,6 @@ class CelastrinaError {
     }
 
     /**
-     * @brief
-     *
      * @returns {string}
      */
     toString() {
@@ -57,12 +54,9 @@ class CelastrinaError {
     }
 
     /**
-     * @brief
-     *
      * @param {string} message
      * @param {int} code
      * @param {boolean} drop
-     *
      * @returns {CelastrinaError}
      */
     static newError(message, code = 500, drop = false) {
@@ -70,28 +64,20 @@ class CelastrinaError {
     }
 
     /**
-     * @brief
-     *
      * @param {Error} error
      * @param {int} code
      * @param {boolean} drop
-     *
      * @returns {CelastrinaError}
      */
     static wrapError(error, code = 500, drop = false) {
         return new CelastrinaError(error, code, drop);
     }
 }
-
 /**
- * @brief
- *
- * @author Robert R Murrell
+ * @type {CelastrinaError}
  */
 class CelastrinaValidationError extends CelastrinaError {
     /**
-     * @brief
-     *
      * @param {Error} error
      * @param {int} code
      * @param {boolean} drop
@@ -103,8 +89,6 @@ class CelastrinaValidationError extends CelastrinaError {
     }
 
     /**
-     * @brief
-     *
      * @returns {string}
      */
     toString() {
@@ -116,8 +100,6 @@ class CelastrinaValidationError extends CelastrinaError {
     }
 
     /**
-     * @brief
-     *
      * @param {string} message
      * @param {int} code
      * @param {boolean} drop
@@ -130,13 +112,10 @@ class CelastrinaValidationError extends CelastrinaError {
     }
 
     /**
-     * @brief
-     *
      * @param {Error} error
      * @param {int} code
      * @param {boolean} drop
      * @param {string} tag
-     *
      * @returns {CelastrinaValidationError}
      */
     static wrapValidationError(error, tag = "", drop = false, code = 400) {

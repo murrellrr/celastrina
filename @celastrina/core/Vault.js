@@ -22,6 +22,12 @@
  * SOFTWARE.
  */
 
+/**
+ * @author Robert R Murrell
+ * @copyright Robert R Murrell
+ * @license MIT
+ */
+
 "use strict";
 
 const axios  = require("axios").default;
@@ -36,12 +42,10 @@ const axios  = require("axios").default;
  */
 
 /**
- * @brief
  * @author Robert R Murrell
  */
 class Vault {
     /**
-     * @brief
      * @param {string} token
      */
     constructor(token) {
@@ -51,7 +55,6 @@ class Vault {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get token() {
@@ -59,7 +62,6 @@ class Vault {
     }
 
     /**
-     * @brief
      * @param {string} identifier
      * @returns {Promise<string>}
      */
@@ -76,7 +78,11 @@ class Vault {
             });
     }
 }
-
+/*
+ * *********************************************************************************************************************
+ * EXPORTS
+ * *********************************************************************************************************************
+ */
 module.exports = {
     Vault: Vault
 };

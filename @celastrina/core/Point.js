@@ -22,19 +22,19 @@
  * SOFTWARE.
  */
 
+/**
+ * @author Robert R Murrell
+ * @copyright Robert R Murrell
+ * @license MIT
+ */
+
 "use strict";
 
 /**
- * @brief
- *
- * @author Robert R Murrell
- *
  * @type {{lat: number, lon: number}}
  */
 class Point {
     /**
-     * @brief
-     *
      * @param {number} lat
      * @param {number} lon
      */
@@ -44,8 +44,6 @@ class Point {
     }
 
     /**
-     * @brief
-     *
      * @returns {string}
      */
     toString() {

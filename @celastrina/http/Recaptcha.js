@@ -22,6 +22,12 @@
  * SOFTWARE.
  */
 
+/**
+ * @author Robert R Murrell
+ * @copyright Robert R Murrell
+ * @license MIT
+ */
+
 "use strict";
 
 const axios       = require("axios").default;
@@ -42,13 +48,10 @@ const {HTTPParameterFetch, HeaderParameterFetch, HTTPContext} = require("./HttpF
  */
 
 /**
- * @brief
- * @author Robert R Murrell
  * @type {{url: string, secret: string, score: number, timeout: number}}
  */
 class Recaptcha {
     /**
-     * @brief
      * @param {string} secret
      * @param {number} [score=.8]
      * @param {string} [url="https://www.google.com/recaptcha/api/siteverify"]
@@ -62,7 +65,6 @@ class Recaptcha {
     }
 
     /**
-     * @brief
      * @param {string} token
      * @returns {Promise<number>}
      */
@@ -94,12 +96,10 @@ class Recaptcha {
     }
 }
 /**
- * @brief
- * @author Robert R Murrell
+ * @type {FunctionRole}
  */
 class RecaptchaFunctionRole extends FunctionRole {
     /**
-     * @brief
      * @param {string} [action]
      * @param {Array.<string>} roles
      * @param {ValueMatch} [match]
@@ -115,7 +115,6 @@ class RecaptchaFunctionRole extends FunctionRole {
     }
 
     /**
-     * @brief
      * @param {string} action
      * @param {BaseContext | HTTPContext} context
      * @returns {Promise<boolean>}

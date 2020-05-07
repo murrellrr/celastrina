@@ -22,6 +22,12 @@
  * SOFTWARE.
  */
 
+/**
+ * @author Robert R Murrell
+ * @copyright Robert R Murrell
+ * @license MIT
+ */
+
 "use strict";
 
 const axios  = require("axios").default;
@@ -101,7 +107,6 @@ class PropertyHandler {
     constructor() {}
 
     /**
-     * @brief
      * @param {string} key
      * @param {null|string} [defaultValue]
      * @returns {Promise<string>}
@@ -116,7 +121,6 @@ class PropertyHandler {
     }
 
     /**
-     * @brief
      * @param {string} key
      * @param {null|string} [defaultValue]
      * @returns {Promise<string>}
@@ -126,7 +130,6 @@ class PropertyHandler {
     }
 }
 /**
- * @brief Handler class to load properties from process.env or Azure Vault as secrets.
  * @author Robert R Murrell
  * @type {{_vault: Vault}}
  */
@@ -183,16 +186,11 @@ class VaultPropertyHandler extends PropertyHandler {
     }
 }
 /**
- * @brief Base class for Configuration a configuration Property
- * @description A Configuration Property is a key=value pair that can be loaded from process.env or a secret in
- *              Azure Vault.
- * @author Robert R Murrell
  * @type {{_name:string, _type:string, _secure:boolean, _defaultValue:null|*}}
  * @abstract
  */
 class Property {
     /**
-     * @brief
      * @param {string} name
      * @param {boolean} [secure]
      * @param {null|*} [defaultValue]
@@ -206,7 +204,6 @@ class Property {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get name() {
@@ -214,7 +211,6 @@ class Property {
     }
 
     /**
-     * @brief
      * @returns {boolean}
      */
     get secure() {
@@ -222,7 +218,6 @@ class Property {
     }
 
     /**
-     * @brief
      * @returns {*}
      */
     get defaultValue() {
@@ -230,9 +225,6 @@ class Property {
     }
 
     /**
-     * @brief Lookup a value based on a key.
-     * @description Default behavior is to retrieve the value from the {PropertyHandler} instance. Override this method
-     *              to get property values from other locations.
      * @param {PropertyHandler} handler
      * @returns {Promise<null|Object|string|boolean|number>}
      */
@@ -244,10 +236,7 @@ class Property {
     }
 
     /**
-     * @brief Convert from a string value to the desired property type.
-     * @description. Default behavior is to throw an error. Override this method to convert a string to the desired
-     *               type.
-     * @param {string} value The string value to convert.
+     * @param {string} value
      * @returns {Promise<null|Object|string|boolean|number>}
      */
     async resolve(value) {
@@ -257,7 +246,6 @@ class Property {
     }
 
     /**
-     * @brief
      * @param {PropertyHandler} handler
      * @returns {Promise<null|Object|string|boolean|number>}
      */
@@ -277,13 +265,10 @@ class Property {
     }
 }
 /**
- * @brief Loads an Object from a string property containing JSON.
- * @author Robert R Murrell
  * @type {Property}
  */
 class JsonProperty extends Property {
     /**
-     * @brief
      * @param {string} name
      * @param {boolean} secure
      * @param {null|string} defaultValue
@@ -293,7 +278,6 @@ class JsonProperty extends Property {
     }
 
     /**
-     * @brief
      * @param {string} value
      * @returns {Promise<null|Object>}
      */
@@ -309,13 +293,10 @@ class JsonProperty extends Property {
     }
 }
 /**
- * @brief Loads a string.
- * @author Robert R Murrell
  * @type {Property}
  */
 class StringProperty extends Property {
     /**
-     * @brief
      * @param {string} name
      * @param {boolean} secure
      * @param {null|string} defaultValue
@@ -325,7 +306,6 @@ class StringProperty extends Property {
     }
 
     /**
-     * @brief
      * @param {string} value
      * @returns {Promise<null|string>}
      */
@@ -341,10 +321,6 @@ class StringProperty extends Property {
     }
 }
 /**
- * @brief Loads a boolean from a string.
- * @description Derrives the boolean value from <code>value.toLowerCase() === "true"</code> where the value "value"
- *              equates to <code>true</code> and any other value to <code>false</code>.
- * @author Robert R Murrell
  * @type {Property}
  */
 class BooleanProperty extends Property {
@@ -375,14 +351,10 @@ class BooleanProperty extends Property {
     }
 }
 /**
- * @brief Loads a number from a string.
- * @description Derrives the number from <code>Number(value)</code>.
- * @author Robert R Murrell
  * @type {Property}
  */
 class NumericProperty extends Property {
     /**
-     * @brief
      * @param {string} name
      * @param {boolean} secure
      * @param {null|number} defaultValue
@@ -392,7 +364,6 @@ class NumericProperty extends Property {
     }
 
     /**
-     * @brief
      * @param {string} value
      * @returns {Promise<null|number>}
      */
@@ -407,28 +378,18 @@ class NumericProperty extends Property {
         });
     }
 }
-
-
-
-
-
 /*
  * *********************************************************************************************************************
  * APPLICATION AUTHENTICATION AND AUTHORIZATION
  * *********************************************************************************************************************
  */
 /**
- * @brief Application authorization for MSAL client configuration
- * @description An {ApplicationAuthorization} is a configuration for an Azure Application credential. This allows
- *              functions to perform actions as the application identity, granting access to resources provided to the
- *              application.
  * @type {{_authority:StringProperty|string, _tenant:StringProperty|string, _id:StringProperty|string,
  *         _secret:StringProperty|string}}
  * @see https://docs.microsoft.com/en-us/azure/active-directory/develop/msal-client-application-configuration
  */
 class ApplicationAuthorization {
     /**
-     * @brief
      * @param {StringProperty|string} authority
      * @param {StringProperty|string} tenant
      * @param {StringProperty|string} id
@@ -448,7 +409,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get authority() {
@@ -456,7 +416,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get tenant() {
@@ -464,7 +423,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get id() {
@@ -472,7 +430,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get secret() {
@@ -480,7 +437,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @returns {boolean}
      */
     get managed() {
@@ -488,7 +444,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @param {StringProperty|string} resource
      * @returns {ApplicationAuthorization}
      */
@@ -498,7 +453,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @returns {Array.<string>}
      */
     get resources() {
@@ -506,7 +460,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @param {string} resource
      * @returns {Promise<string>}
      */
@@ -535,7 +488,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @param {string} resource
      * @returns {Promise<string>}
      * @private
@@ -561,7 +513,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @param {string} resource
      * @returns {Promise<string>}
      * @private
@@ -585,7 +536,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @param {string} resource
      * @returns {Promise<string>}
      */
@@ -607,7 +557,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @param {Array.<_CelastrinaToken>} tokens
      * @returns {Promise<void>}
      * @private
@@ -627,7 +576,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @param {{params:URLSearchParams, headers:Object}} config
      * @param {string} resource
      * @returns {Promise<_CelastrinaToken>}
@@ -649,7 +597,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @returns {Promise<void>}
      * @private
      */
@@ -680,7 +627,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @param {AuthenticationContext} adContext
      * @param {string} resource
      * @returns {Promise<_CelastrinaToken>}
@@ -702,7 +648,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @returns {Promise<void>}
      * @private
      */
@@ -734,7 +679,6 @@ class ApplicationAuthorization {
     }
 
     /**
-     * @brief
      * @returns {Promise<void>}
      */
     async initialize() {
@@ -759,12 +703,10 @@ class ApplicationAuthorization {
     }
 }
 /**
- * @brief
  * @author Robert R Murrell
  */
 class ApplicationAuthorizationProperty extends JsonProperty {
     /**
-     * @brief
      * @param {string} name
      * @param {boolean} secure
      * @param {null|string} defaultValue
@@ -775,7 +717,6 @@ class ApplicationAuthorizationProperty extends JsonProperty {
     }
 
     /**
-     * @brief
      * @param {string} value
      * @returns {Promise<null|Object>}
      */
@@ -824,15 +765,8 @@ class ApplicationAuthorizationProperty extends JsonProperty {
  * PROPERTIES LOADER FOR ASYNC LOADING OF CONFIGURATION
  * *********************************************************************************************************************
  */
-/**
- * @brief Loads a property asynchronously.
- * @description Simple Factory class for creating a promise that will load a {Property} and set it asynchrounously. This
- *              is to facillitate concurrent property loading on start-up, improving performance.
- * @author Robert R Murrell
- */
 class PropertyLoader {
     /**
-     * @brief
      * @param {Object} object
      * @param {string} attribute
      * @param {Property} property
@@ -857,13 +791,8 @@ class PropertyLoader {
  * SECURITY
  * *********************************************************************************************************************
  */
-/**
- * @brief Base Subject for authentication and authorization.
- * @author Robert R Murrell
- */
 class BaseSubject {
     /**
-     * @brief
      * @param {string} id
      * @param {Array.<string>} roles
      */
@@ -873,7 +802,6 @@ class BaseSubject {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get id() {
@@ -881,7 +809,6 @@ class BaseSubject {
     }
 
     /**
-     * @brief
      * @returns {Array.<string>}
      */
     get roles() {
@@ -889,7 +816,6 @@ class BaseSubject {
     }
 
     /**
-     * @brief
      * @param {string} role
      */
     addRole(role) {
@@ -897,7 +823,6 @@ class BaseSubject {
     }
 
     /**
-     * @brief
      * @param {Array.<string>} roles
      */
     addRoles(roles) {
@@ -905,7 +830,6 @@ class BaseSubject {
     }
 
     /**
-     * @brief
      * @param {string} role
      * @returns {Promise<boolean>}
      */
@@ -916,7 +840,6 @@ class BaseSubject {
     }
 
     /**
-     * @brief
      * @returns {{subject:string, roles:Array.<string>}}
      */
     toJSON() {
@@ -924,8 +847,6 @@ class BaseSubject {
     }
 }
 /**
- * @brief Base class for matching roles to assertions.
- * @author Robert R Murrell
  * @abstract
  */
 class ValueMatch {
@@ -938,7 +859,6 @@ class ValueMatch {
     }
 
     /**
-     * @brief
      * @param {Array.<string>} assertion
      * @param {Array.<string>} values
      * @returns {Promise<boolean>}
@@ -950,7 +870,6 @@ class ValueMatch {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get type() {
@@ -958,8 +877,7 @@ class ValueMatch {
     }
 }
 /**
- * @brief Checks that any assertions matches any values.
- * @author Robert R Murrell
+ * @type {ValueMatch}
  */
 class MatchAny extends ValueMatch {
     constructor() {
@@ -989,8 +907,7 @@ class MatchAny extends ValueMatch {
     }
 }
 /**
- * @brief Checks that all assertions match all values.
- * @author Robert R Murrell
+ * @type {ValueMatch}
  */
 class MatchAll extends ValueMatch {
     constructor() {
@@ -1020,8 +937,7 @@ class MatchAll extends ValueMatch {
     }
 }
 /**
- * @brief Checks that no assertions match any values.
- * @author Robert R Murrell
+ * @type {ValueMatch}
  */
 class MatchNone extends ValueMatch {
     constructor() {
@@ -1029,7 +945,6 @@ class MatchNone extends ValueMatch {
     }
 
     /**
-     * @brief No role in assertion must match a role in values.
      * @param {Array.<string>} assertion
      * @param {Array.<string>} values
      * @returns {Promise<boolean>}
@@ -1050,13 +965,8 @@ class MatchNone extends ValueMatch {
         });
     }
 }
-/**
- * @brief A role that is allowed to use this Function.
- * @author Robert R Murrell
- */
 class FunctionRole {
     /**
-     * @brief
      * @param {string} [action]
      * @param {Array.<string>} roles
      * @param {ValueMatch} [match]
@@ -1068,7 +978,6 @@ class FunctionRole {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get action() {
@@ -1076,7 +985,6 @@ class FunctionRole {
     }
 
     /**
-     * @brief
      * @param {string} role
      * @returns {FunctionRole}
      */
@@ -1086,7 +994,6 @@ class FunctionRole {
     }
 
     /**
-     * @brief
      * @returns {Array<string>}
      */
     get roles() {
@@ -1094,7 +1001,6 @@ class FunctionRole {
     }
 
     /**
-     * @brief
      * @param {string} action
      * @param {BaseContext} context
      * @returns {Promise<boolean>}
@@ -1116,12 +1022,10 @@ class FunctionRole {
     }
 }
 /**
- * @brief
- * @author Robert R Murrell
+ * @type {JsonProperty}
  */
 class FunctionRoleProperty extends JsonProperty {
     /**
-     * @brief
      * @param {string} name
      * @param {boolean} secure
      * @param {null|string} defaultValue
@@ -1131,7 +1035,6 @@ class FunctionRoleProperty extends JsonProperty {
     }
 
     /**
-     * @brief
      * @param type
      * @returns {Promise<ValueMatch>}
      * @private
@@ -1155,7 +1058,6 @@ class FunctionRoleProperty extends JsonProperty {
     }
 
     /**
-     * @brief
      * @param {string} value
      * @returns {Promise<null|Object>}
      */
@@ -1201,15 +1103,12 @@ class FunctionRoleProperty extends JsonProperty {
         });
     }
 }
-
 /*
  * *********************************************************************************************************************
  * CONFIGURATION
  * *********************************************************************************************************************
  */
 /**
- * @brief The base configuration for Celastrina.
- * @author Robert R Murrell
  * @type {{_name:StringProperty|string, managed:BooleanProperty|boolean}}
  */
 class Configuration {
@@ -1218,7 +1117,6 @@ class Configuration {
     static CELASTRINA_CONFIG_ROLES                     = "celastrinajs.core.function.roles";
 
     /**
-     * @brief
      * @param {StringProperty|string} name
      * @param {BooleanProperty|boolean} [managed=true]
      */
@@ -1245,7 +1143,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get name() {
@@ -1253,7 +1150,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @returns {boolean}
      */
     get isManaged() {
@@ -1261,7 +1157,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @returns {PropertyHandler}
      */
     get properties() {
@@ -1269,7 +1164,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @returns {object}
      */
     get values(){
@@ -1277,7 +1171,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @param {string} key
      * @param {*} value
      * @returns {Configuration}
@@ -1290,7 +1183,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @param {string} key
      * @param {*} [defaultValue=null]
      * @returns {*}
@@ -1303,7 +1195,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @param {ApplicationAuthorizationProperty|ApplicationAuthorization} application
      * @returns {Configuration}
      */
@@ -1321,12 +1212,7 @@ class Configuration {
     }
 
     /**
-     * @brief Adds a resource name for authorization.
-     * @description Resource authorizations are used for Azure Functions with managed identities. If using an
-     *              application identity us {ApplicationAuthorization} instead.
-     *              In order for resource authorizations to work the {_managed} attribute of this {Configuration}
-     *              <strong>must be <code>true</code></strong> or the function will not boot strap.
-     * @param {StringProperty|string} resource The name of the resource to authorize.
+     * @param {StringProperty|string} resource
      * @returns {Configuration}
      */
     addResourceAuthorization(resource) {
@@ -1340,7 +1226,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @returns {Array<string>}
      */
     get resourceAuthorizations() {
@@ -1348,7 +1233,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @param {FunctionRoleProperty|FunctionRole} role
      * @returns {Configuration}
      */
@@ -1358,7 +1242,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @returns {Array<FunctionRole>}
      */
     get roles() {
@@ -1366,7 +1249,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @returns {_AzureFunctionContext}
      */
     get context() {
@@ -1374,7 +1256,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @param {string} endpoint
      * @param {string} secret
      * @returns {Promise<string>}
@@ -1399,7 +1280,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @return {Promise<void>}
      * @private
      */
@@ -1440,7 +1320,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @param {Object} obj
      * @param {Array.<Promise>} promises
      * @private
@@ -1451,11 +1330,7 @@ class Configuration {
                 let local = obj[prop];
                 if(typeof local !== "undefined" && local != null) {
                     if(local instanceof Property)
-                        if(local.secure && !this._managed)
-                            throw CelastrinaError.newError("Managed configuration required. Property '" +
-                                local.name + "' is secure.");
-                        else
-                            promises.unshift(PropertyLoader.load(obj, prop, local, this._handler));
+                        promises.unshift(PropertyLoader.load(obj, prop, local, this._handler));
                     else
                         this._load(local, promises);
                 }
@@ -1464,7 +1339,6 @@ class Configuration {
     }
 
     /**
-     * @brief
      * @param {_AzureFunctionContext} context
      * @returns {Promise<void>}
      */
@@ -1515,6 +1389,9 @@ class Configuration {
  * CRYPTOGRAPHY
  * *********************************************************************************************************************
  */
+/**
+ * @abstract
+ */
 class Algorithm {
     constructor(name) {
         this._name = name;
@@ -1526,15 +1403,88 @@ class Algorithm {
     get name() {
         return this._name;
     }
+
+    async createCipher() {
+        return new Promise((resolve, reject) => {
+            reject(CelastrinaError.newError("Not supported."));
+        });
+    }
+
+    async createDecipher() {
+        return new Promise((resolve, reject) => {
+            reject(CelastrinaError.newError("Not supported."));
+        });
+    }
 }
+/**
+ * @type {Algorithm}
+ */
 class AES256Algorithm extends Algorithm {
     /**
      * @param {string} password
-     * @param {string} salt
      * @param {string} iv
+     * @param {string} salt
      */
-    constructor(password, salt = "", iv) {
+    constructor(password, iv, salt = "celastrina") {
         super("aes-256-cbc");
+        this._password = password;
+        this._salt     = salt;
+        this._iv       = iv;
+    }
+
+    /**
+     * @returns {Promise<string>}
+     * @private
+     */
+    async _createKey() {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(crypto.scryptSync(this._password, this._salt, 24));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+
+    /**
+     * @returns {Promise<Cipher>}
+     */
+    async createCipher() {
+        return new Promise((resolve, reject) => {
+            this._createKey()
+                .then((key) => {
+                    try {
+                        resolve(crypto.createCipheriv(this._name, key, this._iv));
+                    }
+                    catch(exception) {
+                        reject(exception);
+                    }
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+
+    /**
+     * @returns {Promise<Decipher>}
+     */
+    async createDecipher() {
+        return new Promise((resolve, reject) => {
+            this._createKey()
+                .then((key) => {
+                    try {
+                        resolve(crypto.createDecipheriv(this._name, key, this._iv));
+                    }
+                    catch(exception) {
+                        reject(exception);
+                    }
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
     }
 }
 class Cryptography {
@@ -1542,48 +1492,73 @@ class Cryptography {
      * @param {Algorithm} algorithm
      */
     constructor(algorithm) {
-        this._cipher   = null;
-        this._decipher = null;
+        this._algorithm = algorithm;
+        /** @type {Cipher} */
+        this._cipher     = null;
+        /** @type {Decipher} */
+        this._decipher   = null;
     }
 
-    async initialize(configuration) {
+    /**
+     * @returns {Promise<void>}
+     */
+    async initialize() {
         return new Promise((resolve, reject) => {
-            reject(CelastrinaError.newError("Not supported."));
+            Promise.all([this._algorithm.createCipher(), this._algorithm.createDecipher()])
+                .then((results) => {
+                    this._cipher   = results[0];
+                    this._decipher = results[1];
+                    resolve();
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
         });
     }
 
-    async encode(value) {
-        return new Promise((resolve, reject) => {
-            reject(CelastrinaError.newError("Not supported."));
-        });
-    }
-
-    async dencode(value) {
-        return new Promise((resolve, reject) => {
-            reject(CelastrinaError.newError("Not supported."));
-        });
-    }
-
+    /**
+     * @param {string} value UTF8 string.
+     * @returns {Promise<string>} Base64 encded HEX string.
+     */
     async encrypt(value) {
         return new Promise((resolve, reject) => {
-            reject(CelastrinaError.newError("Not supported."));
+            try {
+                let encrypted = this._cipher.update(value, "utf8", "hex");
+                encrypted += this._cipher.final("hex");
+                encrypted  = Buffer.from(encrypted, "hex").toString("base64");
+                resolve(encrypted);
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 
+    /**
+     * @param {string} value Base64 encded HEX string.
+     * @returns {Promise<string>}
+     */
     async decrypt(value) {
         return new Promise((resolve, reject) => {
-            reject(CelastrinaError.newError("Not supported."));
+            try {
+                let encrypted = Buffer.from(value, "base64").toString("hex");
+                let decrypted = this._decipher.update(encrypted, "hex", "utf8");
+                decrypted += this._decipher.final("utf8");
+                resolve(decrypted);
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
+
 /*
  * *********************************************************************************************************************
  * FUNCTION
  * *********************************************************************************************************************
  */
 /**
- * @brief Logging level for the context logger.
- * @author Robert R Murrell
  * @type {{LEVEL_TRACE: number, LEVEL_INFO: number, LEVEL_VERBOSE: number, LEVEL_WARN: number, LEVEL_ERROR: number}}
  */
 const LOG_LEVEL = {
@@ -1594,8 +1569,6 @@ const LOG_LEVEL = {
     LEVEL_ERROR:   4
 };
 /**
- * @brief Response object to hold the results of test run during a monitoring request.
- * @author Robert R Murrell
  * @type {{_topic: string, _passed: Object, _failed: Object, failed: boolean}}
  */
 class MonitorResponse {
@@ -1606,7 +1579,6 @@ class MonitorResponse {
     }
 
     /**
-     * @brief
      * @returns {Object}
      */
     get passed() {
@@ -1614,7 +1586,6 @@ class MonitorResponse {
     }
 
     /**
-     * @brief
      * @returns {Object}
      */
     get failed() {
@@ -1622,7 +1593,6 @@ class MonitorResponse {
     }
 
     /**
-     * @brief Sets a check that was made by this monitor that passed.
      * @param {string} probe
      * @param {string} message
      */
@@ -1631,7 +1601,6 @@ class MonitorResponse {
     }
 
     /**
-     * @brief Sets a check that was made by this monitor that failed.
      * @param {string} probe
      * @param {string} message
      */
@@ -1641,7 +1610,6 @@ class MonitorResponse {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get result() {
@@ -1651,19 +1619,59 @@ class MonitorResponse {
             return "PASSED";
     }
 }
+
 /**
- * @brief Base class for handling credentialling, authentication, and authorization.
+ * @abstract
+ */
+class RoleResolver {
+    static CELASTRINA_CONFIG_SENTRY_ROLE_HANDLER = "celastrinajs.core.function.roles.resolver";
+
+    constructor() {
+        //
+    }
+
+    /**
+     * @param {BaseContext} context
+     * @returns {Promise<BaseSubject>}
+     */
+    async resolve(context) {
+        return new Promise((resolve, reject) => {
+            reject(CelastrinaError.newError("Not Implemented."));
+        });
+    }
+}
+
+/**
+ * @type {RoleResolver}
+ */
+class BaseRoleResolver extends RoleResolver {
+    constructor() {
+        super();
+    }
+
+    /**
+     * @param {BaseContext} context
+     * @returns {Promise<BaseSubject>}
+     */
+    async resolve(context) {
+        return new Promise((resolve, reject) => {
+            resolve(context.subject);
+        });
+    }
+}
+/**
  * @type {{_appauth:Object}}
  */
 class BaseSentry {
     constructor() {
-        this._appauth    = {};
-        this._roles      = {};
+        this._appauth = {};
+        this._roles = {};
+        /** @type {null|RoleResolver} */
+        this._roleresolver = null;
         this._localAppId = null;
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get localApplicationId() {
@@ -1671,7 +1679,6 @@ class BaseSentry {
     }
 
     /**
-     * @brief
      * @returns {Object}
      */
     get roles() {
@@ -1679,11 +1686,8 @@ class BaseSentry {
     }
 
     /**
-     * @brief Returns the authorization token for an application or managed identity and resource.
-     * @param {string} resource The resource to get an authorization token for. Example https://database.windows.net/.
-     *                 See https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/
-     *                 services-support-managed-identities for more information.
-     * @param {null|string} [id] The application ID, or the ID of the managed identity.
+     * @param {string} resource
+     * @param {null|string} [id]
      * @returns {Promise<string>}
      */
     async getAuthorizationToken(resource, id = null) {
@@ -1701,7 +1705,6 @@ class BaseSentry {
     }
 
     /**
-     * @brief
      * @param {BaseContext} context
      * @returns {Promise<BaseSubject>}
      */
@@ -1712,7 +1715,6 @@ class BaseSentry {
     }
 
     /**
-     * @brief
      * @param {BaseContext} context
      * @returns {Promise<void>}
      */
@@ -1742,18 +1744,22 @@ class BaseSentry {
     }
 
     /**
-     * @brief
      * @param {BaseContext} context
      * @returns {Promise<BaseSubject>}
      */
     async setRoles(context) {
         return new Promise((resolve, reject) => {
-            resolve(context.subject);
+            this._roleresolver.resolve(context)
+                .then((subject) => {
+                    resolve(subject);
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
         });
     }
 
     /**
-     * @brief
      * @param {ApplicationAuthorization} authorization
      * @returns {Promise<void>}
      * @private
@@ -1777,7 +1783,6 @@ class BaseSentry {
     }
 
     /**
-     * @brief
      * @param {Array.<ApplicationAuthorization>} applications
      * @returns {Promise<void>}
      * @private
@@ -1803,7 +1808,6 @@ class BaseSentry {
     }
 
     /**
-     * @brief
      * @param {Configuration} configuration
      * @private
      */
@@ -1816,7 +1820,6 @@ class BaseSentry {
     }
 
     /**
-     * @brief
      * @param {FunctionRole} role
      * @returns {Promise<void>}
      * @private
@@ -1834,7 +1837,6 @@ class BaseSentry {
     }
 
     /**
-     * @brief
      * @param {Array.<FunctionRole>} roles
      * @returns {Promise<void>}
      * @private
@@ -1862,16 +1864,21 @@ class BaseSentry {
     }
 
     /**
-     * @brief
      * @param {Configuration} configuration
      * @returns {Promise<BaseSentry>}
      */
     async initialize(configuration) {
         return new Promise((resolve, reject) => {
             // Set up the local application id.
-            this._localAppId = process.env["CELASTRINA_MSI_OBJECT_ID"];
+            this._localAppId = configuration.properties.getEnvironmentProperty("CELASTRINA_MSI_OBJECT_ID");
             if(typeof this._localAppId !== "string")
                 this._localAppId = configuration.context.invocationId;
+
+            this._roleresolver = configuration.getValue(RoleResolver.CELASTRINA_CONFIG_SENTRY_ROLE_HANDLER,
+                                                       null);
+            if(this._roleresolver == null)
+                this._roleresolver = new BaseRoleResolver();
+
             this._loadResourceAuthorizations(configuration);
             this._loadApplicationAuthorizations(configuration.applicationAuthorizations)
                 .then(() => {
@@ -1886,13 +1893,8 @@ class BaseSentry {
         });
     }
 }
-/**
- * @brief The base class for representing the context of a function invocation.
- * @author Robert R Murrell
- */
 class BaseContext {
     /**
-     * @brief
      * @param {_AzureFunctionContext} context
      * @param {string} name
      * @param {PropertyHandler} properties
@@ -1914,7 +1916,6 @@ class BaseContext {
     }
 
     /**
-     * @brief
      * @brief {Configuration} configration
      * @returns {Promise<BaseContext>}
      */
@@ -1932,7 +1933,6 @@ class BaseContext {
     }
 
     /**
-     * @brief Returns true if this a monitor message, false otherwise.
      * @returns {boolean}
      */
     get isMonitorInvocation() {
@@ -1940,8 +1940,6 @@ class BaseContext {
     }
 
     /**
-     * @brief Returns the monitor response or null if this was not a monitor message.
-     * @description Use this to record your passed or failed checks you've mode.
      * @returns {null|MonitorResponse}
      */
     get monitorResponse() {
@@ -1949,7 +1947,6 @@ class BaseContext {
     }
 
     /**
-     * @brief
      * @returns {_AzureFunctionContext}
      */
     get context() {
@@ -1957,8 +1954,6 @@ class BaseContext {
     }
 
     /**
-     * @brief Returns the name for this context.
-     * @description The name is the textual context of this software context and is used in logging.
      * @returns {string}
      */
     get name() {
@@ -1966,8 +1961,6 @@ class BaseContext {
     }
 
     /**
-     * @brief Returns the invocation ID assigned by azure during function invocation.
-     * @description This is not the same as the request ID, which is assigned by Celastrina.
      * @returns {string}
      */
     get invocationId() {
@@ -1975,7 +1968,6 @@ class BaseContext {
     }
 
     /**
-     * @brief Returns the uuid for this transaction as assigned by Celastrina.
      * @returns {string}
      */
     get requestId() {
@@ -1983,7 +1975,6 @@ class BaseContext {
     }
 
     /**
-     * @brief
      * @returns {BaseSentry}
      */
     get sentry() {
@@ -1991,7 +1982,6 @@ class BaseContext {
     }
 
     /**
-     * @brief
      * @param {BaseSentry} sentry
      */
     set sentry(sentry) {
@@ -1999,7 +1989,6 @@ class BaseContext {
     }
 
     /**
-     * @brief
      * @returns {BaseSubject}
      */
     get subject() {
@@ -2007,7 +1996,6 @@ class BaseContext {
     }
 
     /**
-     * @brief
      * @param {BaseSubject} subject
      */
     set subject(subject) {
@@ -2015,7 +2003,6 @@ class BaseContext {
     }
 
     /**
-     * @brief Returns the action being performed by this context. Default is "process".
      * @returns {string}
      */
     get action() {
@@ -2023,15 +2010,13 @@ class BaseContext {
     }
 
     /**
-     * @brief Returns a binding object by name
-     * @param {string} name The binding to get.
+     * @param {string} name
      */
     getBinding(name) {
         return this._context.bindings[name];
     }
 
     /**
-     * @brief Sets a binding object.
      * @param {string} name
      * @param {Object} value
      */
@@ -2040,7 +2025,6 @@ class BaseContext {
     }
 
     /**
-     * @brief
      * @param {string} key
      * @param {null|string} [defaultValue]
      * @return {Promise<string>}
@@ -2050,7 +2034,6 @@ class BaseContext {
     }
 
     /**
-     * @brief
      * @param {string} key
      * @param {null|string} [defaultValue]
      * @return {Promise<string>}
@@ -2060,7 +2043,6 @@ class BaseContext {
     }
 
     /**
-     * @brief
      * @param {Object} message
      * @param {LOG_LEVEL} [level] default is trace.
      * @param {null|string} [subject] default is null.
@@ -2090,7 +2072,6 @@ class BaseContext {
     }
 
     /**
-     * @brief
      * @param {Object} object
      * @param {LOG_LEVEL} [level] default is trace.
      * @param {null|string} [subject] default is null.
@@ -2100,8 +2081,7 @@ class BaseContext {
     }
 
     /**
-     * @brief Calls context.done on the function context with the optional parameter.
-     * @param {null|Object} [value]
+     * @param {null|Object} [value=null]
      */
     done(value = null) {
         if(value === null)
@@ -2111,13 +2091,10 @@ class BaseContext {
     }
 }
 /**
- * @brief Basic lifecycle for a function invocation.
- * @author Robert R Murrell
  * @abstract
  */
 class BaseFunction {
     /**
-     * @brief Initializes the function class.
      * @param {Configuration} configuration
      */
     constructor(configuration) {
@@ -2127,11 +2104,6 @@ class BaseFunction {
     }
 
     /**
-     * @brief Lifecycle operation to perform key operations of setting up and bootstrapping this function.
-     * @description <p>Override this function to perform any pre-initialization tasks. The lifecycle is invoked after
-     *              the context is created but before initialization. Implementors MUST call the super of
-     *              or this function may not work as intended or produce errors.</p>
-     *              <p>Do not rely on any internal features of this function while inside this promise.</p>
      * @returns {Promise<BaseSentry>} BaseSentry if successful.
      *
      * @throws {CelastrinaError}
@@ -2149,12 +2121,10 @@ class BaseFunction {
     }
 
     /**
-     * @brief Creates an implementations of Base Context from the Azure Function context passed in.
-     * @description Override this function to create the instance of BaseContext required for your function.
      * @param {_AzureFunctionContext} context
      * @param {string} name
      * @param {PropertyHandler} properties
-     * @returns {Promise<BaseContext>} The base context for this function.
+     * @returns {Promise<BaseContext>}
      */
     async createContext(context, name, properties) {
         return new Promise(
@@ -2169,13 +2139,8 @@ class BaseFunction {
     }
 
     /**
-     * @brief Lifecycle operation to perform key operations of setting up and bootstrapping this function.
-     * @description <p>Override this function to perform any pre-initialization tasks. The lifecycle is invoked after
-     *              the context is created but before initialization. Implementors MUST call the super of
-     *              or this function may not work as intended or produce errors.</p>
-     *              <p>Do not rely on any internal features of this function while inside this promise.</p>
-     * @param {_AzureFunctionContext} context The context of the function.
-     * @returns {Promise<void>} Void if successful.
+     * @param {_AzureFunctionContext} context
+     * @returns {Promise<void>}
      * @throws {CelastrinaError}
      */
     async bootstrap(context) {
@@ -2205,10 +2170,8 @@ class BaseFunction {
     }
 
     /**
-     * @brief Lifecycle operation to initialize any objects required to perform the function.
-     * @description Override this function to perform any initialization actions.
-     * @param {BaseContext} context The context of the function.
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
+     * @param {BaseContext} context
+     * @returns {Promise<void>}
      */
     async initialize(context) {
         return new Promise((resolve, reject) => {
@@ -2217,13 +2180,8 @@ class BaseFunction {
     }
 
     /**
-     * @brief Lifecycle operation to authenticate a requester before performing the action.
-     * @description Override this function to perform any authentication actions. If you need to validate anything
-     *              related to authentication you'll need to do it here as validation lifecycle is invoked AFTER
-     *              authentication and authorization.
-     * @param {BaseContext} context The context of the function.
-     * @returns {Promise<BaseSubject>} An instance of BaseSubject.
-     * @throws {CelastrinaError} if the user cannot be authenticated for any reason.
+     * @param {BaseContext} context
+     * @returns {Promise<BaseSubject>}
      */
     async authenticate(context) {
         return new Promise((resolve, reject) => {
@@ -2242,13 +2200,8 @@ class BaseFunction {
     }
 
     /**
-     * @brief Lifecycle operation to authorize a requester before performing the action.
-     * @description Override this function to perform any authorization actions. If you need to validate anything
-     *              related to authorization you'll need to do it here as validation lifecycle is invoked AFTER
-     *              authorization.
-     * @param {BaseContext} context The context of the function.
-     * @returns {Promise<void>} Void if successful.
-     * @throws {CelastrinaError} if the user cannot be authorized for any reason.
+     * @param {BaseContext} context
+     * @returns {Promise<void>}
      */
     async authorize(context) {
         return new Promise((resolve, reject) => {
@@ -2263,11 +2216,8 @@ class BaseFunction {
     }
 
     /**
-     * @brief Lifecycle operation to validate the business input before performing the rest of the lifecycle.
-     * @description Override this function to perform any validation actions.
-     * @param {BaseContext} context The context of the function.
-     * @returns {Promise<void>} Void if successful, or rejected with an CelastrinaError if not.
-     * @throws {CelastrinaValidationError} if the input cannot be validated.
+     * @param {BaseContext} context
+     * @returns {Promise<void>}
      */
     async validate(context) {
         return new Promise((resolve, reject) => {
@@ -2276,12 +2226,8 @@ class BaseFunction {
     }
 
     /**
-     * @brief Override this method to respond to monitor requests.
-     * @description Fill out the monitor response and resolve. do not use send or done. This must return a promise that
-     *              either resolves to void or rejects with a type of {CelastrinaError}
-     * @param {BaseContext} context The context of the function.
-     * @returns {Promise<void>} Void if successful.
-     * @throws {CelastrinaError} if the monitor lifecycle fails for any reason.
+     * @param {BaseContext} context
+     * @returns {Promise<void>}
      */
     async monitor(context) {
         return new Promise(
@@ -2294,11 +2240,8 @@ class BaseFunction {
     }
 
     /**
-     * @brief Lifecycle operation to load information before performing the rest of the lifecycle.
-     * @description Override this function to perform any loading actions.
-     * @param {BaseContext} context The context of the function.
-     * @returns {Promise<void>} Void if successful.
-     * @throws {CelastrinaError} if the load lifecycle fails for any reason.
+     * @param {BaseContext} context
+     * @returns {Promise<void>}
      */
     async load(context) {
         return new Promise((resolve, reject) => {
@@ -2307,11 +2250,8 @@ class BaseFunction {
     }
 
     /**
-     * @brief Lifecycle operation to process the request.
-     * @description Override this function to perform business logic of this function.
-     * @param {BaseContext} context The context of the function.
-     * @returns {Promise<void>} Void if successful.
-     * @throws {CelastrinaError} if the process lifecycle fails for any reason.
+     * @param {BaseContext} context
+     * @returns {Promise<void>}
      */
     async process(context) {
         return new Promise((resolve, reject) => {
@@ -2320,11 +2260,8 @@ class BaseFunction {
     }
 
     /**
-     * @brief Lifecycle operation to save information after the process lifecycle.
-     * @description Override this function to save any states after processing.
-     * @param {BaseContext} context The context of the function.
-     * @returns {Promise<void>} Void if successful.
-     * @throws {CelastrinaError} if the save lifecycle fails for any reason.
+     * @param {BaseContext} context
+     * @returns {Promise<void>}
      */
     async save(context) {
         return new Promise((resolve, reject) => {
@@ -2333,12 +2270,9 @@ class BaseFunction {
     }
 
     /**
-     * @brief Lifecycle operation to save handle any exceptions during the lifecycle, up to processing.
-     * @description Override this function to handle any exceptions up to processing.
-     * @param {BaseContext} context The context of the function.
+     * @param {BaseContext} context
      * @param {*} exception
-     * @returns {Promise<void>} Void if successful.
-     * @throws {CelastrinaError} if the exception lifecycle fails for any reason.
+     * @returns {Promise<void>}
      */
     async exception(context, exception) {
         return new Promise((resolve, reject) => {
@@ -2347,11 +2281,8 @@ class BaseFunction {
     }
 
     /**
-     * @brief Lifecycle operation to clean up prior to the completion of the function.
-     * @description Override this function to clean up before complettion.
-     * @param {BaseContext} context The context of the function.
-     * @returns {Promise<void>} Void if successful.
-     * @throws {CelastrinaError} if the terminate lifecycle fails for any reason.
+     * @param {BaseContext} context
+     * @returns {Promise<void>}
      */
     async terminate(context) {
         return new Promise((resolve, reject) => {
@@ -2360,10 +2291,8 @@ class BaseFunction {
     }
 
     /**
-     * @brief Initialized the key vualt resource using the MSI managed identity configuration.
-     * @param {BaseContext} context The context of the function.
-     * @returns {Promise<void>} Void if successful.
-     * @throws {CelastrinaError} if the secureInitialize lifecycle fails for any reason.
+     * @param {BaseContext} context
+     * @returns {Promise<void>}
      */
     async secureInitialize(context) {
         return new Promise(
@@ -2456,7 +2385,6 @@ class BaseFunction {
     }
 
     /**
-     * @brief Determines the class of exceptions an sends the appropriate message to the calling end-pont.
      * @param {_AzureFunctionContext} context
      * @param {*} exception
      * @private
@@ -2501,8 +2429,13 @@ module.exports = {
     FunctionRole: FunctionRole,
     FunctionRoleProperty: FunctionRoleProperty,
     Configuration: Configuration,
+    Algorithm: Algorithm,
+    AES256Algorithm: AES256Algorithm,
+    Cryptography: Cryptography,
     LOG_LEVEL: LOG_LEVEL,
     BaseSubject: BaseSubject,
+    MonitorResponse: MonitorResponse,
+    RoleResolver: RoleResolver,
     BaseSentry: BaseSentry,
     BaseContext: BaseContext,
     BaseFunction: BaseFunction

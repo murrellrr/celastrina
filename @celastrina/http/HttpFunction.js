@@ -22,13 +22,19 @@
  * SOFTWARE.
  */
 
+/**
+ * @author Robert R Murrell
+ * @copyright Robert R Murrell
+ * @license MIT
+ */
+
 "use strict";
 
 const moment = require("moment");
 const jwt    = require("jsonwebtoken");
 
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Configuration, BaseSubject, BaseSentry,
-       BaseContext, BaseFunction} = require("@celastrina/core");
+       Algorithm, AES256Algorithm, Cryptography, RoleResolver, BaseContext, BaseFunction} = require("@celastrina/core");
 
 /**
  * @typedef _jwtpayload
@@ -54,12 +60,10 @@ const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Conf
  * @property {string} issuer
  */
 /**
- * @brief
- * @author Robert R Murrell
+ * @type {BaseSubject}
  */
 class JwtSubject extends BaseSubject {
     /**
-     * @brief
      * @param {string} sub
      * @param {string} aud
      * @param {string} iss
@@ -81,7 +85,6 @@ class JwtSubject extends BaseSubject {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get nonce() {
@@ -89,7 +92,6 @@ class JwtSubject extends BaseSubject {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get audience() {
@@ -97,7 +99,6 @@ class JwtSubject extends BaseSubject {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get issuer() {
@@ -105,7 +106,6 @@ class JwtSubject extends BaseSubject {
     }
 
     /**
-     * @brief
      * @returns {moment.Moment}
      */
     get issued() {
@@ -113,7 +113,6 @@ class JwtSubject extends BaseSubject {
     }
 
     /**
-     * @brief
      * @returns {moment.Moment}
      */
     get expires() {
@@ -121,7 +120,6 @@ class JwtSubject extends BaseSubject {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get token() {
@@ -129,7 +127,6 @@ class JwtSubject extends BaseSubject {
     }
 
     /**
-     * @brief
      * @param {string[]} headers
      */
     setAuthorizationHeader(headers) {
@@ -138,7 +135,6 @@ class JwtSubject extends BaseSubject {
     }
 
     /**
-     * @brief
      * @returns {{subject:string, roles: Array.<string>, nounce:string, audience: string, issuer: string,
      *            issued: string, expires: string}}
      */
@@ -153,7 +149,6 @@ class JwtSubject extends BaseSubject {
     }
 
     /**
-     * @brief
      * @param {JwtSubject} source
      */
     copy(source) {
@@ -166,8 +161,7 @@ class JwtSubject extends BaseSubject {
     }
 
     /**
-     * @brief
-     * @param {string} bearerToken
+     * @param {string} token
      * @return {Promise<JwtSubject>}
      */
     static async decode(token) {
@@ -189,12 +183,10 @@ class JwtSubject extends BaseSubject {
     }
 }
 /**
- * @brief
  * @author Robert R Murrell
  */
 class Issuer {
     /**
-     * @brief
      * @param {string|StringProperty} name
      * @param {string|StringProperty} audience
      * @param {JsonProperty|Array.<string>} [roles=[]]
@@ -209,7 +201,6 @@ class Issuer {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get name() {
@@ -217,7 +208,6 @@ class Issuer {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get audience() {
@@ -225,7 +215,6 @@ class Issuer {
     }
 
     /**
-     * @brief
      * @returns {Array<string>}
      */
     get roles() {
@@ -233,7 +222,6 @@ class Issuer {
     }
 
     /**
-     * @brief
      * @param {JwtSubject} subject
      * @param {boolean} [validateNonce=false]
      * @returns {Promise<boolean>}
@@ -267,12 +255,10 @@ class Issuer {
     }
 }
 /**
- * @brief
- * @author Robert R Murrell
+ * @type {JsonProperty}
  */
 class IssuerProperty extends JsonProperty {
     /**
-     * @brief
      * @param {string} name
      * @param {boolean} secure
      * @param {null|string} defaultValue
@@ -282,7 +268,6 @@ class IssuerProperty extends JsonProperty {
     }
 
     /**
-     * @brief
      * @param {string} value
      * @returns {Promise<null|Object>}
      */
@@ -315,13 +300,10 @@ class IssuerProperty extends JsonProperty {
     }
 }
 /**
- * @brief Gets a Parameter value from an HTTP Header, Query, or Body.
- * @author Robert R Murrell
  * @abstract
  */
 class HTTPParameterFetch {
     /**
-     * @brief
      * @param {string} [type]
      */
     constructor(type = "HTTPParameterFetch") {
@@ -329,7 +311,6 @@ class HTTPParameterFetch {
     }
 
     /**
-     * @brief
      * @param {HTTPContext} context
      * @param {string} key
      * @param {null|string} [defaultValue]
@@ -342,7 +323,6 @@ class HTTPParameterFetch {
     }
 
     /**
-     * @brief
      * @param {HTTPContext} context
      * @param {string} key
      * @param {null|string} [defaultValue]
@@ -366,19 +346,14 @@ class HTTPParameterFetch {
     }
 }
 /**
- * @brief Gets a Header Parameter.
- * @author Robert R Murrell
+ * @type {HTTPParameterFetch}
  */
 class HeaderParameterFetch extends HTTPParameterFetch {
-    /**
-     * @brief
-     */
     constructor() {
         super("header");
     }
 
     /**
-     * @brief
      * @param {HTTPContext} context
      * @param {string} key
      * @param {null|string} [defaultValue
@@ -396,19 +371,14 @@ class HeaderParameterFetch extends HTTPParameterFetch {
     }
 }
 /**
- * @brief Gets a Query Parameter.
- * @author Robert R Murrell
+ * @type {HTTPParameterFetch}
  */
 class QueryParameterFetch extends HTTPParameterFetch {
-    /**
-     * @brief
-     */
     constructor() {
         super("query");
     }
 
     /**
-     * @brief
      * @param {HTTPContext} context
      * @param {string} key
      * @param {null|string} [defaultValue
@@ -426,19 +396,14 @@ class QueryParameterFetch extends HTTPParameterFetch {
     }
 }
 /**
- * @brief Gets an attribute of a Body object.
- * @author Robert R Murrell
+ * @type {HTTPParameterFetch}
  */
 class BodyParameterFetch extends HTTPParameterFetch {
-    /**
-     * @brief
-     */
     constructor(key) {
         super("body");
     }
 
     /**
-     * @brief
      * @param {HTTPContext} context
      * @param {string} key
      * @param {null|string} [defaultValue
@@ -460,12 +425,10 @@ class BodyParameterFetch extends HTTPParameterFetch {
     }
 }
 /**
- * @brief
- * @author
+ * @type {JsonProperty}
  */
 class HTTPParameterFetchProperty extends JsonProperty {
     /**
-     * @brief
      * @param {string} name
      * @param {boolean} secure
      * @param {null|string} defaultValue
@@ -475,7 +438,6 @@ class HTTPParameterFetchProperty extends JsonProperty {
     }
 
     /**
-     * @brief
      * @param {string} value
      * @returns {Promise<null|Object>}
      */
@@ -515,16 +477,11 @@ class HTTPParameterFetchProperty extends JsonProperty {
         });
     }
 }
-/**
- * @brief
- * @author Robert R Murrell
- */
 class JwtConfiguration {
     /** @type {string} */
     static CELASTRINAJS_CONFIG_JWT = "celastrinajs.core.jwt";
 
     /**
-     * @brief
      * @param {Array.<IssuerProperty|Issuer>} [issures=[]]
      * @param {(HTTPParameterFetchProperty|HTTPParameterFetch)} [param={HeaderParameterFetch}]
      * @param {(string|StringProperty)} [scheme="Bearer "]
@@ -549,7 +506,6 @@ class JwtConfiguration {
     }
 
     /**
-     * @brief
      * @param {IssuerProperty|Issuer} issuer
      * @returns {JwtConfiguration}
      */
@@ -559,7 +515,6 @@ class JwtConfiguration {
     }
 
     /**
-     * @brief
      * @param {Array.<(IssuerProperty|Issuer)>} [issuers=[]]
      * @returns {JwtConfiguration}
      */
@@ -569,7 +524,6 @@ class JwtConfiguration {
     }
 
     /**
-     * @brief
      * @returns {Array.<Issuer>}
      */
     get issuers() {
@@ -577,7 +531,6 @@ class JwtConfiguration {
     }
 
     /**
-     * @brief
      * @param {HTTPParameterFetchProperty|HTTPParameterFetch} [param={HeaderParameterFetch}]
      * @return {JwtConfiguration}
      */
@@ -587,7 +540,6 @@ class JwtConfiguration {
     }
 
     /**
-     * @brief
      * @returns {HTTPParameterFetch}
      */
     get param() {
@@ -595,7 +547,6 @@ class JwtConfiguration {
     }
 
     /**
-     * @brief
      * @param {string|StringProperty} [scheme="Bearer "]
      * @return {JwtConfiguration}
      */
@@ -605,7 +556,6 @@ class JwtConfiguration {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get scheme() {
@@ -613,7 +563,6 @@ class JwtConfiguration {
     }
 
     /**
-     * @brief
      * @param {boolean|BooleanProperty} [remove=true]
      * @return {JwtConfiguration}
      */
@@ -623,7 +572,6 @@ class JwtConfiguration {
     }
 
     /**
-     * @brief
      * @returns {boolean}
      */
     get removeScheme() {
@@ -631,7 +579,6 @@ class JwtConfiguration {
     }
 
     /**
-     * @brief
      * @returns {string}
      */
     get token() {
@@ -639,7 +586,6 @@ class JwtConfiguration {
     }
 
     /**
-     * @brief
      * @param {string|StringProperty} [token="authorization"]
      * @return {JwtConfiguration}
      */
@@ -649,7 +595,6 @@ class JwtConfiguration {
     }
 
     /**
-     * @brief
      * @returns {boolean}
      */
     get validateNonce() {
@@ -657,7 +602,6 @@ class JwtConfiguration {
     }
 
     /**
-     * @brief
      * @param {(boolean|BooleanProperty)} [validateNonce=false]
      * @returns {JwtConfiguration}
      */
@@ -667,14 +611,10 @@ class JwtConfiguration {
     }
 }
 /**
- * @brief Base context for an HTTP Request/Response.
- * @description Used with the {HTTPFunction}
- * @author Robert R Murrell
- * @see HTTPFunction
+ * @type {BaseContext}
  */
 class HTTPContext extends BaseContext {
     /**
-     * @brief
      * @param {_AzureFunctionContext} context
      * @param {string} name
      * @param {PropertyHandler} properties
@@ -687,32 +627,89 @@ class HTTPContext extends BaseContext {
             body: "<html lang=\"en\"><head><title>" + this._name +
                 "</title></head><body>200, Success</body></html>"};
         this._action = this._context.req.method.toLowerCase();
+        this._cookies = {};
     }
 
+    /**
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _setRequestId() {
+        return new Promise((resolve, reject) => {
+            try {
+                // Override the request ID if its there.
+                let id = this._context.req.query["requestId"];
+                if (typeof id === "undefined" || id == null)
+                    id = this._context.req.headers["x-celastrina-requestId"];
+                if (typeof id === "string")
+                    this._requestId = id;
+                resolve();
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+
+    /**
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _setMonitorMode() {
+        return new Promise((resolve, reject) => {
+            try {
+                // Checking to see if we are in monitoring mode
+                let monitor;
+                if(this.method === "trace")
+                    monitor = true;
+                else {
+                    monitor = this._context.req.query["monitor"];
+                    if (typeof monitor === "undefined" || monitor == null)
+                        monitor = this._context.req.headers["x-celastrina-monitor"];
+                    monitor = (typeof monitor === "string") ? (monitor === "true") : false;
+                }
+                this._monitor = monitor;
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+
+    /**
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _parseCookies() {
+        return new Promise((resolve, reject) => {
+            try {
+                let cookie = this.getRequestHeader("cookie");
+                if (typeof cookie === "string" && cookie.trim().length > 0) {
+                    // Parse the values in the cookiw.
+                    let parts = cookie.split(";");
+                    for(const part of parts) {
+                        let peices = part.split("=");
+                        this._cookies[peices.shift().trim()] = decodeURI(peices.join("="));
+                    }
+                }
+                resolve();
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+
+    /**
+     * @param configuration
+     * @returns {Promise<BaseContext & HTTPContext>}
+     */
     async initialize(configuration) {
         return new Promise((resolve, reject) => {
-            // Override the request ID if its there.
-            let id = this._context.req.query["requestId"];
-            if (typeof id === "undefined" || id == null)
-                id = this._context.req.headers["x-celastrina-requestId"];
-            if(typeof id === "string")
-                this._requestId = id;
-
-            // Checking to see if we are in monitoring mode
-            let monitor;
-            if(this.method === "trace")
-                monitor = true;
-            else {
-                monitor = this._context.req.query["monitor"];
-                if (typeof monitor === "undefined" || monitor == null)
-                    monitor = this._context.req.headers["x-celastrina-monitor"];
-                monitor = (typeof monitor === "string") ? (monitor === "true") : false;
-            }
-            this._monitor = monitor;
-
-            super.initialize(configuration)
-                .then((context) => {
-                    resolve(context);
+            Promise.all([super.initialize(configuration), this._setRequestId(), this._setMonitorMode(),
+                               this._parseCookies()])
+                .then((results) => {
+                    resolve(results[0]);
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -721,7 +718,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Returns the HTTP request method used.
      * @returns {string}
      */
     get method() {
@@ -729,7 +725,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Returns the url request.
      * @returns {string}
      */
     get url() {
@@ -737,7 +732,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Gets the request
      * @returns {_AzureFunctionRequest}
      */
     get request() {
@@ -745,7 +739,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Gets the response.
      * @returns {_AzureFunctionResponse}
      */
     get response() {
@@ -753,7 +746,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief
      * @returns {Object}
      */
     get params() {
@@ -761,7 +753,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief
      * @returns {Object}
      */
     get query() {
@@ -769,7 +760,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief The RAW request body.
      * @returns {string}
      */
     get raw() {
@@ -777,9 +767,21 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Gets a query string.
-     * @param {string} name The name of the header.
-     * @param {null|string} [defaultValue] The value to return if the header was undefined, null, or empty.
+     * @param {string} name
+     * @param {null|string} [defaultValue=null]
+     * @return {null|string}
+     */
+    getCookie(name, defaultValue = null) {
+        let cookie = this._cookies[name];
+        if(typeof cookie !== "string")
+            return defaultValue
+        else
+            return cookie;
+    }
+
+    /**
+     * @param {string} name
+     * @param {null|string} [defaultValue=null]
      * @return {null|string}
      */
     getQuery(name, defaultValue = null) {
@@ -791,9 +793,8 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Gets a request header.
-     * @param {string} name The name of the header.
-     * @param {null|string} [defaultValue] The value to return if the header was undefined, null, or empty.
+     * @param {string} name
+     * @param {null|string} [defaultValue=null]
      * @return {null|string}
      */
     getRequestHeader(name, defaultValue = null) {
@@ -805,9 +806,8 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Gets a response header.
-     * @param {string} name The name of the header.
-     * @param {null|string} [defaultValue] The value to return if the header was undefined, null, or empty.
+     * @param {string} name
+     * @param {null|string} [defaultValue=null]
      * @return {string}
      */
     getResponseHeader(name, defaultValue = null) {
@@ -819,16 +819,14 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Sets a response header.
-     * @param {string} name The name of the header.
-     * @param {string} value The value to set.
+     * @param {string} name
+     * @param {string} value
      */
     setResponseHeader(name, value) {
         this._context.res.headers[name] = value;
     }
 
     /**
-     * @brief Returns the request body.
      * @returns {_Body}
      */
     get requestBody() {
@@ -836,7 +834,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Returns the response body.
      * @returns {_Body}
      */
     get responseBody() {
@@ -844,7 +841,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Sets the body of the response and invoked done on the context.
      * @param {*} [body]
      * @param {number} [status] The HTTP status code, default is 200.
      */
@@ -867,7 +863,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Sends an HTTP 400 error from an {CelastrinaValidationError}.
      * @param {null|CelastrinaValidationError} [error]
      */
     sendValidationError(error = null) {
@@ -877,7 +872,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Sends a redirect to the calling end-point.
      * @param {string} url
      * @param {null|Object} [body]
      */
@@ -887,7 +881,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Sends a redirect to the calling end-point and places the request bodt in the response body.
      * @param {string} url
      */
     sendRedirectForwardBody(url) {
@@ -895,7 +888,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Sends an HTTP 400 error from an {CelastrinaValidationError}.
      * @param {null|CelastrinaError} [error]
      */
     sendServerError(error = null) {
@@ -905,7 +897,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Sends an HTTP 4001error from an {CelastrinaValidationError}.
      * @param {null|CelastrinaError} [error]
      */
     sendNotAuthorizedError(error= null) {
@@ -915,7 +906,6 @@ class HTTPContext extends BaseContext {
     }
 
     /**
-     * @brief Sends an HTTP 400 error from an {CelastrinaValidationError}.
      * @param {null|CelastrinaError} [error]
      */
     sendForbiddenError(error = null) {
@@ -925,9 +915,7 @@ class HTTPContext extends BaseContext {
     }
 }
 /**
- * @brief
- * @description
- * @author Robert R Murrell
+ * @type {BaseSentry}
  */
 class JwtSentry extends BaseSentry {
     constructor() {
@@ -937,9 +925,8 @@ class JwtSentry extends BaseSentry {
     }
 
     /**
-     * @brief
      * @param {Configuration} configuration
-     * @returns {Promise<(BaseSentry & JwtSentry)>}
+     * @returns {Promise<(JwtSentry & BaseSentry)>}
      */
     async initialize(configuration) {
         return new Promise((resolve, reject) => {
@@ -949,7 +936,7 @@ class JwtSentry extends BaseSentry {
                         // Going to initialize the acceptable issuers.
                         this._config = configuration.getValue(JwtConfiguration.CELASTRINAJS_CONFIG_JWT);
                         if(this._config == null) {
-                            configuration.context.log("JwtConfiguration missing or invalid."); // Azure level log as Celastrina not bootstrspped yet.
+                            configuration.context.log("JwtConfiguration missing or invalid.");
                             reject(CelastrinaError.newError("Invalid configration."));
                         }
                         else
@@ -966,7 +953,6 @@ class JwtSentry extends BaseSentry {
     }
 
     /**
-     * @brief
      * @param {HTTPContext} context
      * @returns {Promise<string>}
      * @private
@@ -1055,16 +1041,213 @@ class JwtSentry extends BaseSentry {
     }
 }
 /**
- * @brief Extension of the {BaseFunction} that handles HTTP triggers.
- * @description Implementors must create a httpTrigger input binding named <code>red</code> and an output binding named
- *              res to handle the HTTP request and response objects respectively.
- * @author Robert R Murrell
- * @see BaseFunction
+ * @type {RoleResolver}
+ */
+class CookieRoleResolver extends RoleResolver {
+    /**
+     * @param {string} [name="celastrina_session"]
+     */
+    constructor(name = "celastrina_session") {
+        super();
+        this._name = name;
+    }
+
+    /**
+     * @param {HTTPContext} context
+     * @returns {Promise<string>}
+     * @private
+     */
+    async _getCookie(context) {
+        return new Promise((resolve, reject) => {
+            let session = context.getCookie(this._name, null);
+            if(typeof session !== "string" || session.trim().length === 0)
+                reject(CelastrinaError.newError("Not Authorized.", 401));
+            else
+                resolve(session);
+        });
+    }
+
+    /**
+     * @param {HTTPContext} context
+     * @param {string} cookie
+     * @returns {Promise<object>}
+     */
+    async _getSession(context, cookie) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(JSON.parse(cookie));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+
+    /**
+     * @param {HTTPContext} context
+     * @param {object} session
+     * @returns {Promise<BaseSubject>}
+     * @private
+     */
+    async _setRoles(context, session) {
+        return new Promise((resolve, reject) => {
+            let roles = session.roles;
+            if(typeof roles === "undefined" || roles == null || !Array.isArray(roles)) {
+                context.log("Roles not found in session object.", LOG_LEVEL.LEVEL_ERROR,
+                            "CookieRoleResolver._setRoles(context, session)");
+                reject(CelastrinaError.newError("Not Authorized.", 401));
+            }
+            else {
+                context.subject.setRoles(roles)
+                    .then((subject) => {
+                        resolve(subject);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+        });
+    }
+
+    /**
+     * @param {BaseContext | HTTPContext} context
+     * @returns {Promise<BaseSubject>}
+     */
+    async resolve(context) {
+        return new Promise((resolve, reject) => {
+            this._getCookie(context)
+                .then((cookie) => {
+                    return this._getSession(context, cookie);
+                })
+                .then((session) => {
+                    return this._setRoles(context, session);
+                })
+                .then((subject) => {
+                    resolve(subject);
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+}
+/**
+ * @type {CookieRoleResolver}
+ */
+class SecureCookieRoleResolver extends CookieRoleResolver {
+    /**
+     * @param {Cryptography} crypto
+     * @param {string} [name="celastrina_session"]
+     */
+    constructor(crypto, name = "celastrina_session") {
+        super(name);
+        this._crypto = crypto;
+    }
+
+    /**
+     * @param {HTTPContext} context
+     * @param {string} cookie
+     * @returns {Promise<object>}
+     * @private
+     */
+    async _getSession(context, cookie) {
+        return new Promise((resolve, reject) => {
+            this._crypto.decrypt(cookie)
+                .then((decrypted) => {
+                    return super._getSession(context, decrypted);
+                })
+                .then((session) => {
+                    resolve(session);
+                })
+                .catch((exception) => {
+                    reject(exception);
+                })
+        });
+    }
+}
+/**
+ * @type {JsonProperty}
+ */
+class CookieRoleResolverProperty extends JsonProperty {
+    /**
+     * @param {string} name
+     * @param {boolean} secure
+     * @param {null|string} defaultValue
+     */
+    constructor(name, secure = false, defaultValue = null) {
+        super(name, secure, defaultValue);
+    }
+
+    /**
+     * @param {string} value
+     * @returns {Promise<null|Object>}
+     */
+    async resolve(value) {
+        return new Promise((resolve, reject) => {
+            super.resolve(value)
+                .then((obj) => {
+                    if(!obj.hasOwnProperty("name"))
+                        reject(CelastrinaValidationError.newValidationError(
+                            "Invalid CookieRoleResolver. _name is required.", "CookieRoleResolver._name"));
+                    else
+                        resolve(new CookieRoleResolver(obj._name));
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+}
+
+/**
+ * @type {JsonProperty}
+ */
+class SecureCookieRoleResolverProperty extends JsonProperty {
+    /**
+     * @param {string} name
+     * @param {boolean} secure
+     * @param {null|string} defaultValue
+     */
+    constructor(name, secure = false, defaultValue = null) {
+        super(name, secure, defaultValue);
+    }
+
+    /**
+     * @param {string} value
+     * @returns {Promise<null|Object>}
+     */
+    async resolve(value) {
+        return new Promise((resolve, reject) => {
+            super.resolve(value)
+                .then((obj) => {
+                    if(!obj.hasOwnProperty("_name"))
+                        reject(CelastrinaValidationError.newValidationError(
+                            "Invalid CookieRoleResolver. _name is required.", "CookieRoleResolver._name"));
+                    else if(!obj.hasOwnProperty("_password"))
+                        reject(CelastrinaValidationError.newValidationError(
+                            "Invalid CookieRoleResolver. _password is required.", "CookieRoleResolver._password"));
+                    else if(!obj.hasOwnProperty("_iv"))
+                        reject(CelastrinaValidationError.newValidationError(
+                            "Invalid CookieRoleResolver. _iv is required.", "CookieRoleResolver._iv"));
+                    else if(!obj.hasOwnProperty("_salt"))
+                        reject(CelastrinaValidationError.newValidationError(
+                            "Invalid CookieRoleResolver. _salt is required.", "CookieRoleResolver._salt"));
+                    else
+                        resolve(new SecureCookieRoleResolver(new Cryptography(new AES256Algorithm(obj._password,
+                                                             obj._iv, obj._salt)), obj._name));
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+}
+/**
+ * @type {BaseFunction}
  * @abstract
  */
 class HTTPFunction extends BaseFunction {
     /**
-     * @brief
      * @param {Configuration} configuration
      */
     constructor(configuration) {
@@ -1072,7 +1255,6 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief Converts an Azure function context to an {HTTPContext}.
      * @param {_AzureFunctionContext} context
      * @param {string} name
      * @param {PropertyHandler} properties
@@ -1091,8 +1273,6 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief Handles an HTTP GET request.
-     * @description Override this function to handle an HTTP GET request. Sends response 204 by default.
      * @param {HTTPContext} context
      * @returns {Promise<void>}
      */
@@ -1105,8 +1285,6 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief Handles an HTTP PATCH request.
-     * @description Override this function to handle an HTTP PATCH request. Sends response 501 by default.
      * @param {HTTPContext} context
      * @returns {Promise<void>}
      */
@@ -1118,8 +1296,6 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief Handles an HTTP PUT request.
-     * @description Override this function to handle an HTTP PUT request. Sends response 501 by default.
      * @param {HTTPContext} context
      * @returns {Promise<void>}
      */
@@ -1131,8 +1307,6 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief Handles an HTTP POST request.
-     * @description Override this function to handle an HTTP POST request. Sends response 501 by default.
      * @param {HTTPContext} context
      * @returns {Promise<void>}
      */
@@ -1144,8 +1318,6 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief Handles an HTTP DELETE request.
-     * @description Override this function to handle an HTTP DELETE request. Sends response 501 by default.
      * @param {HTTPContext} context
      * @returns {Promise<void>}
      */
@@ -1157,8 +1329,6 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief Handles an HTTP OPTOINS request.
-     * @description Override this function to handle an HTTP OPTOINS request. Sends response 501 by default.
      * @param {HTTPContext} context
      * @returns {Promise<void>}
      */
@@ -1170,8 +1340,6 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief Handles an HTTP HEAD request.
-     * @description Override this function to handle an HTTP HEAD request. Sends response 501 by default.
      * @param {HTTPContext} context
      * @returns {Promise<void>}
      */
@@ -1184,11 +1352,6 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief Handles an HTTP TRACE request.
-     * @description <p>Override this function to handle an HTTP TRACE request. Sends response 501 by default. This function
-     *              is also called by {HTTPFunction.monitor(context)} function if a monitoring message is received.</p>
-     *              <p>Do not invoke the {HTTPContext.send()} function from this promise. The monitor object will be
-     *                 sent in the {HTTPFunction.monitor(context)} method.</p>
      * @param {BaseContext | HTTPContext} context
      * @returns {Promise<void>}
      */
@@ -1202,7 +1365,6 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief Calls {HTTPFunction._trace(context)}
      * @param {BaseContext | HTTPContext} context
      * @returns {Promise<void>}
      */
@@ -1222,7 +1384,6 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief HTTP Exception handler.
      * @param {BaseContext | HTTPContext} context
      * @param {*} exception
      * @returns {Promise<void>}
@@ -1256,9 +1417,6 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief Rejects this promoise with a HTTP Bad Request Response.
-     * @description Override this method to handle and HTTP methods not handled by this Function. The default behavior
-     *              is to respond with an HTTP 400.
      * @param {BaseContext & HTTPContext} context
      * @returns {Promise<void>}
      */
@@ -1269,7 +1427,6 @@ class HTTPFunction extends BaseFunction {
     }
 
     /**
-     * @brief Dispatches the HTTP request to the corresponding handler method.
      * @param {BaseContext | HTTPContext} context
      * @returns {Promise<void>}
      */
@@ -1293,8 +1450,7 @@ class HTTPFunction extends BaseFunction {
     }
 }
 /**
- * @brief
- * @author Robert R Murrell
+ * @type {HTTPFunction}
  * @abstract
  */
 class JwtHTTPFunction extends HTTPFunction {
@@ -1319,12 +1475,10 @@ class JwtHTTPFunction extends HTTPFunction {
     }
 }
 /**
- * @brief
- * @author Robert R Murrell
+ * @type {HTTPContext}
  */
 class JSONHTTPContext extends HTTPContext {
     /**
-     * @brief
      * @param {_AzureFunctionContext} context
      * @param {string} name
      * @param {PropertyHandler} properties
@@ -1350,16 +1504,11 @@ class JSONHTTPContext extends HTTPContext {
     }
 }
 /**
- * @brief Implementation of the HTTPFunction designed to handle JSON.
- * @description Uses the {JSONHTTPContext} object to ensure the response Content-Type header is "application/json".
- * @author Robert R Murrell
- * @see HTTPFunction
- * @see JSONHTTPContext
+ * @type {HTTPFunction}
  * @abstract
  */
 class JSONHTTPFunction extends HTTPFunction {
     /**
-     * @brief
      * @param {Configuration} configuration
      */
     constructor(configuration) {
@@ -1367,7 +1516,6 @@ class JSONHTTPFunction extends HTTPFunction {
     }
 
     /**
-     * @brief Returns a {JSONHTTPContext}
      * @param {_AzureFunctionContext} context
      * @param {string} name
      * @param {PropertyHandler} properties
@@ -1386,13 +1534,11 @@ class JSONHTTPFunction extends HTTPFunction {
     }
 }
 /**
- * @brief
- * @author Robert R Murrell
+ * @type {JSONHTTPFunction}
  * @abstract
  */
 class JwtJSONHTTPFunction extends JSONHTTPFunction {
     /**
-     * @brief
      * @param {Configuration} configuration
      */
     constructor(configuration) {
@@ -1427,6 +1573,10 @@ module.exports = {
     QueryParameterFetch: QueryParameterFetch,
     BodyParameterFetch: BodyParameterFetch,
     HTTPParameterFetchProperty: HTTPParameterFetchProperty,
+    CookieRoleResolver: CookieRoleResolver,
+    CookieRoleResolverProperty: CookieRoleResolverProperty,
+    SecureCookieRoleResolver: SecureCookieRoleResolver,
+    SecureCookieRoleResolverProperty: SecureCookieRoleResolverProperty,
     JwtSentry: JwtSentry,
     HTTPFunction: HTTPFunction,
     JwtHTTPFunction: JwtHTTPFunction,

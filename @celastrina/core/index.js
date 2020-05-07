@@ -25,14 +25,14 @@
 const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
 const {Vault} = require("./Vault");
 const {Property, JsonProperty, StringProperty, BooleanProperty, NumericProperty, ApplicationAuthorization, ValueMatch,
-       MatchAny, MatchAll, MatchNone, FunctionRole, Configuration, LOG_LEVEL, BaseSubject, BaseSentry, BaseContext,
-       BaseFunction, ApplicationAuthorizationProperty, FunctionRoleProperty} = require("./BaseFunction");
+       MatchAny, MatchAll, MatchNone, FunctionRole, Configuration, Algorithm, AES256Algorithm, Cryptography, LOG_LEVEL,
+       BaseSubject, MonitorResponse, RoleResolver, BaseSentry, BaseContext, BaseFunction,
+       ApplicationAuthorizationProperty, FunctionRoleProperty} = require("./BaseFunction");
 const {Point} = require("./Point");
 
 module.exports = {
-    CelastrinaError:           CelastrinaError,
+    CelastrinaError: CelastrinaError,
     CelastrinaValidationError: CelastrinaValidationError,
-    Vault: Vault,
     Property: Property,
     JsonProperty: JsonProperty,
     StringProperty: StringProperty,
@@ -47,10 +47,14 @@ module.exports = {
     FunctionRole: FunctionRole,
     FunctionRoleProperty: FunctionRoleProperty,
     Configuration: Configuration,
+    Algorithm: Algorithm,
+    AES256Algorithm: AES256Algorithm,
+    Cryptography: Cryptography,
     LOG_LEVEL: LOG_LEVEL,
     BaseSubject: BaseSubject,
+    MonitorResponse: MonitorResponse,
+    RoleResolver: RoleResolver,
     BaseSentry: BaseSentry,
     BaseContext: BaseContext,
-    BaseFunction: BaseFunction,
-    Point: Point
+    BaseFunction: BaseFunction
 };

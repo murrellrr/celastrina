@@ -27,14 +27,14 @@ const config = new Configuration(new StringProperty("function.name"),
 class MyNewHTTPTriggerFunction extends JSONHTTPFunction {
     async _get(context) {
         return new Promise((resolve, reject) => {
-            context.send({"message": "_get invoked."});
+            context.send({message: "_get invoked."});
             resolve();
         });
     }
 
     async _post(context) {
         return new Promise((resolve, reject) => {
-            context.send({"message": "_post invoked."});
+            context.send({message: "_post invoked."});
             resolve();
         });
     }
@@ -109,8 +109,8 @@ respective types. This parameter is optional and will default to `null`.
 - **factory** {_\*_}: RESERVED. Current not used and optional. Defaults to `null`.
 
 #### Using a Property
-To use a `Property`, add to your function configuration through the portal at All services > Function App > 
-\[Your function App\] > Configuration and in your local.settings.json.
+To use a `Property`, add to your function application settings through the Azure portal at _All services > Function App > 
+\[Your function App\] > Configuration_ and in your local.settings.json.
 
 ```
 {
@@ -187,8 +187,124 @@ There is a special phase that can happen anywhere from `initialize` to `terminat
 This is invoked when any of the life-cycle promises are rejected. If the `exception` life-cycle is invoked prior to 
 `terminate` then terminate will still be invoked. If an exception happens during `createContext` then `terminate` will 
 **not** be invoked as the context might not have been safely instantiated. If an exception happens within `excetion` or 
-`terminate` then an &quot;unhandled&quot; condition is met and a error is returned via the Azure `context.done()` method 
+`terminate` then an &quot;unhandled&quot; condition is met, and an error is returned via the Azure `context.done()` method 
 passing an error message.
 
 In the processing phase, the HTTP package looks at the HTTP method in the request and invokes the `_[method]` function 
 in the class. For example, if the HTTP method is GET, then `_get(context)` is invoked.
+
+### So, what about managed mode?
+Glad you asked! Managed mode puts Celastrina.js inso a secure managed resource mode. This allows Celastrina.js to not only 
+secure property values in Microsoft Azure Key Vault but also consume resources as a Managed Identity leveraging MSI. Managed 
+Identities allow you to access the resource manager, databases, vault, and many other PaaS resources as the functions 
+managed identity. To use resources you must enable either a System or User Assigned identity. To do so go to 
+_All services > Function App > \[Your function App\] > Identity_ in the Azure portal. There select the "System Assigned" or 
+"User Assigned" tab and enable your identity.
+
+Once enabled, all you need to do is set managed to `true` in your `Configuration` and add resources as you please.
+
+```
+const config = new Configuration("Your Function Name", false);
+
+/* OR */
+
+const config = new Configuration(new StringProperty("function.name"), new BooleanProperty("function.managed"));
+```
+
+When using properties, make sure you update the aplication settings, and your local.settings.json for local debug:
+
+```
+{
+  "IsEncrypted": false,
+  "Values": {
+    "function.name": "Your Function Name",
+    "function.managed": "true"
+  }
+}
+```
+
+Celastrina.js will not leverage MSI and use the `IDENTITY_ENDPOINT` and `IDENTITY_HEADER` environment variables when 
+registering resources. See [https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview](https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview)
+for more information on MSI and Managed Identities.
+
+Celastrina.js will also immediately register the Key Vault resource for the function on bootstrap. This ill allow you to
+put configuration properties as secrets in Key Vault.
+
+#### So, why should I use Azure Key Vault and not Deployment Slots?
+Well, that's a great questions. I happen to trust more the added layer os security from Azure Key Vault and the clearer 
+Seperation of Duties (SOD) in managing securey properties in Key Vault. It allows a configuration manager or other higher 
+privilliged role in your organization safely distribute and version sensitive information without exposing it to 
+developers. Basically, you can hand a resource URL to a developer without devulging sensitive information or elevated 
+access. Heres how it works:
+
+1. In Azire portal, navigate to _All services > Key vaults > \[Your Key Vault\] | Secrets_ and add a new secret.
+2. Then go to _All services > Key vaults > \[Your Key Vault\] | Access policies_ and add your Azure Function's Managed 
+Identity to the policy. I usually just add it to `GET` and `LIST`.
+3. Get the resource URL for the secret and add it to the application settings.
+
+```
+{
+  "IsEncrypted": false,
+  "Values": {
+    "function.name": "Your Function Name",
+    "function.managed": "true"
+    "YOUR_VUALT_SECURE_PROPERTY": "https://\[Your Key Vault\].vault.azure.net/secrets/\[Your Secret\]/\[Your Version ID\]"
+  }
+}
+```
+
+Your application settings would look something like this:
+
+```
+{
+  "IsEncrypted": false,
+  "Values": {
+    "function.name": "Your Function Name",
+    "function.managed": "true"
+    "YOUR_VUALT_SECURE_PROPERTY": "https://MyNewVault.vault.azure.net/secrets/MyNewSecret/6ff6009aa001384e8edc348064b3503a"
+  }
+}
+```
+
+Now, when you use a Property instance, you just set `secure` to `true` and it will look up the value in Key Vault.
+
+```
+new StringProperty("YOUR_VUALT_SECURE_PROPERTY", true);
+```
+
+During bootstrap, Celastrina.js will get the resource URL from the application setting then, using the managed resource 
+identity for vault, look up the secret and replace it with the value from Key Vault. You can use any `Property` instance 
+this way, including placing json in Key Vault and using the `JsonProperty`.
+
+Oh, and BTW, Celastrina.js will cache all the secure properties so that the will not get retrieved from Key Vualt every 
+lookup. Please, TRUST me, this is safe, simple, and affordable. For most applications, this is pennies on the dollar.
+
+#### Back to Managed Resources
+You can add authorizations for any other supported managed resource using the `Configration`. For a list of supported 
+service please visit [https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/services-support-managed-identities](https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/services-support-managed-identities).
+
+To add a resource authorization:
+
+```
+const config = new Configuration(new StringProperty("function.name"),
+                                 new BooleanProperty("function.managed"));
+
+config.config.addResourceAuthorization("https://datalake.azure.net/");
+
+// OR
+
+config.config.addResourceAuthorization(new StringProperty("YOUR_RESOURCE_AUTHORIZATION"));
+```
+
+More about actually using a resource authorization later.
+
+#### Wait, what about Applications Registrations?
+Awesome! So you finally realized that roll'n your own user management system is a bad idea and have set up Azure AD B2C!
+I'm proud of you, that's a big step! If I was wrong and you havent, I choose not to help you. Just don't. If you're gonna 
+use Azure, use Azure AD. If you are an enterprise and writing an application for employees, you're almost there. If not, 
+use Azure AD b2C for your customers. Its basically free for most small to medium application so there is really no reason 
+not to. Please, don't fight this.
+
+If you've made it this far, you probably have Azure AD, or Azure AD B2C and want to access resources not as a function 
+managed identity, but as an application. No problem, Celastrina.js makes this pretty easy to do as well.
+

@@ -13,7 +13,7 @@ customization and code, potentially lowering your time-to-value.
 2. You gotta know Javascript and Node.js, duh.
 
 ## Quick-start
-To use Celastring.js simply deploy the following to your Microsoft Azure HTTP Trigger function:
+To use Celastrina.js simply deploy the following to your Microsoft Azure HTTP Trigger function:
 
 ```
 "use strict";
@@ -46,7 +46,7 @@ module.exports = new MyNewHTTPTriggerFunction(config);
 
 ### function.json
 Update you r Microsoft Azure function.json file with the following directive "entryPoint": "execute". Your in and out 
-bdinges should be named "req" and "res" respectively. Your function.json should look something like this:
+bdinges should be named `req` and `res` respectively. Your `function.json` should look something like this:
 
 ```
 {
@@ -82,16 +82,16 @@ way to secure key=value pairs using Microsoft Azure Vault.
 
 Celastrina.js core comes with four out-of-the-box `Property` types:
 
-1. **NumericProperty**: `key=value` pair representing a Numberic data-type.
-2. **BooleanProperty**: `key=value` pair representing a true/false data type. The `BooleanProperty` simple looks for 
+1. `NumericProperty`: `key=value` pair representing a Numberic data-type.
+2. `BooleanProperty`: `key=value` pair representing a true/false data type. The `BooleanProperty` simple looks for 
 `string === "true"` for `true`, `false` otherwise.
-3. **StringProperty**: `key=value` pair for string, duh.
-4. **JsonProperty**: A serialized JavaScript object parsed using `JSON.parse()`.
+3. `StringProperty`: `key=value` pair for string, duh.
+4. `JsonProperty`: A serialized JavaScript object parsed using `JSON.parse()`.
 
 This HTTP package also includes specialized property types will discuss later in this document. Celastrina.js takes 
 advantage of varient-type nature of JavaScript by allowing ANY configuration element to be a primitive type, or a 
 `Property` instance. All `Property` instances are converted to thier respective types during the bootstrp life-cycle of 
-the Celastring.js function. More on life-cycle later.
+the Celastrina.js function. More on life-cycle later.
 
 A `Property` instance has the following constructor:
 
@@ -99,14 +99,14 @@ A `Property` instance has the following constructor:
 constructor(name, secure = false, defaultValue = null, factory = null)
 ```
 
-- **name** {_string_}: The name, or KEY, of the property in the process.env. This paramter is required and cannot be 
+- `name` {`string`}: The name, or KEY, of the property in the process.env. This paramter is required and cannot be 
 undefined.
-- **secure** {_boolean_}: Determines if this property actually contains a link to a Microsoft Azure Key Vault Secret 
+- `secure` {`boolean`}: Determines if this property actually contains a link to a Microsoft Azure Key Vault Secret 
 Identifier. This parameter is optional and the default is `false`.
-- **defaultValue** {_\*_}: The default value to use if the entry in process.env is `null` or `unddefined. The super
+- `defaultValue` {`*`}: The default value to use if the entry in process.env is `null` or `unddefined. The super
 class `Property` will accept Any (`*`) value but implentations such as `StringProperty` or `BooleanProperty` will enforce thier 
 respective types. This parameter is optional and will default to `null`.
-- **factory** {_\*_}: RESERVED. Current not used and optional. Defaults to `null`.
+- `factory` {`*`}: RESERVED. Currently, not used.
 
 #### Using a Property
 To use a `Property`, add to your function application settings through the Azure portal at _All services > Function App > 
@@ -125,9 +125,9 @@ To use a `Property`, add to your function application settings through the Azure
 Next, you need create a property instance and add it to a configuration. A `Configuration` has 2 required parameters passed 
 in the constructor. The 2 parameters are the `name` and `managed` mode parameters. 
 
-- **name** {_string_}: The firendly name of this function. This name is used for diagnostics, insights, and logging and 
+- `name` {`string`}: The firendly name of this function. This name is used for diagnostics, insights, and logging and 
 should not be seen by the caller.
-- **managed** {_boolean_}: Determines if this function runs in a secure `managed` mode. More on that later.
+- `managed` {`boolean`}: Determines if this function runs in a secure `managed` mode. More on that later.
 
 As stated you may use the primitive types or corrosponding `Property` instances.
 
@@ -153,14 +153,14 @@ Pretty straight forward,eh? The core `Configuration` of Celastrina.js comes with
 including `name` and `managed`. You can set these attributes using the `Configuration.addValue` method or using explicit 
 setter methods. The following explicit attributes are supported:
 
-- **addApplicationAuthorization** {_ApplicationAuthorization_}
-- **addResourceAuthorization** {_string_}
-- **addFunctionRole** {_FunctionRole_}
+- `addApplicationAuthorization` {`ApplicationAuthorization`}
+- `addResourceAuthorization` {`string`}
+- `addFunctionRole` {`FunctionRole`}
 
 More on what these mean later... The `Configuration` is only available during the bootstrap life-cycle. After that, any 
 environment properties can be accessed from the `BaseContext` object.
 
-#### The Celastring.js Life-Cycle
+#### The Celastrina.js Life-Cycle
 Celastrina.js follows a fairly straight forward life-cycle of promises to execute work. The basic life-cycle executed 
 when the 'execute' method is invoked in BaseFunction is, in order, as follows:
 
@@ -191,7 +191,56 @@ This is invoked when any of the life-cycle promises are rejected. If the `except
 passing an error message.
 
 In the processing phase, the HTTP package looks at the HTTP method in the request and invokes the `_[method]` function 
-in the class. For example, if the HTTP method is GET, then `_get(context)` is invoked.
+in the class. For example, if the HTTP method is GET, then `_get(context)` is invoked. A typical HTTP Trigger function 
+might look like:
+
+```
+class MyNewHTTPTriggerFunction extends JwtJSONHTTPFunction {
+    async initialize(context) {
+        return new Promise((resolve, reject) => {
+            // Do some initialization stuff
+            resolve();
+        });
+    }
+    
+    async load(context) {
+        return new Promise((resolve, reject) => {
+            // Load some objects from your data store
+            resolve();
+        });
+    }
+    
+    async _get(context) {
+        return new Promise((resolve, reject) => {
+            context.send({message: "_get invoked."});
+            resolve();
+        });
+    }
+
+    async _post(context) {
+        return new Promise((resolve, reject) => {
+            context.send({message: "_post invoked."});
+            resolve();
+        });
+    }
+
+    async save(context) {
+        return new Promise((resolve, reject) => {
+            // Save some objects to your data store
+            resolve();
+        });
+    }
+    
+    async terminate(context) {
+        return new Promise((resolve, reject) => {
+            // Do your cleanup.
+            resolve();
+        });
+    }
+}
+
+module.exports = new MyNewHTTPTriggerFunction(config);
+```
 
 ### So, what about managed mode?
 Glad you asked! Managed mode puts Celastrina.js inso a secure managed resource mode. This allows Celastrina.js to not only 
@@ -230,7 +279,7 @@ for more information on MSI and Managed Identities.
 Celastrina.js will also immediately register the Key Vault resource for the function on bootstrap. This ill allow you to
 put configuration properties as secrets in Key Vault.
 
-#### So, why should I use Azure Key Vault and not Deployment Slots?
+#### So, why should I use Azure Key Vault and not Application Settings?
 Well, that's a great questions. I happen to trust more the added layer os security from Azure Key Vault and the clearer 
 Seperation of Duties (SOD) in managing securey properties in Key Vault. It allows a configuration manager or other higher 
 privilliged role in your organization safely distribute and version sensitive information without exposing it to 
@@ -248,7 +297,7 @@ Identity to the policy. I usually just add it to `GET` and `LIST`.
   "Values": {
     "function.name": "Your Function Name",
     "function.managed": "true"
-    "YOUR_VUALT_SECURE_PROPERTY": "https://\[Your Key Vault\].vault.azure.net/secrets/\[Your Secret\]/\[Your Version ID\]"
+    "YOUR_VUALT_SECURE_PROPERTY": "https://[Your Key Vault].vault.azure.net/secrets/[Your Secret]/[Your Version ID]"
   }
 }
 ```
@@ -300,7 +349,7 @@ More about actually using a resource authorization later.
 
 #### Wait, what about Applications Registrations?
 Awesome! So you finally realized that roll'n your own user management system is a bad idea and have set up Azure AD B2C!
-I'm proud of you, that's a big step! If I was wrong and you havent, I choose not to help you. Just don't. If you're gonna 
+I'm proud of you, that's a big step! If I was wrong and you haven't, I choose not to help you. Just don't. If you're gonna 
 use Azure, use Azure AD. If you are an enterprise and writing an application for employees, you're almost there. If not, 
 use Azure AD b2C for your customers. Its basically free for most small to medium application so there is really no reason 
 not to. Please, don't fight this.

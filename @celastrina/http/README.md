@@ -273,7 +273,7 @@ When using properties, make sure you update the aplication settings, and your lo
 ```
 
 Celastrina.js will not leverage MSI and use the `IDENTITY_ENDPOINT` and `IDENTITY_HEADER` environment variables when 
-registering resources. See [https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview](https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview)
+registering resources. See [https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview](https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview).
 for more information on MSI and Managed Identities.
 
 Celastrina.js will also immediately register the Key Vault resource for the function on bootstrap. This ill allow you to
@@ -351,9 +351,122 @@ More about actually using a resource authorization later.
 Awesome! So you finally realized that roll'n your own user management system is a bad idea and have set up Azure AD B2C!
 I'm proud of you, that's a big step! If I was wrong and you haven't, I choose not to help you. Just don't. If you're gonna 
 use Azure, use Azure AD. If you are an enterprise and writing an application for employees, you're almost there. If not, 
-use Azure AD b2C for your customers. Its basically free for most small to medium application so there is really no reason 
-not to. Please, don't fight this.
+use Azure AD B2C for your customers. Its basically free for most small to medium application so there is really no reason 
+not to. Please, don't fight this. BTW, heres a good link on configuring Azure AD B2C [https://docs.microsoft.com/en-us/azure/active-directory-b2c/](https://docs.microsoft.com/en-us/azure/active-directory-b2c/)
 
 If you've made it this far, you probably have Azure AD, or Azure AD B2C and want to access resources not as a function 
-managed identity, but as an application. No problem, Celastrina.js makes this pretty easy to do as well.
+managed identity, but as an application. No problem, Celastrina.js makes this pretty easy to do as well, enter 
+`ApplicationAuthorization`. 
+
+The `ApplicationAuthorization` constructor takes the following information:
+
+-`authority` {`string`}: This is the authorizing URL for the directory. For most Azure AD B2C deployments this will be 
+`https://login.microsoftonline.com`.
+- `tenant` {`string`}: This is the UUID for your tenant. You can get this by navigating to Home > Azure AD B2C in the
+Azure portal and clicking on the "Resource name" in the "Overview" page. There will be a "Tenant ID" you can copy from 
+there.
+- `id` {`string`}: This is the Application ID of the registered application. You can get the application ID in Azure 
+portal at Home > Azure AD B2C | App registrations (Preview) > \[Your Application\].
+- `secret` {`string`}: This is the credential the application uses.
+- `resources` {`Array.<string>`}: An array of resources to register for the application.
+
+Using the  `ApplicationAuthorization` in code:
+
+```
+const config = new Configuration(new StringProperty("function.name"),
+                                 new BooleanProperty("function.managed"));
+
+config.addApplicationAuthorization(new ApplicationAuthorization("https://login.microsoftonline.com", 
+    "c7b24e39-37e9-4fcf-bbf0-480309764eef", "f396619a-f2dc-455c-8f71-0fc77d424b46", "x?=/4ZkXh<Yv'4_m2&n]<B[L", 
+    ["https://datalake.azure.net"]));
+```
+
+There is also a custom `Property` instance called `ApplicationAuthorizationProperty` (_how original_) that allows you 
+to load from and application authorization from a application setting.
+
+```
+config.addApplicationAuthorization(new ApplicationAuthorizationProperty("YOUR PROPERTY NAME", true));
+```
+
+In Azure Key Vault add the following json string:
+
+```
+{
+    "_authority":"https://login.microsoftonline.com", 
+    "_tenant": "c7b24e39-37e9-4fcf-bbf0-480309764eef", 
+    "_id":"f396619a-f2dc-455c-8f71-0fc77d424b46", 
+    "_secret":"x?=/4ZkXh<Yv'4_m2&n]<B[L", 
+    "_resources": [
+            "https://vault.azure.net", "https://datalake.azure.net/"
+        ]
+}
+```
+
+I **highly** recommend you use `ApplicationAuthorizationProperty` and place the json in Azure Key Vault. I **DO NOT** 
+recommend giving out application secrets to developers!
+
+For more information on Application registrations and MSAL, see [https://docs.microsoft.com/en-us/azure/active-directory/develop/msal-client-application-configuration](https://docs.microsoft.com/en-us/azure/active-directory/develop/msal-client-application-configuration).
+
+#### How do I use the resource registrations and authorizations?
+Use them is as simple as assing the bearer token to the `authorization` header of your RESTful requests to azure 
+resources.
+
+Accessing these bearer tokens introduces another concept of Celastrina.js, the Sentry! Queue menacing music! The sentry
+handles all security matters in Celastrina.js from managed resources registrations, authentication, to authorization. The
+sentry is derrived from the base class `BaseSentry`, and is contained in the context of any life-cycle function.
+
+To use an application authorization bearer token simply look up the resource by the application ID. Let say I want the 
+bearer token for Azure Datalake for the application authorization above:
+
+```
+    async _get(context) {
+        return new Promise(async (resolve, reject) => {
+            let token = await context.sentry.getAuthorizationToken("https://datalake.azure.net/", 
+                                "f396619a-f2dc-455c-8f71-0fc77d424b46");
+            resolve();
+        });
+    }
+```
+
+If you want to get the Datalake bearer token for the Azure function's managed identity simply omit the optional 
+application ID:
+
+```
+    async _get(context) {
+        return new Promise(async (resolve, reject) => {
+            let token = await context.sentry.getAuthorizationToken("https://datalake.azure.net/");
+            resolve();
+        });
+    }
+```
+
+All bearer tokens are fetched and cached during the bootstrap life-cycle. Tokens are also lazy refreshed during access if 
+the token has expired. Because of this, a call to `getAuthorizationToken` may take longer then expected if the token 
+has expired.
+
+### WOW, this is awesome! Wait, what about authentication and authorization of users?
+Yes! Of course! Now that you are using Azure AD B2C you have authentication and are iching to get your users to login. 
+I'm so proud of how mindful you are about protecting your web application. Celastrina.js has got your back!
+
+#### I wanna use JWT!
+Great I do too. Time to use Azure API Manager... _queue sound of record being scratched followed by silence_.
+
+>Look, gonna level with you about the architecture that Celastrina.js was designed to support. It was designed for 
+>micro services behind an API Gateway. I know! I know! You are saying it right now - "_this architecture is way 
+>too complex for my simple application!_" You probably almost clicked away. Look, don't fight this. Use Azure API 
+>Manager. I promise it will cost you, in most cases, nothing to use. It has all the mechinisms in place to validate JWT.
+>Please don't do this in your azure function, especially if you went the Azure AD B2C route. I know you can do it in 
+>the function, just don't. **I'll make my case:** It won't be long before your application has a dozen or so micro 
+>services. Configuring JWT validation for each is daunting and prone to failure. Simply adding an API manager in front 
+>with a global validation policy makes this so much safer and easier. Also, while I'm on my soap box, it won't be long 
+>before your micro service will need a resource from another micro service. You know, even the smallest application, it 
+>will take about 5 days before you are writing a call to another azure function within a function. **DON'T DO THIS 
+>EITHER!** Simply enrich the message in API Manager, keep your code decoupled. It becomes a nightmare calling azure 
+>functions from other functions, especially when deploying from DEV->INT->UAT->PROD. Make this decision early, bite the 
+>bullet, spare yourself a lot of time, energy, and sanity. Use API manager for JWT validation and message enrichment.
+
+Whoa, where were you? Welcome back! Once API Manager is configured to validate your JWT token from Azure AD B2C 
+Celastrina.js can leverage the token information for function AAA. Oh, and heres a good link to help you configure 
+API Manager [https://docs.microsoft.com/en-us/azure/api-management/](https://docs.microsoft.com/en-us/azure/api-management/).
+
 

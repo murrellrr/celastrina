@@ -761,7 +761,7 @@ class MyFunction extends JwtJSONHTTPFunction {
     }
 }
 
-module.exports = new MyNewSecureHTTPTriggerFunction(config);
+module.exports = new MyFunction(config);
 ```
 
 Function application settings and `local.settings`.json:

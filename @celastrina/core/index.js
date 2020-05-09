@@ -31,8 +31,6 @@ const {Property, JsonProperty, StringProperty, BooleanProperty, NumericProperty,
 const {Point} = require("./Point");
 
 module.exports = {
-    CelastrinaError: CelastrinaError,
-    CelastrinaValidationError: CelastrinaValidationError,
     Property: Property,
     JsonProperty: JsonProperty,
     StringProperty: StringProperty,

@@ -1,18 +1,18 @@
-# celastrina
+#celastrina
 Javascript Framework for simplifying Microsoft Azure Functions and supporting resources.
 
-## Who should use celastrina.js?
+##Who should use celastrina.js?
 Right now, to receive the highest time-to-value, celastrina.js should be used in green-field application development. 
 While stable and well-supported, Celastrina.js has not been out in the wild very long; because of this, configurations 
 to support diverse deployments are not yet available. While extremely flexible and developer oriented, Celastrina.js is
 still fairly rigid to its intended framework, using it on established or legacy projects usually requires a lot of 
 customization and code, potentially lowering your time-to-value.
 
-## Prerequisite
+##Prerequisite
 1. You gotta know Azure, at least a little.
 2. You gotta know Javascript and Node.js, duh.
 
-## Quick-start
+##Quick-start
 To use Celastrina.js simply deploy the following to your Microsoft Azure HTTP Trigger function:
 
 ```
@@ -44,7 +44,10 @@ module.exports = new MyNewHTTPTriggerFunction(config);
 
 ```
 
-### function.json
+If you are feeling brave, or just here for a refresher, you can skip down to [Putting it all together](#Putting-it-all-together) 
+and dive right in.
+
+###function.json
 Update you r Microsoft Azure function.json file with the following directive "entryPoint": "execute". Your in and out 
 bdinges should be named `req` and `res` respectively. Your `function.json` should look something like this:
 
@@ -71,10 +74,10 @@ bdinges should be named `req` and `res` respectively. Your `function.json` shoul
 }
 ```
 
-## Detailed Help & Documentation
+##Detailed Help & Documentation
 Please visit https://www.celastrinajs.com for complete documentation on using Celastrina.js.
 
-### Environment Properties
+###Environment Properties
 Celastrina.js leverages Microsoft Azure Function application settings a little differently. Celastrina.js uses a 
 confiuration object (`Configuration`) that is linked through `Property` instances. A property represents a key=value pair in the 
 `process.env`. The `Property` paradigm is a little different as it enfources some degree of type-safety as well as a 
@@ -108,7 +111,7 @@ class `Property` will accept Any (`*`) value but implentations such as `StringPr
 respective types. This parameter is optional and will default to `null`.
 - `factory` {`*`}: RESERVED. Currently, not used.
 
-#### Using a Property
+####Using a Property
 To use a `Property`, add to your function application settings through the Azure portal at _All services > Function App > 
 \[Your function App\] > Configuration_ and in your local.settings.json.
 
@@ -237,7 +240,7 @@ class MyNewHTTPTriggerFunction extends JSONHTTPFunction {
 module.exports = new MyNewHTTPTriggerFunction(config);
 ```
 
-### So, what about managed mode?
+###So, what about managed mode?
 Glad you asked! Managed mode puts Celastrina.js inso a secure managed resource mode. This allows Celastrina.js to not only 
 secure property values in Microsoft Azure Key Vault but also consume resources as a Managed Identity leveraging MSI. Managed 
 Identities allow you to access the resource manager, databases, vault, and many other PaaS resources as the functions 
@@ -274,7 +277,7 @@ for more information on MSI and Managed Identities.
 Celastrina.js will also immediately register the Key Vault resource for the function on bootstrap. This ill allow you to
 put configuration properties as secrets in Key Vault.
 
-#### So, why should I use Azure Key Vault and not Application Settings?
+####So, why should I use Azure Key Vault and not Application Settings?
 Well, that's a great questions. I happen to trust more the added layer os security from Azure Key Vault and the clearer 
 Seperation of Duties (SOD) in managing securey properties in Key Vault. It allows a configuration manager or other higher 
 privilliged role in your organization safely distribute and version sensitive information without exposing it to 
@@ -323,7 +326,7 @@ this way, including placing json in Key Vault and using the `JsonProperty`.
 Oh, and BTW, Celastrina.js will cache all the secure properties so that the will not get retrieved from Key Vualt every 
 lookup. Please, TRUST me, this is safe, simple, and affordable. For most applications, this is pennies on the dollar.
 
-#### Back to Managed Resources
+####Back to Managed Resources
 You can add authorizations for any other supported managed resource using the `Configration`. For a list of supported 
 service please visit [https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/services-support-managed-identities](https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/services-support-managed-identities).
 
@@ -342,7 +345,7 @@ config.config.addResourceAuthorization(new StringProperty("YOUR_RESOURCE_AUTHORI
 
 More about actually using a resource authorization later.
 
-#### Wait, what about Applications Registrations?
+####Wait, what about Applications Registrations?
 Awesome! So you finally realized that roll'n your own user management system is a bad idea and have set up Azure AD B2C!
 I'm proud of you, that's a big step! If I was wrong and you haven't, I choose not to help you. Just don't. If you're gonna 
 use Azure, use Azure AD. If you are an enterprise and writing an application for employees, you're almost there. If not, 
@@ -402,7 +405,7 @@ recommend giving out application secrets to developers!
 
 For more information on Application registrations and MSAL, see [https://docs.microsoft.com/en-us/azure/active-directory/develop/msal-client-application-configuration](https://docs.microsoft.com/en-us/azure/active-directory/develop/msal-client-application-configuration).
 
-#### How do I use the resource registrations and application authorizations?
+####How do I use the resource registrations and application authorizations?
 Use them is as simple as assing the bearer token to the `authorization` header of your RESTful requests to azure 
 resources.
 
@@ -439,11 +442,11 @@ All bearer tokens are fetched and cached during the bootstrap life-cycle. Tokens
 the token has expired. Because of this, a call to `getAuthorizationToken` may take longer then expected if the token 
 has expired.
 
-### WOW, this is awesome! Wait, what about authentication and authorization of users?
+###WOW, this is awesome! Wait, what about authentication and authorization of users?
 Yes! Of course! Now that you are using Azure AD B2C you have authentication and are iching to get your users to login. 
 I'm so proud of how mindful you are about protecting your web application. Celastrina.js has got your back!
 
-#### I wanna use JWT!
+####I wanna use JWT!
 Great I do too. Time to use Azure API Manager... _queue sound of record being scratched followed by silence_.
 
 _Queue wavy line fade-out_
@@ -579,7 +582,7 @@ need a different level of authentication per HTTP method you'll need to split th
 
 BAM! That's it!
 
-#### Wait, you said Authentication and Authorization, what about roles?
+####Wait, you said Authentication and Authorization, what about roles?
 Whoa, slow your role child! _Queue Batman and Robin *slap* meme and slapping sound_ I got a soap box for this one... 
 
 _Queue wavy line fade-out_
@@ -692,7 +695,7 @@ will retrieve and decrypt the session cookie from the cookie header, copy the `r
 subject roles, authenticate the requesters JWT token against the issuers, apply role escalations, then authorize the 
 HTTP method requested.
 
-# Putting it all together
+#Putting it all together
 Setting up the index.js:
 
 ```

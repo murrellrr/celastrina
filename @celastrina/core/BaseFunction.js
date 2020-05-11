@@ -194,13 +194,11 @@ class Property {
      * @param {string} name
      * @param {boolean} [secure]
      * @param {null|*} [defaultValue]
-     * @param {null} [factory]
      */
-    constructor(name, secure = false, defaultValue = null, factory = null) {
+    constructor(name, secure = false, defaultValue = null) {
         this._name         = name;
         this._secure       = secure;
         this._defaultValue = defaultValue;
-        this._factory      = factory;
     }
 
     /**

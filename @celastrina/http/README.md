@@ -17,6 +17,7 @@ customization and code, potentially lowering your time-to-value.
 managed resources are handled internally and now no longer required indicating the system uses managed services like 
 Vault.
 2. Support for Application Settings, App Configurations, and a hybrid Application Settings and Vault.
+3. Repaired issue in JwtSentry when expired tokens are allowed.
 
 ##Quick-start
 To use Celastrina.js simply deploy the following to your Microsoft Azure HTTP Trigger function:

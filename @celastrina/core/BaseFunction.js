@@ -1512,7 +1512,7 @@ class BaseSentry {
     async initialize(configuration) {
         return new Promise((resolve, reject) => {
             // Set up the local application id.
-            this._localAppId = configuration.properties.getEnvironmentProperty("CELASTRINA_MSI_OBJECT_ID");
+            this._localAppId = configuration.properties.getProperty("CELASTRINA_MSI_OBJECT_ID");
             if(typeof this._localAppId !== "string")
                 this._localAppId = configuration.context.invocationId;
 

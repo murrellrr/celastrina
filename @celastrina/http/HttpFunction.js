@@ -127,6 +127,13 @@ class JwtSubject extends BaseSubject {
     }
 
     /**
+     * @returns {boolean}
+     */
+    isExpired() {
+        return this._expires.isSameOrAfter(moment());
+    }
+
+    /**
      * @param {string[]} headers
      */
     setAuthorizationHeader(headers) {
@@ -1013,6 +1020,7 @@ class JwtSentry extends BaseSentry {
     async authenticate(context) {
         return new Promise((resolve, reject) => {
             try {
+                /** @type {JwtSubject} */
                 let subject = null;
                 this._getToken(context)
                     .then((auth) => {
@@ -1021,25 +1029,32 @@ class JwtSentry extends BaseSentry {
                     })
                     .then((jwtsub) => {
                         subject = jwtsub;
-                        // No we check the issuers to see if we match any.
-                        /** @type {Array.<Promise<boolean>>} */
-                        let promises = [];
-                        let issuers = this._config.issuers;
-                        for(const issuer of issuers) {
-                            promises.unshift(issuer.authenticate(subject)); // Performs the role escalations too.
+                        if(subject.isExpired())
+                            reject(CelastrinaError.newError("No Authorized.", 401));
+                        else {
+                            // No we check the issuers to see if we match any.
+                            /** @type {Array.<Promise<boolean>>} */
+                            let promises = [];
+                            let issuers = this._config.issuers;
+                            for (const issuer of issuers) {
+                                promises.unshift(issuer.authenticate(subject)); // Performs the role escalations too.
+                            }
+                            Promise.all(promises)
+                                .then((results) => {
+                                    let authenticated = false;
+                                    for(const result of results) {
+                                        if((authenticated = result))
+                                            break;
+                                    }
+                                    if(authenticated)
+                                        resolve(subject);
+                                    else
+                                        reject(CelastrinaError.newError("Not Authorized.", 401));
+                                })
+                                .catch((exception) => {
+                                    reject(exception);
+                                });
                         }
-                        return Promise.all(promises);
-                    })
-                    .then((results) => {
-                        let authenticated = false;
-                        for(const result of results) {
-                            if((authenticated = result))
-                                break;
-                        }
-                        if(authenticated)
-                            resolve(subject);
-                        else
-                            reject(CelastrinaError.newError("Not Authorized.", 401));
                     })
                     .catch((exception) => {
                         reject(exception);

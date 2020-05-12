@@ -260,11 +260,10 @@ class Issuer {
 class IssuerProperty extends JsonProperty {
     /**
      * @param {string} name
-     * @param {boolean} secure
      * @param {null|string} defaultValue
      */
-    constructor(name, secure = false, defaultValue = null) {
-        super(name, secure, defaultValue);
+    constructor(name, defaultValue = null) {
+        super(name, defaultValue);
     }
 
     /**
@@ -430,11 +429,10 @@ class BodyParameterFetch extends HTTPParameterFetch {
 class HTTPParameterFetchProperty extends JsonProperty {
     /**
      * @param {string} name
-     * @param {boolean} secure
      * @param {null|string} defaultValue
      */
-    constructor(name, secure = false, defaultValue = null) {
-        super(name, secure, defaultValue);
+    constructor(name, defaultValue = null) {
+        super(name, defaultValue);
     }
 
     /**
@@ -1122,7 +1120,7 @@ class CookieSessionResolver {
     }
 }
 /**
- * @type {CookieRoleResolver}
+ * @type {CookieSessionResolver}
  */
 class SecureCookieSessionResolver extends CookieSessionResolver {
     /**
@@ -1161,11 +1159,10 @@ class SecureCookieSessionResolver extends CookieSessionResolver {
 class CookieSessionResolverProperty extends JsonProperty {
     /**
      * @param {string} name
-     * @param {boolean} secure
      * @param {null|string} defaultValue
      */
-    constructor(name, secure = false, defaultValue = null) {
-        super(name, secure, defaultValue);
+    constructor(name, defaultValue = null) {
+        super(name, defaultValue);
     }
 
     /**
@@ -1196,11 +1193,10 @@ class CookieSessionResolverProperty extends JsonProperty {
 class SecureCookieSessionResolverProperty extends JsonProperty {
     /**
      * @param {string} name
-     * @param {boolean} secure
      * @param {null|string} defaultValue
      */
-    constructor(name, secure = false, defaultValue = null) {
-        super(name, secure, defaultValue);
+    constructor(name, defaultValue = null) {
+        super(name, defaultValue);
     }
 
     /**

@@ -35,7 +35,7 @@ const moment = require("moment");
 const uuid4v = require("uuid/v4");
 const crypto = require('crypto');
 const {TokenResponse, AuthenticationContext} = require("adal-node");
-const {CelastrinaError} = require("./CelastrinaError");
+const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
 const {PropertyHandler, AppSettingsPropertyHandler, Property,
        JsonProperty, StringProperty, BooleanProperty, NumericProperty, } = require("./Property");
 const {Vault} = require("./Vault");

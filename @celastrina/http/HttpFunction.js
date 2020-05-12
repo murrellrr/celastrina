@@ -130,7 +130,8 @@ class JwtSubject extends BaseSubject {
      * @returns {boolean}
      */
     isExpired() {
-        return this._expires.isSameOrAfter(moment());
+        let now = moment();
+        return now.isSameOrAfter(this._expires);
     }
 
     /**
@@ -1029,8 +1030,10 @@ class JwtSentry extends BaseSentry {
                     })
                     .then((jwtsub) => {
                         subject = jwtsub;
-                        if(subject.isExpired())
+                        if(subject.isExpired()) {
+                            context.log("JWT Token expired.", LOG_LEVEL.LEVEL_INFO, "JwtSentry.authenticate(context)");
                             reject(CelastrinaError.newError("No Authorized.", 401));
+                        }
                         else {
                             // No we check the issuers to see if we match any.
                             /** @type {Array.<Promise<boolean>>} */

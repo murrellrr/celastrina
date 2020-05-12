@@ -36,7 +36,10 @@ const uuid4v = require("uuid/v4");
 const crypto = require('crypto');
 const {TokenResponse, AuthenticationContext} = require("adal-node");
 const {CelastrinaError} = require("./CelastrinaError");
+const {PropertyHandler, AppSettingsPropertyHandler, Property,
+       JsonProperty, StringProperty, BooleanProperty, NumericProperty, } = require("./Property");
 const {Vault} = require("./Vault");
+const {App} = require("./Property");
 
 /**
  * @typedef _ManagedResourceToken
@@ -94,288 +97,6 @@ const {Vault} = require("./Vault");
  * @property {string} originalUrl
  * @property {string} rawBody
  */
-/*
- * *********************************************************************************************************************
- * PROPERTIES
- * *********************************************************************************************************************
- */
-/**
- * @brief Handler class to load properties from {process.env}.
- * @author Robert R Murrell
- */
-class PropertyHandler {
-    constructor() {}
-
-    /**
-     * @param {string} key
-     * @param {null|string} [defaultValue]
-     * @returns {Promise<string>}
-     */
-    async getEnvironmentProperty(key, defaultValue = null) {
-        return new Promise((resolve, reject) => {
-            let value = process.env[key];
-            if(typeof value === "undefined" || value.trim().length === 0)
-                value = defaultValue;
-            resolve(value);
-        });
-    }
-
-    /**
-     * @param {string} key
-     * @param {null|string} [defaultValue]
-     * @returns {Promise<string>}
-     */
-    async getSecureEnvironmentProperty(key, defaultValue = null) {
-        return this.getEnvironmentProperty(key, defaultValue);
-    }
-}
-/**
- * @author Robert R Murrell
- * @type {{_vault: Vault}}
- */
-class VaultPropertyHandler extends PropertyHandler {
-    /**
-     * @prief
-     * @param {Vault} vault
-     */
-    constructor(vault) {
-        super();
-        this._vault = vault;
-        this._cache = {};
-    }
-
-    /**
-     * @brief
-     * @returns {Vault}
-     */
-    get vault() {
-        return this._vault;
-    }
-
-    /**
-     * @brief
-     * @param {string} key
-     * @param {null|string} [defaultValue]
-     * @returns {Promise<string>}
-     */
-    async getSecureEnvironmentProperty(key, defaultValue = null) {
-        return new Promise(
-            (resolve, reject) => {
-                let result = this._cache[key];
-                if(typeof result === "undefined") {
-                    this.getEnvironmentProperty(key)
-                        .then((value) => {
-                            if(typeof value !== "string" || value.trim().length === 0)
-                                reject(CelastrinaError.newError("No Key Vault URL set."));
-                            else
-                                return this._vault.getSecret(value);
-                        })
-                        .then((secret) => {
-                            if(typeof secret === "undefined" || secret == null)
-                                secret = defaultValue;
-                            this._cache[key] = secret;
-                            resolve(secret);
-                        })
-                        .catch((exception) => {
-                            reject(exception);
-                        });
-                }
-                else
-                    resolve(result);
-            });
-    }
-}
-/**
- * @type {{_name:string, _type:string, _secure:boolean, _defaultValue:null|*}}
- * @abstract
- */
-class Property {
-    /**
-     * @param {string} name
-     * @param {boolean} [secure]
-     * @param {null|*} [defaultValue]
-     */
-    constructor(name, secure = false, defaultValue = null) {
-        this._name         = name;
-        this._secure       = secure;
-        this._defaultValue = defaultValue;
-    }
-
-    /**
-     * @returns {string}
-     */
-    get name() {
-        return this._name;
-    }
-
-    /**
-     * @returns {boolean}
-     */
-    get secure() {
-        return this._secure;
-    }
-
-    /**
-     * @returns {*}
-     */
-    get defaultValue() {
-        return this._defaultValue;
-    }
-
-    /**
-     * @param {PropertyHandler} handler
-     * @returns {Promise<null|Object|string|boolean|number>}
-     */
-    async lookup(handler) {
-        if(this._secure)
-            return handler.getSecureEnvironmentProperty(this._name, this._defaultValue);
-        else
-            return handler.getEnvironmentProperty(this._name, this._defaultValue);
-    }
-
-    /**
-     * @param {string} value
-     * @returns {Promise<null|Object|string|boolean|number>}
-     */
-    async resolve(value) {
-        return new Promise((resolve, reject) => {
-            reject(CelastrinaError.newError("Property not supported."));
-        });
-    }
-
-    /**
-     * @param {PropertyHandler} handler
-     * @returns {Promise<null|Object|string|boolean|number>}
-     */
-    load(handler) {
-        return new Promise((resolve, reject) => {
-            this.lookup(handler)
-                .then((local) => {
-                    return this.resolve(local);
-                })
-                .then((value) => {
-                    resolve(value);
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
-        });
-    }
-}
-/**
- * @type {Property}
- */
-class JsonProperty extends Property {
-    /**
-     * @param {string} name
-     * @param {boolean} secure
-     * @param {null|string} defaultValue
-     */
-    constructor(name, secure = false, defaultValue = null) {
-        super(name, secure, defaultValue);
-    }
-
-    /**
-     * @param {string} value
-     * @returns {Promise<null|Object>}
-     */
-    async resolve(value) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(JSON.parse(value));
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
-}
-/**
- * @type {Property}
- */
-class StringProperty extends Property {
-    /**
-     * @param {string} name
-     * @param {boolean} secure
-     * @param {null|string} defaultValue
-     */
-    constructor(name, secure = false, defaultValue = null) {
-        super(name, secure, defaultValue);
-    }
-
-    /**
-     * @param {string} value
-     * @returns {Promise<null|string>}
-     */
-    async resolve(value) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(value);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
-}
-/**
- * @type {Property}
- */
-class BooleanProperty extends Property {
-    /**
-     * @brief
-     * @param {string} name
-     * @param {boolean} secure
-     * @param {null|boolean} defaultValue
-     */
-    constructor(name, secure = false, defaultValue = null) {
-        super(name, secure, defaultValue);
-    }
-
-    /**
-     * @brief
-     * @param {string} value
-     * @returns {Promise<null|boolean>}
-     */
-    async resolve(value) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve((value.toLowerCase() === "true"));
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
-}
-/**
- * @type {Property}
- */
-class NumericProperty extends Property {
-    /**
-     * @param {string} name
-     * @param {boolean} secure
-     * @param {null|number} defaultValue
-     */
-    constructor(name, secure = false, defaultValue = null) {
-        super(name, secure, defaultValue);
-    }
-
-    /**
-     * @param {string} value
-     * @returns {Promise<null|number>}
-     */
-    async resolve(value) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(Number(value));
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
-}
 /*
  * *********************************************************************************************************************
  * APPLICATION AUTHENTICATION AND AUTHORIZATION
@@ -706,11 +427,10 @@ class ApplicationAuthorization {
 class ApplicationAuthorizationProperty extends JsonProperty {
     /**
      * @param {string} name
-     * @param {boolean} secure
      * @param {null|string} defaultValue
      */
-    constructor(name, secure = false, defaultValue = null) {
-        super(name, secure, defaultValue);
+    constructor(name, defaultValue = null) {
+        super(name, defaultValue);
         this._type = "ApplicationAuthorization";
     }
 
@@ -1025,11 +745,10 @@ class FunctionRole {
 class FunctionRoleProperty extends JsonProperty {
     /**
      * @param {string} name
-     * @param {boolean} secure
      * @param {null|string} defaultValue
      */
-    constructor(name, secure = false, defaultValue = null) {
-        super(name, secure, defaultValue);
+    constructor(name, defaultValue = null) {
+        super(name, defaultValue);
     }
 
     /**
@@ -1116,27 +835,24 @@ class Configuration {
 
     /**
      * @param {StringProperty|string} name
-     * @param {BooleanProperty|boolean} [managed=true]
      */
-    constructor(name, managed = true) {
+    constructor(name) {
         if(typeof name == "string" && name.trim().length === 0)
             throw CelastrinaError.newError("Invalid configuration. Name cannot be undefined, null or 0 length.");
         else if(!(name instanceof StringProperty))
             throw CelastrinaError.newError("Invalid configuration. Name must be string or StringProperty.");
         this._name    = name;
-        this._managed = managed;
         this._config  = {}; // Class for storing named configurations.
         /** @type {null|_AzureFunctionContext} */
         this._context = null;
         /** @type {null|PropertyHandler} */
-        this._handler = new PropertyHandler();
+        this._handler = null;
         /** @type {Array.<JsonProperty|ApplicationAuthorization>} **/
         this._config[Configuration.CELASTRINA_CONFIG_APPLICATION_AUTHORIZATION] = [];
         /** @type {Array.<StringProperty|string>} **/
         this._config[Configuration.CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION] = [];
         /** @type {Array.<JsonProperty|FunctionRole>} */
         this._config[Configuration.CELASTRINA_CONFIG_ROLES] = [];
-
         this._loaded = false;
     }
 
@@ -1145,13 +861,6 @@ class Configuration {
      */
     get name() {
         return this._name;
-    }
-
-    /**
-     * @returns {boolean}
-     */
-    get isManaged() {
-        return this._managed;
     }
 
     /**
@@ -1169,11 +878,20 @@ class Configuration {
     }
 
     /**
+     * @param {PropertyHandler} handler
+     * @returns {Configuration}
+     */
+    setPropertyHandler(handler) {
+        this._handler = handler;
+        return this;
+    }
+
+    /**
      * @param {string} key
      * @param {*} value
      * @returns {Configuration}
      */
-    addValue(key , value) {
+    setValue(key , value) {
         if(typeof key !== "string" || key.trim().length === 0)
             throw CelastrinaError.newError("Invalid configuration. Key cannot be undefined, null or 0 length.");
         this._config[key] = value;
@@ -1214,11 +932,6 @@ class Configuration {
      * @returns {Configuration}
      */
     addResourceAuthorization(resource) {
-        if(!this._managed)
-            throw CelastrinaError.newError("Invalied managed state exception. This function MUST be " +
-                                           "managed (managed = true) to use resource authorizations. If " +
-                                           "attempting to assign resources to an application, please use " +
-                                           "ApplicationRegistration.");
         this._config[Configuration.CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION].unshift(resource);
         return this;
     }
@@ -1254,70 +967,6 @@ class Configuration {
     }
 
     /**
-     * @param {string} endpoint
-     * @param {string} secret
-     * @returns {Promise<string>}
-     * @private
-     */
-    async _registerVaultResource(endpoint, secret) {
-        return new Promise((resolve, reject) => {
-            let params = new URLSearchParams();
-            params.append("resource", "https://vault.azure.net");
-            params.append("api-version", "2019-08-01");
-            let config = {params: params,
-                          headers: {"X-IDENTITY-HEADER": secret}};
-
-            axios.get(endpoint, config)
-                .then((response) => {
-                    resolve(response.data.access_token);
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
-        });
-    }
-
-    /**
-     * @return {Promise<void>}
-     * @private
-     */
-    async _setManaged() {
-        return new Promise((resolve, reject) => {
-            try {
-                // We are going to ignore secure property values for this setting.
-                if(this._managed instanceof BooleanProperty) {
-                    // Setting if this is managed or not, going to ignore
-                    let local = process.env[this._managed.name];
-                    if(typeof local === "undefined" || local == null)
-                        this._managed = false;
-                    else
-                        this._managed = (local === "true");
-                }
-
-                // Now we load the appropriate property handler
-                if(this._managed) {
-                    this._context.log("[Configuration._setManaged()]: Loading configuration in managed mode, " +
-                                      "getting vault token from endpoint " + process.env["MSI_ENDPOINT"] + ".");
-                    this._registerVaultResource(process.env["IDENTITY_ENDPOINT"], process.env["IDENTITY_HEADER"])
-                        .then((value) => {
-                            this._context.log("[Configuration._setManaged()]: Creating VaultPropertyHandler.");
-                            this._handler = new VaultPropertyHandler(new Vault(value));
-                            resolve();
-                        })
-                        .catch((exception) => {
-                            reject(exception);
-                        });
-                }
-                else
-                    resolve();
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
-
-    /**
      * @param {Object} obj
      * @param {Array.<Promise>} promises
      * @private
@@ -1347,8 +996,12 @@ class Configuration {
                     // Set up the Azure function context for the configuration.
                     this._context = context;
                     if(!this._loaded) {
-                        // Set up the properties loader
-                        this._setManaged()
+                        // Setting the default handler to the application settings handler.
+                        if(typeof this._handler === "undefined" || this._handler == null)
+                            this._handler = new AppSettingsPropertyHandler();
+
+                        // Setting up the property handler.
+                        this._handler.initialize(context, this._config)
                             .then(() => {
                                 // Scan for any property object then replace async.
                                 /** @type {Array.<Promise<void>>} */
@@ -1801,7 +1454,7 @@ class BaseSentry {
      * @private
      */
     _loadResourceAuthorizations(configuration) {
-        if(configuration.isManaged && configuration.resourceAuthorizations.length > 0) {
+        if(configuration.resourceAuthorizations.length > 0) {
             configuration.addApplicationAuthorization(new ApplicationAuthorization(process.env["MSI_ENDPOINT"],
                 "", this._localAppId, process.env["MSI_SECRET"], configuration.resourceAuthorizations,
                 true));
@@ -2056,20 +1709,11 @@ class BaseContext {
 
     /**
      * @param {string} key
-     * @param {null|string} [defaultValue]
+     * @param {null|string} [defaultValue=null]
      * @return {Promise<string>}
      */
-    async getEnvironmentProperty(key, defaultValue = null) {
-        return this._properties.getEnvironmentProperty(key, defaultValue);
-    }
-
-    /**
-     * @param {string} key
-     * @param {null|string} [defaultValue]
-     * @return {Promise<string>}
-     */
-    async getSecureEnvironmentProperty(key, defaultValue = null) {
-        return this._properties.getSecureEnvironmentProperty(key, defaultValue);
+    async getProperty(key, defaultValue = null) {
+        return this._properties.getProperty(key, defaultValue);
     }
 
     /**

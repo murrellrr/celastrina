@@ -58,7 +58,14 @@ class Vault {
      * @returns {string}
      */
     get token() {
-        return this.config.headers["Authorization"];
+        return this.config.headers["Authorization"].slice(7);
+    }
+
+    /**
+     * @param {string} token
+     */
+    set token(token) {
+        this.config.headers["Authorization"] = "Bearer " + token;
     }
 
     /**

@@ -12,6 +12,12 @@ customization and code, potentially lowering your time-to-value.
 1. You gotta know Azure, at least a little.
 2. You gotta know Javascript and Node.js, duh.
 
+##Recent Changes
+1. Removed `managed` mode from the `Configuration`. Adopting Azure Key Vault and App Configuration changed how to 
+managed resources are handled internally and now no longer required indicating the system uses managed services like 
+Vault.
+2. Support for Application Settings, App Configurations, and a hybrid Application Settings and Vault.
+
 ##Quick-start
 To use Celastrina.js simply deploy the following to your Microsoft Azure HTTP Trigger function:
 
@@ -21,8 +27,7 @@ To use Celastrina.js simply deploy the following to your Microsoft Azure HTTP Tr
 const {LOG_LEVEL, StringProperty, BooleanProperty, Configuration} = require("@celastrina/core");
 const {JSONHTTPContext, JSONHTTPFunction} = require("@celastrina/http");
 
-const config = new Configuration(new StringProperty("function.name"),
-                                 new BooleanProperty("function.managed"));
+const config = new Configuration(new StringProperty("function.name"));
 
 class MyNewHTTPTriggerFunction extends JSONHTTPFunction {
     async _get(context) {
@@ -99,17 +104,14 @@ the Celastrina.js function. More on life-cycle later.
 A `Property` instance has the following constructor:
 
 ```
-constructor(name, secure = false, defaultValue = null, factory = null)
+constructor(name, defaultValue = null)
 ```
 
 - `name` {`string`}: The name, or KEY, of the property in the process.env. This paramter is required and cannot be 
 undefined.
-- `secure` {`boolean`}: Determines if this property actually contains a link to a Microsoft Azure Key Vault Secret 
-Identifier. This parameter is optional and the default is `false`.
 - `defaultValue` {`*`}: The default value to use if the entry in process.env is `null` or `unddefined. The super
 class `Property` will accept Any (`*`) value but implentations such as `StringProperty` or `BooleanProperty` will enforce thier 
 respective types. This parameter is optional and will default to `null`.
-- `factory` {`*`}: RESERVED. Currently, not used.
 
 ####Using a Property
 To use a `Property`, add to your function application settings through the Azure portal at _All services > Function App > 
@@ -119,27 +121,25 @@ To use a `Property`, add to your function application settings through the Azure
 {
   "IsEncrypted": false,
   "Values": {
-    "function.name": "Your Function Name",
-    "function.managed": "false"
+    "function.name": "Your Function Name"
   }
 }
 ```
 
-Next, you need create a property instance and add it to a configuration. A `Configuration` has 2 required parameters passed 
-in the constructor. The 2 parameters are the `name` and `managed` mode parameters. 
+Next, you need create a property instance and add it to a configuration. A `Configuration` has 1 required parameter passed 
+in the constructor:
 
 - `name` {`string`}: The firendly name of this function. This name is used for diagnostics, insights, and logging and 
 should not be seen by the caller.
-- `managed` {`boolean`}: Determines if this function runs in a secure `managed` mode. More on that later.
 
 As stated you may use the primitive types or corrosponding `Property` instances.
 
 ```
-const config = new Configuration("Your Function Name", false);
+const config = new Configuration("Your Function Name");
 
 /* OR */
 
-const config = new Configuration(new StringProperty("function.name"), new BooleanProperty("function.managed"));
+const config = new Configuration(new StringProperty("function.name"));
 
 ```
 Let's unpack this real quick. The name parameter in the later example uses a `StringProperty` with a key that points to 
@@ -240,91 +240,9 @@ class MyNewHTTPTriggerFunction extends JSONHTTPFunction {
 module.exports = new MyNewHTTPTriggerFunction(config);
 ```
 
-###So, what about managed mode?
-Glad you asked! Managed mode puts Celastrina.js inso a secure managed resource mode. This allows Celastrina.js to not only 
-secure property values in Microsoft Azure Key Vault but also consume resources as a Managed Identity leveraging MSI. Managed 
-Identities allow you to access the resource manager, databases, vault, and many other PaaS resources as the functions 
-managed identity. To use resources you must enable either a System or User Assigned identity. To do so go to 
-_All services > Function App > \[Your function App\] > Identity_ in the Azure portal. There select the "System Assigned" or 
-"User Assigned" tab and enable your identity.
-
-Once enabled, all you need to do is set managed to `true` in your `Configuration` and add resources as you please.
-
-```
-const config = new Configuration("Your Function Name", false);
-
-/* OR */
-
-const config = new Configuration(new StringProperty("function.name"), new BooleanProperty("function.managed"));
-```
-
-When using properties, make sure you update the aplication settings, and your local.settings.json for local debug:
-
-```
-{
-  "IsEncrypted": false,
-  "Values": {
-    "function.name": "Your Function Name",
-    "function.managed": "true"
-  }
-}
-```
-
-Celastrina.js will not leverage MSI and use the `IDENTITY_ENDPOINT` and `IDENTITY_HEADER` environment variables when 
-registering resources. See [https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview](https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview).
-for more information on MSI and Managed Identities.
-
-Celastrina.js will also immediately register the Key Vault resource for the function on bootstrap. This ill allow you to
-put configuration properties as secrets in Key Vault.
-
-####So, why should I use Azure Key Vault and not Application Settings?
-Well, that's a great questions. I happen to trust more the added layer os security from Azure Key Vault and the clearer 
-Seperation of Duties (SOD) in managing securey properties in Key Vault. It allows a configuration manager or other higher 
-privilliged role in your organization safely distribute and version sensitive information without exposing it to 
-developers. Basically, you can hand a resource URL to a developer without devulging sensitive information or elevated 
-access. Heres how it works:
-
-1. In Azire portal, navigate to _All services > Key vaults > \[Your Key Vault\] | Secrets_ and add a new secret.
-2. Then go to _All services > Key vaults > \[Your Key Vault\] | Access policies_ and add your Azure Function's Managed 
-Identity to the policy. I usually just add it to `GET` and `LIST`.
-3. Get the resource URL for the secret and add it to the application settings.
-
-```
-{
-  "IsEncrypted": false,
-  "Values": {
-    "function.name": "Your Function Name",
-    "function.managed": "true"
-    "YOUR_VUALT_SECURE_PROPERTY": "https://[Your Key Vault].vault.azure.net/secrets/[Your Secret]/[Your Version ID]"
-  }
-}
-```
-
-Your application settings would look something like this:
-
-```
-{
-  "IsEncrypted": false,
-  "Values": {
-    "function.name": "Your Function Name",
-    "function.managed": "true"
-    "YOUR_VUALT_SECURE_PROPERTY": "https://MyNewVault.vault.azure.net/secrets/MyNewSecret/6ff6009aa001384e8edc348064b3503a"
-  }
-}
-```
-
-Now, when you use a Property instance, you just set `secure` to `true` and it will look up the value in Key Vault.
-
-```
-new StringProperty("YOUR_VUALT_SECURE_PROPERTY", true);
-```
-
-During bootstrap, Celastrina.js will get the resource URL from the application setting then, using the managed resource 
-identity for vault, look up the secret and replace it with the value from Key Vault. You can use any `Property` instance 
-this way, including placing json in Key Vault and using the `JsonProperty`.
-
-Oh, and BTW, Celastrina.js will cache all the secure properties so that the will not get retrieved from Key Vualt every 
-lookup. Please, TRUST me, this is safe, simple, and affordable. For most applications, this is pennies on the dollar.
+###So, How do I use Azure Key Vault or App Configuration Service?
+Glad you asked! 
+**COMING SOON**
 
 ####Back to Managed Resources
 You can add authorizations for any other supported managed resource using the `Configration`. For a list of supported 

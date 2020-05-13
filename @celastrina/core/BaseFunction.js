@@ -67,14 +67,7 @@ const {App} = require("./Property");
  * @property {Object} headers
  * @property {Object} body
  */
-/**
- * @typedef _AzureLog
- * @property error
- * @property warn
- * @property verbose
- * @property info
- * @function ()
- */
+
 /**
  * @typedef {Object} _Body
  */
@@ -845,7 +838,7 @@ class Configuration {
         this._config  = {}; // Class for storing named configurations.
         /** @type {null|_AzureFunctionContext} */
         this._context = null;
-        /** @type {null|PropertyHandler} */
+        /** @type {null|JsonProperty|PropertyHandler} */
         this._handler = null;
         /** @type {Array.<JsonProperty|ApplicationAuthorization>} **/
         this._config[Configuration.CELASTRINA_CONFIG_APPLICATION_AUTHORIZATION] = [];
@@ -878,7 +871,7 @@ class Configuration {
     }
 
     /**
-     * @param {PropertyHandler} handler
+     * @param {null|JsonProperty|PropertyHandler} handler
      * @returns {Configuration}
      */
     setPropertyHandler(handler) {

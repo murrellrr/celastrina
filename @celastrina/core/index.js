@@ -24,8 +24,10 @@
 
 const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
 const {Vault} = require("./Vault");
-const {PropertyHandler, AppSettingsPropertyHandler, VaultAppSettingPropertyHandler, AppConfigPropertyHandler, Property,
-       JsonProperty, StringProperty, BooleanProperty, NumericProperty} = require("./Property");
+const {AppConfiguration} = require("./AppConfiguration");
+const {PropertyHandler, AppSettingsPropertyHandler, VaultAppSettingPropertyHandler, AppConfigPropertyHandler,
+       CachedProperty, CachePropertyHandler, Property, JsonProperty, StringProperty, BooleanProperty,
+       NumericProperty} = require("./Property");
 const {ApplicationAuthorization, ValueMatch, MatchAny, MatchAll, MatchNone, FunctionRole, Configuration, Algorithm,
        AES256Algorithm, Cryptography, LOG_LEVEL, BaseSubject, MonitorResponse, RoleResolver, BaseSentry, BaseContext,
        BaseFunction, ApplicationAuthorizationProperty, FunctionRoleProperty} = require("./BaseFunction");
@@ -34,10 +36,14 @@ const {Point} = require("./Point");
 module.exports = {
     CelastrinaError: CelastrinaError,
     CelastrinaValidationError: CelastrinaValidationError,
+    Vault: Vault,
+    AppConfiguration: AppConfiguration,
     PropertyHandler: PropertyHandler,
     AppSettingsPropertyHandler: AppSettingsPropertyHandler,
     VaultAppSettingPropertyHandler: VaultAppSettingPropertyHandler,
     AppConfigPropertyHandler: AppConfigPropertyHandler,
+    CachedProperty: CachedProperty,
+    CachePropertyHandler: CachePropertyHandler,
     Property: Property,
     StringProperty: StringProperty,
     BooleanProperty: BooleanProperty,

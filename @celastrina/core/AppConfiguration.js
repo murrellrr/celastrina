@@ -34,16 +34,29 @@ const axios  = require("axios").default;
 const {CelastrinaError} = require("./CelastrinaError");
 
 /**
- * @author Robert R Murrell
+ * @typedef _AppConfigKeyValue
+ * @property {string} key
+ * @property {string} label
+ * @property {string} contentType
+ * @property {string} eTag
+ * @property {string} lastModified
+ * @property {boolean} locked
+ * @property {object} tags
  */
-class Vault {
+
+class AppConfiguration {
     /**
      * @param {string} token
+     * @param {string} subscription
+     * @param {string} [label="development"]
      */
-    constructor(token) {
+    constructor(token, subscription, label = "development") {
         let params = new URLSearchParams();
-        params.append("api-version", "7.0");
+        params.append("api-version", "2019-10-01");
         this.config = {params: params, headers: {"Authorization": "Bearer " + token}};
+        this._url = "https://management.azure.com/subscriptions/" + subscription +
+            "/resourceGroups/myResourceGroup/providers/Microsoft.AppConfiguration/configurationStores/fayeh/listKeyValue";
+        this._label = label;
     }
 
     /**
@@ -61,27 +74,23 @@ class Vault {
     }
 
     /**
-     * @param {string} identifier
+     * @param {string} key
      * @returns {Promise<string>}
      */
-    async getSecret(identifier) {
-        return new Promise(
-            (resolve, reject) => {
-                axios.get(identifier, this.config)
-                    .then((response) => {
-                        resolve(response.data.value);
-                    })
-                    .catch((exception) => {
-                        reject(CelastrinaError.newError("Error getting secret for '" + identifier + "'."));
-                    });
-            });
+    async getValue(key) {
+        return new Promise((resolve, reject) => {
+            let data = {key: key, label: this._label};
+            axios.post(this._url, data, this.config)
+                .then((response) => {
+                    resolve(response.data.value);
+                })
+                .catch((exception) => {
+                    reject(CelastrinaError.newError("Error getting value for '" + key + "'."));
+                });
+        });
     }
 }
-/*
- * *********************************************************************************************************************
- * EXPORTS
- * *********************************************************************************************************************
- */
+
 module.exports = {
-    Vault: Vault
+    AppConfiguration: AppConfiguration
 };

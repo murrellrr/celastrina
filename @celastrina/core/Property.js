@@ -39,51 +39,76 @@ const {Vault} = require("./Vault");
  * @typedef _AzureFunctionContext
  * @property {Object & {req: Object, res: Object}} bindings
  * @property {Object & {invocationId: string}} bindingData
- * @property {_AzureLog} log
+ * @property {Object} log
  * @property {function()|function(*)} done
  * @property {function(string)} log
  * @property {string} invocationId
  * @property {Object} traceContext
  */
 /**
- * @typedef _ManagedResourceToken
+ * @typedef _Credential
  * @property {string} access_token
  * @property {moment.Moment} expires_on
  * @property {string} resource
  * @property {string} token_type
  * @property {string} client_id
  */
-/**
- * @typedef _CachedProperty
- * @property {string} type
- * @property {string} resource
- * @property {string} ttl
- * @property {moment.Moment} expires
- * @property {null|string} value
- */
 
 /**
  * @abstract
  */
 class PropertyHandler {
-    constructor() {}
+    constructor() {
+        this._loaded = false;
+    }
+
+    /**
+     * @returns {boolean}
+     */
+    get loaded() {
+        return this._loaded;
+    }
 
     /**
      * @param {_AzureFunctionContext} context
      * @param {object} config
      * @returns {Promise<void>}
+     * @abstract
      */
-    async initialize(context, config) {
+    async _initialize(context, config) {
         return new Promise((resolve, reject) => {
-            context.log.error("[PropertyHandler.initialize(context)]: Not Implemented.");
             reject(CelastrinaError.newError("Not Implemented."));
         });
     }
 
     /**
+     * @param {_AzureFunctionContext} context
+     * @param {object} config
+     * @param {boolean} [force=false]
+     * @returns {Promise<boolean>}
+     */
+    async initialize(context, config, force = false) {
+        return new Promise((resolve, reject) => {
+            if(!this._loaded || force) {
+                this._initialize(context, config)
+                    .then(() => {
+                        this._loaded = true;
+                        resolve(true);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            else
+                resolve(false);
+        });
+    }
+
+    /**
      * @param {string} key
-     * @param {null|string} [defaultValue]
-     * @returns {Promise<string>}
+     * @param {*} [defaultValue = null]
+     * @returns {Promise<*>}
+     * @abstract
      */
     async getProperty(key, defaultValue = null) {
         return new Promise((resolve, reject) => {
@@ -91,6 +116,7 @@ class PropertyHandler {
         });
     }
 }
+
 /**
  * @type {PropertyHandler}
  */
@@ -104,7 +130,7 @@ class AppSettingsPropertyHandler extends PropertyHandler {
      * @param {object} config
      * @returns {Promise<void>}
      */
-    async initialize(context, config) {
+    async _initialize(context, config) {
         return new Promise((resolve, reject) => {
             resolve();
         });
@@ -112,259 +138,86 @@ class AppSettingsPropertyHandler extends PropertyHandler {
 
     /**
      * @param {string} key
-     * @param {null|string} [defaultValue]
-     * @returns {Promise<string>}
+     * @param {*} [defaultValue=null]
+     * @returns {Promise<*>}
      */
     async getProperty(key, defaultValue = null) {
         return new Promise((resolve, reject) => {
             let value = process.env[key];
-            if(typeof value === "undefined" || value.trim().length === 0)
+            if(typeof value === "undefined")
                 value = defaultValue;
             resolve(value);
         });
     }
 }
-class CachedProperty {
-    /**
-     * @param {string} resource
-     * @param {number} [ttl=Number.MAX_VALUE]
-     * @param {DurationInputArg2} [ttlunit="s"]
-     */
-    constructor(resource, ttl = Number.MAX_VALUE, ttlunit = "s") {
-        this._type     = "celastrina.property.cache";
-        this._resource = resource;
-        /** @type {number} */
-        this._ttl      = ttl;
-        /** @type {DurationInputArg2} */
-        this._ttlunit  = ttlunit;
-        /** @type {(null|string)} **/
-        this._value    = null;
-        this._expires  = moment();
-    }
-
-    /**
-     * @returns {string}
-     */
-    get resource() {
-        return this._resource;
-    }
-
-    /**
-     * @returns {null|string}
-     */
-    get value() {
-        return this._value;
-    }
-
-    /**
-     * @param {null|string} value
-     */
-    set value(value) {
-        this._value = value;
-        if(this._ttl > 0) {
-            this._expires = moment();
-            this._expires.add(this._ttl, this._ttlunit);
-        }
-    }
-
-    /**
-     * @returns {boolean}
-     */
-    isExpired() {
-        if(this._ttl === Number.NaN)
-            return true;
-        else if(this._ttl === Number.MAX_VALUE)
-            return false;
-        else {
-            let now = moment();
-            return now.isSameOrAfter(this._expires);
-        }
-    }
-
-    /**
-     * @param {undefined|null|string} value
-     * @return {(null|CachedProperty)}
-     */
-    static create(value) {
-        if(typeof value !== "string")
-            return null;
-        let valueobj = JSON.parse(value);
-        if(typeof valueobj !== "object")
-            return null;
-        if(!valueobj.hasOwnProperty("_type") || valueobj._type !== "celastrina.property.cache")
-            return null;
-        if(!valueobj.hasOwnProperty("_resource") || valueobj._resource.trim().length === 0)
-            throw CelastrinaValidationError.newValidationError("Invalid CachedProperty. _resource is required.",
-                "CachedProperty._resource");
-        return new CachedProperty(valueobj._resource, valueobj._ttl, valueobj._ttlunit);
-    }
-}
 
 
 /**
+ * @type {PropertyHandler}
  * @abstract
  */
-class CachedPropertyHandler extends PropertyHandler {
-    constructor() {
+class ManagedResourcePropertyHandler extends PropertyHandler {
+    /**
+     * @param {string} resource
+     */
+    constructor(resource) {
         super();
-        this._cache = {};
+        /** @type {null|_Credential} */
+        this._credential = null;
+        this._endpoint   = null;
+        this._secret     = null;
+        this._resource   = resource;
     }
 
     /**
-     * @returns {{}}
+     * @returns {Promise<string>}
      */
-    get cache() {
-        return this._cache;
+    async _refreshCredential() {
+        return new Promise(async (resolve, reject) => {
+            try {
+                let params = new URLSearchParams();
+                params.append("resource", this._resource);
+                params.append("api-version", "2019-08-01");
+                let config = {params: params,
+                    headers: {"X-IDENTITY-HEADER": this._secret}};
+                let response = await axios.get(this._endpoint, config);
+                this._credential = /** @type {_Credential} */response.data;
+                this._credential.expires_on = moment.unix(response.data.expires_on);
+                resolve(this._credential.access_token);
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
 
     /**
+     * @param {string} token
      * @returns {Promise<void>}
+     * @abstract
      */
-    async clear() {
+    async _refreshSource(token) {
         return new Promise((resolve, reject) => {
-            this._cache = {};
             resolve();
         });
     }
 
     /**
-     * @param {string} key
-     * @param {null|string} [defaultValue=null]
-     * @returns {Promise<undefined|null|string|CachedProperty>}
-     * @abstract
+     * @returns {Promise<void>}
      */
-    async resolveReference(key, defaultValue = null) {
-        return new Promise((resolve, reject) => {
-            reject(CelastrinaError.newError("Not Implemented."));
-        });
-    }
-
-    /**
-     * @param {string} key
-     * @param {null|string} [defaultValue=null]
-     * @returns {Promise<undefined|null|string>}
-     */
-    async getCachedProperty(key, defaultValue = null) {
-        return new Promise((resolve, reject) => {
-            /** @type {CachedProperty} */
-            let item    = this._cache[key];
-            let expired = (typeof item === "undefined" || item == null);
-
-            if(!expired)
-                expired = item.isExpired();
-
-            if(expired) {
-                this.resolveReference(key, defaultValue)
-                    .then((property) => {
-                        if(property instanceof CachedProperty) {
-                            this._cache[key] = property;
-                            resolve(item.value);
-                        }
-                        else
-                            resolve(property);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
+    async refresh() {
+        return new Promise(async (resolve, reject) => {
+            try {
+                if(this._credential == null || moment().isSameOrAfter(this._credential.expires_on)) {
+                    let token = await this._refreshCredential();
+                    await this._refreshSource(token);
+                    resolve();
+                }
             }
-            else
-                resolve(item.value);
+            catch(exception) {
+                reject(exception);
+            }
         });
-    }
-
-    /**
-     * @param {string} key
-     * @param {null|string} [defaultValue=null]
-     * @returns {Promise<string>}
-     */
-    async getProperty(key, defaultValue = null) {
-        return new Promise((resolve, reject) => {
-            this.getCachedProperty(key, defaultValue)
-                .then((value) => {
-                    if(typeof value === "undefined" || value == null)
-                        value = defaultValue;
-                    resolve(value);
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
-        });
-    }
-}
-
-
-
-
-
-
-
-
-
-
-
-/**
- * @type {AppSettingsPropertyHandler}
- */
-class AppConfigPropertyHandler extends PropertyHandler {
-    constructor() {
-        super();
-    }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-/**
- * @type {CachedPropertyHandler}
- */
-class VaultAppSettingPropertyHandler extends CachedPropertyHandler {
-    constructor() {
-        super();
-        /** @type {null|Vault} */
-        this._vault    = null;
-        this._endpoint = null;
-        this._secret   = null;
-    }
-
-    /**
-     * @returns {Promise<string>}
-     * @private
-     */
-    async _refreshAuthorization() {
-        return new Promise((resolve, reject) => {
-
-        });
-
-        // /** @type {string} */
-        // let endpoint = process.env["IDENTITY_ENDPOINT"];
-        // /** @type {string} */
-        // let secret = process.env["IDENTITY_HEADER"];
-        //
-        // let params = new URLSearchParams();
-        // params.append("resource", "https://vault.azure.net");
-        // params.append("api-version", "2019-08-01");
-        // let config = {params: params,
-        //     headers: {"X-IDENTITY-HEADER": secret}};
-        //
-        // axios.get(endpoint, config)
-        //     .then((response) => {
-        //         response.data.access_token;
-        //
-        //         resolve(response.data.access_token);
-        //     })
-        //     .catch((exception) => {
-        //         reject(exception);
-        //     });
-        //
-        // resolve();
     }
 
     /**
@@ -372,67 +225,113 @@ class VaultAppSettingPropertyHandler extends CachedPropertyHandler {
      * @param {object} config
      * @returns {Promise<void>}
      */
-    async initialize(context, config) {
-        return new Promise((resolve, reject) => {
-            this._endpoint = process.env["IDENTITY_ENDPOINT"];
-            this._secret   = process.env["IDENTITY_HEADER"];
-
-            if((typeof this._endpoint !== "string" || this._endpoint.trim().length === 0) ||
-               (typeof this._secret !== "string" || this._secret.trim().length === 0)) {
-                context.log.error("[VaultAppSettingPropertyHandler.initialize(context)] IDENTITY_ENDPOINT and/or " +
-                                  "IDENTITY_HEADER environment property missing. Are you sure this Azure Function " +
-                                  "is using a Managed Identity?");
-                reject(CelastrinaError.newError("Function not configured for Managed Identity."));
+    async _initialize(context, config) {
+        return new Promise(async (resolve, reject) => {
+            try {
+                this._endpoint = process.env["IDENTITY_ENDPOINT"];
+                this._secret   = process.env["IDENTITY_HEADER"];
+                if((typeof this._endpoint !== "string" || this._endpoint.trim().length === 0) ||
+                    (typeof this._secret !== "string" || this._secret.trim().length === 0)) {
+                    context.log.error("[VaultAppSettingPropertyHandler.initialize(context)] IDENTITY_ENDPOINT and/or " +
+                        "IDENTITY_HEADER environment property missing. Are you sure this Azure Function " +
+                        "is using a Managed Identity?");
+                    reject(CelastrinaError.newError("Function not configured for Managed Identity."));
+                }
+                else {
+                    await this.refresh();
+                }
             }
-            else {
-                this._refreshAuthorization()
-                    .then((token) => {
-                        this._vault = new Vault(token);
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
+            catch(exception) {
+                reject(exception);
             }
         });
     }
+}
+class VaultReference {
+    /**
+     * @param {string} resourceId
+     */
+    constructor(resourceId) {
+        /** @type {string} */
+        this._resourceId = resourceId;
+    }
 
     /**
-     * @returns {Promise<Vault>}
-     * @private
+     * @returns {string}
      */
-    async _getVault() {
+    get resourceId() {
+        return this._resourceId;
+    }
+
+    /**
+     * @param {null|undefined|Object} source
+     * @returns {boolean}
+     */
+    static isObject(source) {
+        return ((typeof source !== "undefined") && (source != null) && source.hasOwnProperty("_type") &&
+            (typeof source._type === "string") && (source._type === "celastrinajs.vault.reference"));
+    }
+
+    /**
+     * @param {Object} source
+     * @returns {VaultReference}
+     */
+    static create(source) {
+        return new VaultReference(source._resourceId);
+    }
+}
+/**
+ * @type {AppSettingsPropertyHandler}
+ */
+class VaultAppSettingPropertyHandler extends ManagedResourcePropertyHandler {
+    constructor() {
+        super("https://vault.azure.net");
+        /** @type {null|Vault} */
+        this._vault    = null;
+        this._settings = new AppSettingsPropertyHandler();
+    }
+
+    /**
+     * @param {string} token
+     * @returns {Promise<void>}
+     */
+    async _refreshSource(token) {
         return new Promise((resolve, reject) => {
-            //
+            try {
+                if(this._vault == null)
+                    this._vault = new Vault(token);
+                else
+                    this._vault.token = token;
+                resolve();
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 
     /**
      * @param {string} key
-     * @param {null|string} [defaultValue=null]
-     * @returns {Promise<undefined|null|CachedProperty>}
-     * @abstract
+     * @param {*} [defaultValue=null]
+     * @returns {Promise<*>}
      */
-    async resolveReference(key, defaultValue = null) {
-        return new Promise((resolve, reject) => {
+    async getProperty(key, defaultValue = null) {
+        return new Promise(async (resolve, reject) => {
             try {
-                /** @type {undefined|null|string} */
-                let value    = process.env[key];
-                let valueobj = CachedProperty.create(value);
-
-                if(valueobj instanceof CachedProperty) {
-                    // Get the property from Vault.
-                    this._getVault()
-                        .then((vault) => {
-                            return vault.getSecret(valueobj.resource);
-                        })
-                        .then((result) => {
-                            valueobj.value = result;
-                            resolve(valueobj);
-                        })
-                        .catch((exception) => {
-                            reject(exception);
-                        });
+                let value = await this._settings.getProperty(key);
+                if(typeof value === "undefined")
+                    resolve(defaultValue);
+                else if(typeof value !== "string")
+                    resolve(value);
+                // Checking to see if this is a vault reference.
+                else if(VaultReference.isObject(value)) {
+                    await this.refresh();
+                    // Now we lookup from vault.
+                    let reference = await VaultReference.create(value);
+                    let secret    = await this._vault.getSecret(reference.resourceId);
+                    if(typeof secret === "undefined")
+                        secret = defaultValue;
+                    resolve(secret);
                 }
                 else
                     resolve(value);
@@ -444,13 +343,269 @@ class VaultAppSettingPropertyHandler extends CachedPropertyHandler {
     }
 }
 /**
+ * @type {AppSettingsPropertyHandler}
+ */
+class AppConfigPropertyHandler extends ManagedResourcePropertyHandler {
+    constructor() {
+        super("https://management.azure.com/");
+    }
+
+    /**
+     * @param {string} token
+     * @returns {Promise<void>}
+     */
+    async _refreshSource(token) {
+        return new Promise((resolve, reject) => {
+            resolve();
+        });
+    }
+
+    /**
+     * @param {string} key
+     * @param {*} [defaultValue=null]
+     * @returns {Promise<*>}
+     */
+    async getProperty(key, defaultValue = null) {
+        return new Promise(async (resolve, reject) => {
+            try {
+                // call from axios.
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+}
+class CachedProperty {
+    /**
+     * @param {number} [time=300]
+     * @param {DurationInputArg2} [unit="s"]
+     */
+    constructor(time = 300, unit = "s") {
+        /** @type {*} */
+        this._value   = null;
+        this._time    = time;
+        this._unit    = unit;
+        /** @type {null|moment.Moment} */
+        this._expires = null;
+        /** @type {null|moment.Moment} */
+        this._lastUpdate = null;
+    }
+
+    /**
+     * @returns {*}
+     */
+    get value() {
+        return this._value;
+    }
+
+    /**
+     * @param {*} value
+     */
+    set value(value) {
+        this._value = value;
+        this._lastUpdate = moment();
+        if(this._time === 0 || value == null)
+            this._expires = null;
+        else
+            this._expires = moment().add(this._time, this._unit);
+    }
+
+    /**
+     * @returns {boolean}
+     */
+    isExpired() {
+        if(this._expires == null)
+            return true;
+        else
+            return (moment().isSameOrAfter(this._expires));
+    }
+
+    /**
+     * @returns {null|moment.Moment}
+     */
+    get expires() {
+        return this._expires;
+    }
+
+    /**
+     * @returns {null|moment.Moment}
+     */
+    get lastUpdated() {
+        return this._lastUpdate;
+    }
+}
+/**
+ * @type {AppSettingsPropertyHandler}
+ */
+class CachePropertyHandler extends PropertyHandler {
+    /** @type {string} */
+    static CONFIG_CACHE_DEFAULT_EXPIRE_TIME = "celastrinajs.property.cache.expire.time";
+    /** @type {string} */
+    static CONFIG_CACHE_DEFAULT_EXPIRE_UNIT = "celastrinajs.property.cache.expire.unit";
+    /** @type {string} */
+    static CONFIG_CACHE_DEFAULT_EXPIRE_OVERRIDE = "celastrinajs.property.cache.expire.override";
+
+    /**
+     * @param {PropertyHandler} [handler=new AppSettingsPropertyHandler()]
+     * @param {number} [defaultTime=300]
+     * @param {DurationInputArg2} [defaultUnit="s"]
+     */
+    constructor(handler = new AppSettingsPropertyHandler(), defaultTime = 300,
+                defaultUnit = "s") {
+        super();
+        this._handler = handler;
+        this._cache   = {};
+        this._defaultTime = defaultTime;
+        this._defaultUnit = defaultUnit;
+    }
+
+    /**
+     * @returns {boolean}
+     */
+    get loaded() {
+        return this._handler.loaded;
+    }
+
+    /**
+     * @returns {Promise<void>}
+     */
+    async configure() {
+        return new Promise(async (resolve, reject) => {
+            try {
+                // TODO: Get the cache config information.
+                let time = await this._handler.getProperty(CachePropertyHandler.CONFIG_CACHE_DEFAULT_EXPIRE_TIME,
+                                                          null);
+                let unit = await this._handler.getProperty(CachePropertyHandler.CONFIG_CACHE_DEFAULT_EXPIRE_UNIT,
+                                                          null);
+                if(typeof time === "number")
+                    this._defaultTime = time;
+                if(typeof unit === "string")
+                    this._defaultUnit = /** @type {DurationInputArg2} */unit;
+                let override = await this._handler.getProperty(
+                    CachePropertyHandler.CONFIG_CACHE_DEFAULT_EXPIRE_OVERRIDE,
+                    null);
+                if(typeof override === "string") {
+                    // Load the JSON
+                    let tempovr = JSON.parse(override);
+                    if((typeof tempovr === "object") && tempovr.hasOwnProperty("_type") &&
+                        (typeof tempovr._type === "string") &&
+                        (tempovr._type === CachePropertyHandler.CONFIG_CACHE_DEFAULT_EXPIRE_OVERRIDE)) {
+                        // Loop through and apply the overrides.
+                        /** @type {{_overrides: Array.<object>}} */
+                        let overrides = tempovr._overrides;
+                        for(/** @type {{_property:string, _time:number, _unit:DurationInputArg2}} */const ovr of overrides) {
+                            this._cache[ovr._property] = new CachedProperty(ovr._time, ovr._unit);
+                        }
+                    }
+                }
+                resolve();
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+
+    /**
+     * @returns {{}}
+     */
+    get cache() {
+        return this._cache;
+    }
+
+    /**
+     * @returns {PropertyHandler}
+     */
+    get handler() {
+        return this._handler;
+    }
+
+    /**
+     * @param {_AzureFunctionContext} context
+     * @param {object} config
+     * @returns {Promise<void>}
+     */
+    async _initialize(context, config) {
+        return this._handler._initialize(context, config);
+    }
+
+    /**
+     * @param {_AzureFunctionContext} context
+     * @param {object} config
+     * @param {boolean} [force=false]
+     * @returns {Promise<boolean>}
+     */
+    async initialize(context, config, force = false) {
+        return this._handler.initialize(context, config, force);
+    }
+
+    /**
+     * @param {string} key
+     * @returns {Promise<CachedProperty>}
+     */
+    async getCacheInfo(key) {
+        return new Promise((resolve, reject) => {
+            let cached = this._cache[key];
+            if(!(cached instanceof CachedProperty))
+                resolve(null);
+            else
+                resolve(cached);
+        });
+    }
+
+    /**
+     * @param {string} key
+     * @param {*} [defaultValue=null]
+     * @returns {Promise<*>}
+     */
+    async getProperty(key, defaultValue = null) {
+        return new Promise(async (resolve, reject) => {
+            try {
+                // Checking to see if it is in cache.
+                /** @type {undefined|CachedProperty} */
+                let cached  = this._cache[key];
+                let value;
+                // Not in cache, attempting to add to cache.
+                if(!(cached instanceof CachedProperty)) {
+                    // Checking to see if we are in the source
+                    value = await this._handler.getProperty(key, null);
+                    // Dont cache null or default value.
+                    if(value == null)
+                        value = defaultValue;
+                    else {
+                        cached = new CachedProperty(this._defaultTime, this._defaultUnit);
+                        cached.value = value;
+                        this._cache[key] = cached;
+                    }
+                }
+                else if(cached.isExpired()) {
+                    // Dont want to remove cache item, just keep it expired for now, this is to keep cache override
+                    // configurations if they were specified.
+                    value = await this._handler.getProperty(key, null);
+                    cached.value = value;
+                    if(value == null)
+                        value = defaultValue;
+                }
+                else
+                    value = cached.value;
+                resolve(value);
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+}
+
+/**
  * @type {{_name:string, _type:string, _secure:boolean, _defaultValue:null|*}}
  * @abstract
  */
 class Property {
     /**
      * @param {string} name
-     * @param {null|*} [defaultValue]
+     * @param {*} [defaultValue = null]
      */
     constructor(name, defaultValue = null) {
         this._name         = name;
@@ -488,7 +643,7 @@ class Property {
     }
 
     /**
-     * @param {string} value
+     * @param {null|string} value
      * @returns {Promise<null|Object|string|boolean|number>}
      */
     async resolve(value) {
@@ -522,20 +677,23 @@ class Property {
 class JsonProperty extends Property {
     /**
      * @param {string} name
-     * @param {null|string} defaultValue
+     * @param {null|Object} defaultValue
      */
     constructor(name, defaultValue = null) {
         super(name, defaultValue);
     }
 
     /**
-     * @param {string} value
+     * @param {null|string} value
      * @returns {Promise<null|Object>}
      */
     async resolve(value) {
         return new Promise((resolve, reject) => {
             try {
-                resolve(JSON.parse(value));
+                if(value == null)
+                    resolve(null);
+                else
+                    resolve(JSON.parse(value));
             }
             catch(exception) {
                 reject(exception);
@@ -591,7 +749,7 @@ class BooleanProperty extends Property {
     async resolve(value) {
         return new Promise((resolve, reject) => {
             try {
-                resolve((value.toLowerCase() === "true"));
+                resolve((value.trim().toLowerCase() === "true"));
             }
             catch(exception) {
                 reject(exception);
@@ -632,6 +790,8 @@ module.exports = {
     AppSettingsPropertyHandler: AppSettingsPropertyHandler,
     VaultAppSettingPropertyHandler: VaultAppSettingPropertyHandler,
     AppConfigPropertyHandler: AppConfigPropertyHandler,
+    CachedProperty: CachedProperty,
+    CachePropertyHandler: CachePropertyHandler,
     Property: Property,
     StringProperty: StringProperty,
     BooleanProperty: BooleanProperty,

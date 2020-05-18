@@ -36,7 +36,7 @@ const uuid4v = require("uuid/v4");
 const crypto = require('crypto');
 const {TokenResponse, AuthenticationContext} = require("adal-node");
 const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
-const {PropertyHandler, AppSettingsPropertyHandler, Property,
+const {PropertyHandler, AppSettingsPropertyHandler, CachePropertyHandler, Property,
        JsonProperty, StringProperty, BooleanProperty, NumericProperty, } = require("./Property");
 const {Vault} = require("./Vault");
 const {App} = require("./Property");
@@ -824,7 +824,9 @@ class FunctionRoleProperty extends JsonProperty {
 class Configuration {
     static CELASTRINA_CONFIG_APPLICATION_AUTHORIZATION = "celastrinajs.core.authorization.application";
     static CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION    = "celastrinajs.core.authorization.resource";
-    static CELASTRINA_CONFIG_ROLES                     = "celastrinajs.core.function.roles";
+    static CELASTRINA_CONFIG_ROLES                     = "celastrinajs.core.roles";
+    static CELASTRINA_CONFIG_DEPLOYMENT_DEV            = "celastringjs.core.deployment.development";
+    static CELASTRINA_CONFIG_PROPERTY_CACHE            = "celastringjs.core.property.cache";
 
     /**
      * @param {StringProperty|string} name
@@ -846,7 +848,6 @@ class Configuration {
         this._config[Configuration.CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION] = [];
         /** @type {Array.<JsonProperty|FunctionRole>} */
         this._config[Configuration.CELASTRINA_CONFIG_ROLES] = [];
-        this._loaded = false;
     }
 
     /**
@@ -979,53 +980,70 @@ class Configuration {
     }
 
     /**
+     * @returns {PropertyHandler}
+     * @private
+     */
+    _getPropertyHandler() {
+        if(typeof this._handler === "undefined" || this._handler == null)
+            this._handler = new AppSettingsPropertyHandler(); // One was not set by the implementor, use default.
+        if(!this._handler.loaded) {
+            // Checking to see if we need to override for local development.
+            let deployment = process.env[Configuration.CELASTRINA_CONFIG_DEPLOYMENT_DEV];
+            if(typeof deployment === "string")
+                // There is a local development mode config.
+                if(deployment.trim().toLowerCase() === "true")
+                    return new AppSettingsPropertyHandler();
+        }
+        return this._handler;
+    }
+
+    /**
      * @param {_AzureFunctionContext} context
      * @returns {Promise<void>}
      */
     async load(context) {
-        return new Promise(
-            (resolve, reject) => {
-                try {
-                    // Set up the Azure function context for the configuration.
-                    this._context = context;
-                    if(!this._loaded) {
-                        // Setting the default handler to the application settings handler.
-                        if(typeof this._handler === "undefined" || this._handler == null)
-                            this._handler = new AppSettingsPropertyHandler();
-
-                        // Setting up the property handler.
-                        this._handler.initialize(context, this._config)
-                            .then(() => {
-                                // Scan for any property object then replace async.
-                                /** @type {Array.<Promise<void>>} */
-                                let promises = [];
-                                this._load(this, promises);
-                                return Promise.all(promises);
-                            })
-                            .then(() => {
-                                if(typeof this._name !== "string" || this._name.trim().length === 0) {
-                                    context.log.error("Invalid Configuration. Name cannot be undefined, null, or 0 length."); // Low level logger.
-                                    reject(CelastrinaError.newError("Invalid Configuration."));
-                                }
-                                else {
-                                    this._context.log("[Configuration.load(context)]: Configuration loaded from source.");
-                                    this._loaded = true;
-                                    resolve();
-                                }
-                            })
-                            .catch((exception) => {
-                                reject(exception);
-                            });
+        return new Promise(async (resolve, reject) => {
+            try {
+                // Set up the Azure function context for the configuration.
+                this._context = context;
+                // Checking the application settings configuration. We do this every time because we may have
+                // moved deployment slots and in doing so changed where we get configuration from. The application
+                // settings will only reload if its changed.
+                if(await this._getPropertyHandler().initialize(context, this._config)) {
+                    // Checking to see if caching is enabled.
+                    let cache = await this._handler.getProperty(Configuration.CELASTRINA_CONFIG_PROPERTY_CACHE);
+                    if(typeof cache === "string") {
+                        // There is a local development mode config.
+                        if(cache.trim().toLowerCase() === "true") {
+                            let cacheprop = new CachePropertyHandler(this._handler);
+                            await cacheprop.configure();
+                            this._handler = cacheprop;
+                            this._context.log("[Configuration.load(context)]: Cache enabled.");
+                        }
+                    }
+                    // Scan for any property object then replace async.
+                    /** @type {Array.<Promise<void>>} */
+                    let promises = [];
+                    this._load(this, promises);
+                    await Promise.all(promises);
+                    if(typeof this._name !== "string" || this._name.trim().length === 0) {
+                        context.log.error("Invalid Configuration. Name cannot be undefined, null, or 0 length."); // Low level logger.
+                        reject(CelastrinaError.newError("Invalid Configuration."));
                     }
                     else {
-                        this._context.log("[Configuration.load(context)]: Configuration loaded from cache.");
+                        this._context.log("[Configuration.load(context)]: Configuration loaded from source.");
                         resolve();
                     }
                 }
-                catch(exception) {
-                    reject(exception);
+                else {
+                    this._context.log("[Configuration.load(context)]: Configuration aready loaded.");
+                    resolve();
                 }
-            });
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
 }
 /*
@@ -1651,6 +1669,13 @@ class BaseContext {
      */
     get session() {
         return this._session;
+    }
+
+    /**
+     * @returns {PropertyHandler}
+     */
+    get propertHandler() {
+        return this._properties;
     }
 
     /**

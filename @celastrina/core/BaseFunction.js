@@ -822,20 +822,27 @@ class FunctionRoleProperty extends JsonProperty {
  * @type {{_name:StringProperty|string, managed:BooleanProperty|boolean}}
  */
 class Configuration {
+    /** @type {string} */
     static CELASTRINA_CONFIG_APPLICATION_AUTHORIZATION = "celastrinajs.core.authorization.application";
+    /** @type {string} */
     static CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION    = "celastrinajs.core.authorization.resource";
+    /** @type {string} */
     static CELASTRINA_CONFIG_ROLES                     = "celastrinajs.core.roles";
-    static CELASTRINA_CONFIG_DEPLOYMENT_DEV            = "celastringjs.core.deployment.development";
-    static CELASTRINA_CONFIG_PROPERTY_CACHE            = "celastringjs.core.property.cache";
+    /** @type {string} */
+    static CELASTRINA_CONFIG_LOCAL_DEV                 = "celastringjs.core.deployment.local.development";
 
     /**
      * @param {StringProperty|string} name
      */
     constructor(name) {
-        if(typeof name == "string" && name.trim().length === 0)
-            throw CelastrinaError.newError("Invalid configuration. Name cannot be undefined, null or 0 length.");
+        if(typeof name === "string") {
+            // Checking its length
+            if(name.trim().length === 0)
+                throw CelastrinaError.newError("Invalid configuration. Name cannot be undefined, null or 0 length.");
+        }
         else if(!(name instanceof StringProperty))
             throw CelastrinaError.newError("Invalid configuration. Name must be string or StringProperty.");
+
         this._name    = name;
         this._config  = {}; // Class for storing named configurations.
         /** @type {null|_AzureFunctionContext} */
@@ -980,19 +987,26 @@ class Configuration {
     }
 
     /**
+     * @param {_AzureFunctionContext} context
      * @returns {PropertyHandler}
      * @private
      */
-    _getPropertyHandler() {
-        if(typeof this._handler === "undefined" || this._handler == null)
+    _getPropertyHandler(context) {
+        if(typeof this._handler === "undefined" || this._handler == null) {
+            context.log("[Configuration._getPropertyHandler(context)]: No property handler specified, " +
+                        "defaulting to AppSettingsPropertyHandler.");
             this._handler = new AppSettingsPropertyHandler(); // One was not set by the implementor, use default.
+        }
         if(!this._handler.loaded) {
             // Checking to see if we need to override for local development.
-            let deployment = process.env[Configuration.CELASTRINA_CONFIG_DEPLOYMENT_DEV];
+            let deployment = process.env[Configuration.CELASTRINA_CONFIG_LOCAL_DEV];
             if(typeof deployment === "string")
                 // There is a local development mode config.
-                if(deployment.trim().toLowerCase() === "true")
+                if(deployment.trim().toLowerCase() === "true") {
+                    context.log("[Configuration._getPropertyHandler(context)]: Local development override, " +
+                                "using AppSettingsPropertyHandler.");
                     return new AppSettingsPropertyHandler();
+                }
         }
         return this._handler;
     }
@@ -1009,18 +1023,7 @@ class Configuration {
                 // Checking the application settings configuration. We do this every time because we may have
                 // moved deployment slots and in doing so changed where we get configuration from. The application
                 // settings will only reload if its changed.
-                if(await this._getPropertyHandler().initialize(context, this._config)) {
-                    // Checking to see if caching is enabled.
-                    let cache = await this._handler.getProperty(Configuration.CELASTRINA_CONFIG_PROPERTY_CACHE);
-                    if(typeof cache === "string") {
-                        // There is a local development mode config.
-                        if(cache.trim().toLowerCase() === "true") {
-                            let cacheprop = new CachePropertyHandler(this._handler);
-                            await cacheprop.configure();
-                            this._handler = cacheprop;
-                            this._context.log("[Configuration.load(context)]: Cache enabled.");
-                        }
-                    }
+                if(await this._getPropertyHandler(this._context).initialize(this._context, this._config)) {
                     // Scan for any property object then replace async.
                     /** @type {Array.<Promise<void>>} */
                     let promises = [];

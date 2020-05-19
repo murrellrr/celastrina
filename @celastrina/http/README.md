@@ -25,7 +25,7 @@ To use Celastrina.js simply deploy the following to your Microsoft Azure HTTP Tr
 ```
 "use strict";
 
-const {LOG_LEVEL, StringProperty, BooleanProperty, Configuration} = require("@celastrina/core");
+const {StringProperty, BooleanProperty, Configuration} = require("@celastrina/core");
 const {JSONHTTPContext, JSONHTTPFunction} = require("@celastrina/http");
 
 const config = new Configuration(new StringProperty("function.name"));
@@ -83,13 +83,14 @@ bdinges should be named `req` and `res` respectively. Your `function.json` shoul
 ##Detailed Help & Documentation
 Please visit https://www.celastrinajs.com for complete documentation on using Celastrina.js.
 
-###Environment Properties
-Celastrina.js leverages Microsoft Azure Function application settings a little differently. Celastrina.js uses a 
-confiuration object (`Configuration`) that is linked through `Property` instances. A property represents a key=value pair in the 
-`process.env`. The `Property` paradigm is a little different as it enfources some degree of type-safety as well as a 
-way to secure key=value pairs using Microsoft Azure Vault.
+###Environment Configuration
+Celastrina.js has abstracted configuration to a simple concept of a configuration and properties, realized in the 
+classes `Configuration` and `Property` respectively. Properties are managed by a PropertyHandler. There are numerous 
+handlers ranging from traditional Azure Function App Settings, to more complex deployments using Azure App 
+Configurations.
 
-Celastrina.js core comes with 4 out-of-the-box `Property` types:
+A `Configuration` contains a set of properties or `Property`, all managed by the `PropertyHandler`. A property 
+represents a strongly typed key=value pair. Celastrina.js core comes with 4 out-of-the-box `Property` types:
 
 1. `NumericProperty`: `key=value` pair representing a Numberic data-type.
 2. `BooleanProperty`: `key=value` pair representing a true/false data type. The `BooleanProperty` simple looks for 
@@ -99,8 +100,10 @@ Celastrina.js core comes with 4 out-of-the-box `Property` types:
 
 This HTTP package also includes specialized property types will discuss later in this document. Celastrina.js takes 
 advantage of varient-type nature of JavaScript by allowing ANY configuration element to be a primitive type, or a 
-`Property` instance. All `Property` instances are converted to thier respective types during the bootstrp life-cycle of 
-the Celastrina.js function. More on life-cycle later.
+`Property` instance. All `Property` instances in a `Configuration` are converted to thier respective types during the 
+bootstrp life-cycle of the Celastrina.js function. More on life-cycle later. After the bootstrp life-cycle, properties 
+are acessed as strings in the context PropertyHandler. You may load the stong-types by using the `PropertyHandler` in 
+conjunction with a `Property` instance.
 
 A `Property` instance has the following constructor:
 
@@ -110,13 +113,14 @@ constructor(name, defaultValue = null)
 
 - `name` {`string`}: The name, or KEY, of the property in the process.env. This paramter is required and cannot be 
 undefined.
-- `defaultValue` {`*`}: The default value to use if the entry in process.env is `null` or `unddefined. The super
-class `Property` will accept Any (`*`) value but implentations such as `StringProperty` or `BooleanProperty` will enforce thier 
-respective types. This parameter is optional and will default to `null`.
+- `defaultValue` {`*`}: The default value to use if the entry in process.env is `null` or `unddefined`. The super
+class `Property` will accept Any (`*`) value but implentations such as `StringProperty` or `BooleanProperty` will 
+enforce thier respective types. This parameter is optional and will default to `null`.
 
 ####Using a Property
-To use a `Property`, add to your function application settings through the Azure portal at _All services > Function App > 
-\[Your function App\] > Configuration_ and in your local.settings.json.
+Lets use the default Azure Application Settings and `local.settings.json` as an example. To use a `Property`, add to your 
+function application settings through the Azure portal at _All services > Function App > \[Your function App\] > 
+Configuration_ and in your local.settings.json.
 
 ```
 {
@@ -144,17 +148,17 @@ const config = new Configuration(new StringProperty("function.name"));
 
 ```
 Let's unpack this real quick. The name parameter in the later example uses a `StringProperty` with a key that points to 
-"function.name" in process.env, equivelent to calling `process.env["function.name"]`:
+"function.name" in `process.env`, equivelent to calling `process.env["function.name"]`:
 
 ```
 new StringProperty("function.name")
 ```
 
 At runtime, when the `execute` function of the class is invoked, this `StringProperty` will be converted to a `string` from 
-the `process.env`.
+the underlying `PropertyHandler` using the key `function.name`.
 
 Pretty straight forward,eh? The core `Configuration` of Celastrina.js comes with numerous out-of-the-box attributes 
-including `name` and `managed`. You can set these attributes using the `Configuration.addValue` method or using explicit 
+including `name`. You can set these attributes using the `Configuration.addValue` method or using explicit 
 setter methods. The following explicit attributes are supported:
 
 - `addApplicationAuthorization` {`ApplicationAuthorization`}
@@ -163,6 +167,17 @@ setter methods. The following explicit attributes are supported:
 
 More on what these are later... The `Configuration` is only available during the `bootstrap` life-cycle. After that, any 
 environment properties can be accessed from the `BaseContext` object.
+
+#### Property Handlers
+Celastrina.js comes with four out-of-the-box PropertyHandler instances:
+
+- `AppSettingsPropertyHandler`: This is a wrapper around `process.env`. This is the default property handler if one not 
+is specified. It is also used if `process.env` contains a boolean property `celastringjs.core.deployment.local.development`.
+This allows local developers to override other configurations and rely on the `local.settings.json`.
+- `VaultAppSettingPropertyHandler`: This is a poor-mans App Configuration. This allows the application settings to 
+contain references to secrets in Azure Key Vault.
+- `AppConfigPropertyHandler`: A wrapper around the Azure App Config Services.
+- `CachePropertyHandler`: A configurable local cache that can wrap any `PropertyHandler` instance.
 
 #### The Celastrina.js Life-Cycle
 Celastrina.js follows a fairly straight forward life-cycle of promises to execute work. The basic life-cycle executed 
@@ -240,10 +255,6 @@ class MyNewHTTPTriggerFunction extends JSONHTTPFunction {
 
 module.exports = new MyNewHTTPTriggerFunction(config);
 ```
-
-###So, How do I use Azure Key Vault or App Configuration Service?
-Glad you asked! 
-**COMING SOON**
 
 ####Back to Managed Resources
 You can add authorizations for any other supported managed resource using the `Configration`. For a list of supported 

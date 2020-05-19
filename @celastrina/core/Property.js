@@ -132,6 +132,8 @@ class AppSettingsPropertyHandler extends PropertyHandler {
      */
     async _initialize(context, config) {
         return new Promise((resolve, reject) => {
+            context.log("[AppSettingsPropertyHandler._initialize(context, config)]: " +
+                        "AppSettingsPropertyHandler initialized.");
             resolve();
         });
     }
@@ -239,6 +241,8 @@ class ManagedResourcePropertyHandler extends PropertyHandler {
                 }
                 else {
                     await this.refresh();
+                    context.log("[ManagedResourcePropertyHandler._initialize(context, config)]: " +
+                                "ManagedResourcePropertyHandler initialized for resource '" + this._resource + "'.");
                 }
             }
             catch(exception) {
@@ -434,6 +438,16 @@ class CachedProperty {
     get lastUpdated() {
         return this._lastUpdate;
     }
+
+    /**
+     * @returns {Promise<void>}
+     */
+    async clear() {
+        return new Promise((resolve, reject) => {
+            this.value = null;
+            resolve();
+        });
+    }
 }
 /**
  * @type {AppSettingsPropertyHandler}
@@ -465,6 +479,31 @@ class CachePropertyHandler extends PropertyHandler {
      */
     get loaded() {
         return this._handler.loaded;
+    }
+
+    /**
+     * @returns {Promise<void>}
+     */
+    async clear() {
+        return new Promise((resolve, reject) => {
+            /** @type {Array.<Promise<void>>} */
+            let promises = [];
+
+            for(let prop in this._cache) {
+                let cached = this._cache[prop];
+                if(cached instanceof CachedProperty) {
+                    promises.unshift(cached.clear());
+                }
+            }
+
+            Promise.all(promises)
+                .then(() => {
+                    resolve();
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
     }
 
     /**
@@ -537,7 +576,28 @@ class CachePropertyHandler extends PropertyHandler {
      * @returns {Promise<boolean>}
      */
     async initialize(context, config, force = false) {
-        return this._handler.initialize(context, config, force);
+        //return this._handler.initialize(context, config, force);
+        return new Promise((resolve, reject) => {
+            this._handler.initialize(context, config, force)
+                .then((first) => {
+                    if(first) {
+                        this.configure()
+                            .then(() => {
+                                context.log("[CachePropertyHandler.initialize(context, config, force)]: " +
+                                            "Caching configured.");
+                                resolve(first);
+                            })
+                            .catch((exception) => {
+                                reject(exception);
+                            });
+                    }
+                    else
+                        resolve(first);
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
     }
 
     /**

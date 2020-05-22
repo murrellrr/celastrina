@@ -26,7 +26,7 @@
 
 const validator = require("validator").default;
 
-const {CelastrinaValidationError} = require("./CelastrinaError");
+const {CelastrinaValidationError} = require("../core/CelastrinaError");
 
 /**
  * @brief

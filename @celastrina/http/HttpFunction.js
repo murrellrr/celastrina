@@ -955,7 +955,7 @@ class JwtSentry extends BaseSentry {
                         // Going to initialize the acceptable issuers.
                         this._config = configuration.getValue(JwtConfiguration.CELASTRINAJS_CONFIG_JWT);
                         if(this._config == null) {
-                            configuration.context.log("JwtConfiguration missing or invalid.");
+                            configuration.context.log.error("JwtConfiguration missing or invalid.");
                             reject(CelastrinaError.newError("Invalid configration."));
                         }
                         else
@@ -1031,7 +1031,7 @@ class JwtSentry extends BaseSentry {
                     .then((jwtsub) => {
                         subject = jwtsub;
                         if(subject.isExpired()) {
-                            context.log("JWT Token expired.", LOG_LEVEL.LEVEL_INFO, "JwtSentry.authenticate(context)");
+                            context.log("JWT Token expired.", LOG_LEVEL.LEVEL_VERBOSE, "JwtSentry.authenticate(context)");
                             reject(CelastrinaError.newError("No Authorized.", 401));
                         }
                         else {
@@ -1092,7 +1092,7 @@ class CookieSessionResolver {
         return new Promise((resolve, reject) => {
             let session = context.getCookie(this._name, null);
             if(typeof session !== "string" || session.trim().length === 0) {
-                context.log("Cookie '" + this._name + "' not found.", LOG_LEVEL.LEVEL_INFO,
+                context.log("Cookie '" + this._name + "' not found.", LOG_LEVEL.LEVEL_VERBOSE,
                             "CookieRoleResolver._getCookie(context)");
                 reject(CelastrinaError.newError("Not Authorized.", 401));
             }
@@ -1290,7 +1290,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _get(context) {
         return new Promise((resolve) => {
-            context.log("WARNING: GET Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._get(context)");
+            context.log("GET Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._get(context)");
             context.send(null, 204);
             resolve();
         });
@@ -1302,7 +1302,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _patch(context) {
         return new Promise((resolve, reject) => {
-            context.log("WARNING: PATCH Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._patch(context)");
+            context.log("PATCH Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._patch(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -1313,7 +1313,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _put(context) {
         return new Promise((resolve, reject) => {
-            context.log("WARNING: PUT Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._put(context)");
+            context.log("PUT Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._put(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -1324,7 +1324,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _post(context) {
         return new Promise((resolve, reject) => {
-            context.log("WARNING: POST Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._post(context)");
+            context.log("POST Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._post(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -1335,7 +1335,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _delete(context) {
         return new Promise((resolve, reject) => {
-            context.log("WARNING: DELETE Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._delete(context)");
+            context.log("DELETE Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._delete(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -1346,7 +1346,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _options(context) {
         return new Promise((resolve, reject) => {
-            context.log("WARNING: OPTOINS Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._options(context)");
+            context.log("OPTOINS Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._options(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -1357,7 +1357,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _head(context) {
         return new Promise((resolve, reject) => {
-            context.log("WARNING: HEAD Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._head(context)");
+            context.log("HEAD Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._head(context)");
             context.send(null, 204);
             resolve();
         });
@@ -1369,7 +1369,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _trace(context) {
         return new Promise((resolve, reject) => {
-            context.log("WARNING: TRACE Method not implemented.", LOG_LEVEL.LEVEL_WARN, "HTTPFunction._trace(context)");
+            context.log("TRACE Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._trace(context)");
             context.monitorResponse.addPassedDiagnostic("Default HTTPFunction",
                 "HTTPFunction._trace(context): Not implemented.");
             resolve();

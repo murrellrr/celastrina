@@ -65,16 +65,15 @@ class Vault {
      * @returns {Promise<string>}
      */
     async getSecret(identifier) {
-        return new Promise(
-            (resolve, reject) => {
-                axios.get(identifier, this.config)
-                    .then((response) => {
-                        resolve(response.data.value);
-                    })
-                    .catch((exception) => {
-                        reject(CelastrinaError.newError("Error getting secret for '" + identifier + "'."));
-                    });
-            });
+        return new Promise((resolve, reject) => {
+            axios.get(identifier, this.config)
+                .then((response) => {
+                    resolve(response.data.value);
+                })
+                .catch((exception) => {
+                    reject(CelastrinaError.newError("Error getting secret for '" + identifier + "'."));
+                });
+        });
     }
 }
 /*

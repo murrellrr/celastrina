@@ -47,15 +47,14 @@ const {CelastrinaError} = require("./CelastrinaError");
 class AppConfiguration {
     /**
      * @param {string} token
-     * @param {string} subscription
+     * @param {string} resourceId
      * @param {string} [label="development"]
      */
-    constructor(token, subscription, label = "development") {
+    constructor(token, resourceId, label = "development") {
         let params = new URLSearchParams();
         params.append("api-version", "2019-10-01");
         this.config = {params: params, headers: {"Authorization": "Bearer " + token}};
-        this._url = "https://management.azure.com/subscriptions/" + subscription +
-            "/resourceGroups/myResourceGroup/providers/Microsoft.AppConfiguration/configurationStores/fayeh/listKeyValue";
+        this._url = "https://management.azure.com" + resourceId + "/listKeyValue";
         this._label = label;
     }
 
@@ -85,7 +84,8 @@ class AppConfiguration {
                     resolve(response.data.value);
                 })
                 .catch((exception) => {
-                    reject(CelastrinaError.newError("Error getting value for '" + key + "'."));
+                    reject(CelastrinaError.newError("Error '" + exception.response.status +
+                                                    "' getting value for '" + key + "'. " + JSON.stringify(exception)));
                 });
         });
     }

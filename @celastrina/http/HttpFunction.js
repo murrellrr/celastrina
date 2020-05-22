@@ -34,7 +34,8 @@ const moment = require("moment");
 const jwt    = require("jsonwebtoken");
 
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Configuration, BaseSubject, BaseSentry,
-       Algorithm, AES256Algorithm, Cryptography, RoleResolver, BaseContext, BaseFunction} = require("@celastrina/core");
+       ValueMatch, MatchAll, MatchAny, MatchNone, Algorithm, AES256Algorithm, Cryptography, RoleResolver, BaseContext,
+       BaseFunction} = require("@celastrina/core");
 
 /**
  * @typedef _jwtpayload
@@ -45,12 +46,10 @@ const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Conf
  * @property {number} iat
  * @property {number} exp
  * @property {string} nonce
- */
-/**
+ *
  * @typedef _jwt
  * @property {_jwtpayload} payload
- */
-/**
+ *
  * @typedef _ClaimsPayload
  * @property {moment.Moment} issued
  * @property {moment.Moment} expires
@@ -162,7 +161,7 @@ class JwtSubject extends BaseSubject {
     copy(source) {
         //sub, aud, iss, iat, exp, nonce, token
         if(source instanceof JwtSubject)
-            return new JwtSubject(source._id, source._audience, source._issuer, source._issued.unix(),
+            return new JwtSubject(source.id, source._audience, source._issuer, source._issued.unix(),
                                   source._expires.unix(), source._nonce, source._token);
         else
             throw CelastrinaError.newError("Source must be an instance of JwtUser.")
@@ -485,7 +484,7 @@ class HTTPParameterFetchProperty extends JsonProperty {
 }
 class JwtConfiguration {
     /** @type {string} */
-    static CELASTRINAJS_CONFIG_JWT = "celastrinajs.core.jwt";
+    static CONFIG_JWT = "celastrinajs.http.jwt";
 
     /**
      * @param {Array.<IssuerProperty|Issuer>} [issures=[]]
@@ -717,7 +716,7 @@ class HTTPContext extends BaseContext {
                                this._parseCookies()])
                 .then((results) => {
                     let sessioResolver = configuration.getValue(
-                        CookieSessionResolver.CELASTRINA_CONFIG_HTTP_SESSION_RESOLVER, null);
+                        CookieSessionResolver.CONFIG_HTTP_SESSION_RESOLVER, null);
                     if(sessioResolver instanceof CookieSessionResolver) {
                         sessioResolver.resolve(/** @type {HTTPContext} */ results[0])
                             .then((_context) => {
@@ -953,7 +952,7 @@ class JwtSentry extends BaseSentry {
                 .then((sentry) => {
                     try {
                         // Going to initialize the acceptable issuers.
-                        this._config = configuration.getValue(JwtConfiguration.CELASTRINAJS_CONFIG_JWT);
+                        this._config = configuration.getValue(JwtConfiguration.CONFIG_JWT);
                         if(this._config == null) {
                             configuration.context.log.error("JwtConfiguration missing or invalid.");
                             reject(CelastrinaError.newError("Invalid configration."));
@@ -1074,7 +1073,7 @@ class JwtSentry extends BaseSentry {
  */
 class CookieSessionResolver {
     /** @type {string} */
-    static CELASTRINA_CONFIG_HTTP_SESSION_RESOLVER = "celastrinajs.core.function.http.session.resolver";
+    static CONFIG_HTTP_SESSION_RESOLVER = "celastrinajs.http.function.session.resolver";
 
     /**
      * @param {string} [name="celastrina_session"]

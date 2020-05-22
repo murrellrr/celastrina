@@ -419,21 +419,6 @@ class ApplicationAuthorization {
         });
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /**
  * @abstract
  */
@@ -532,8 +517,6 @@ class AppSettingsPropertyHandler extends PropertyHandler {
         });
     }
 }
-
-
 /**
  * @type {PropertyHandler}
  * @abstract
@@ -830,11 +813,11 @@ class CachedProperty {
  */
 class CachePropertyHandler extends PropertyHandler {
     /** @type {string} */
-    static CONFIG_CACHE_DEFAULT_EXPIRE_TIME = "celastrinajs.property.cache.expire.time";
+    static CONFIG_CACHE_DEFAULT_EXPIRE_TIME = "celastrinajs.core.property.cache.expire.time";
     /** @type {string} */
-    static CONFIG_CACHE_DEFAULT_EXPIRE_UNIT = "celastrinajs.property.cache.expire.unit";
+    static CONFIG_CACHE_DEFAULT_EXPIRE_UNIT = "celastrinajs.core.property.cache.expire.unit";
     /** @type {string} */
-    static CONFIG_CACHE_DEFAULT_EXPIRE_OVERRIDE = "celastrinajs.property.cache.expire.override";
+    static CONFIG_CACHE_DEFAULT_EXPIRE_OVERRIDE = "celastrinajs.core.property.cache.expire.override";
 
     /**
      * @param {PropertyHandler} [handler=new AppSettingsPropertyHandler()]
@@ -855,6 +838,13 @@ class CachePropertyHandler extends PropertyHandler {
      */
     get loaded() {
         return this._handler.loaded;
+    }
+
+    /**
+     * @returns {PropertyHandler}
+     */
+    get handler() {
+        return this._handler;
     }
 
     /**
@@ -923,13 +913,6 @@ class CachePropertyHandler extends PropertyHandler {
      */
     get cache() {
         return this._cache;
-    }
-
-    /**
-     * @returns {PropertyHandler}
-     */
-    get handler() {
-        return this._handler;
     }
 
     /**
@@ -1215,36 +1198,89 @@ class NumericProperty extends Property {
         });
     }
 }
-/**
- * @type {JsonProperty}
- */
-class VaultAppSettingProperty extends JsonProperty {
+class CacheHandlerProperty {
+    /** @type {string} */
+    static CONFIG_PROPERTY = "celastrinajs.core.property";
+
     /**
      * @param {string} name
-     * @param {null|Object} defaultValue
      */
-    constructor(name, defaultValue = null) {
-        super(name, defaultValue);
+    constructor(name) {
+        this._name = name;
     }
 
-    async resolve(value) {
-        return super.resolve(value);
+    /**
+     * @returns {PropertyHandler}
+     * @abstract
+     */
+    _createPropertyHandler(source) {
+        return null;
+    }
+
+    /**
+     * @returns {PropertyHandler}
+     */
+    configure() {
+        try {
+            /** @type {{cached:boolean}} */
+            let source  = JSON.parse(process.env[CacheHandlerProperty.CONFIG_PROPERTY]);
+            let handler = this._createPropertyHandler(source);
+            if(source.hasOwnProperty("chached") && typeof source.chached === "boolean" &&
+                    source.chached === true)
+                return new CachePropertyHandler(handler);
+            else
+                return handler;
+        }
+        catch(exception) {
+            throw CelastrinaError.wrapError(exception);
+        }
     }
 }
 /**
- * @type {JsonProperty}
+ * @type {CacheHandlerProperty}
  */
-class AppConfigProperty extends JsonProperty {
+class VaultAppSettingHandlerProperty extends CacheHandlerProperty {
     /**
      * @param {string} name
-     * @param {null|Object} defaultValue
      */
-    constructor(name, defaultValue = null) {
-        super(name, defaultValue);
+    constructor(name) {
+        super(name);
     }
 
-    async resolve(value) {
-        return super.resolve(value);
+    /**
+     * @param {object} source
+     * @returns {PropertyHandler}
+     */
+    async _createPropertyHandler(source) {
+        return new VaultAppSettingPropertyHandler();
+    }
+}
+/**
+ * @type {CacheHandlerProperty}
+ */
+class AppConfigHandlerProperty extends CacheHandlerProperty {
+    /**
+     * @param {string} name
+     */
+    constructor(name) {
+        super(name);
+    }
+
+    /**
+     * @param {{resourceId:string, label?:string}} source
+     * @returns {PropertyHandler}
+     */
+    async _createPropertyHandler(source) {
+        if(source.hasOwnProperty("resourceId") && typeof source.resourceId === "string" &&
+                source.resourceId.trim().length > 0) {
+            let label = "development";
+            if(source.hasOwnProperty("label") && typeof source.label === "string" &&
+                    source.label.trim().length > 0)
+                label = source.label;
+            return new AppConfigPropertyHandler(source.resourceId, label);
+        }
+        else
+            throw CelastrinaError.newError("Invalid AppConfigHandlerProperty, missing 'resourceId'");
     }
 }
 /**
@@ -1304,34 +1340,6 @@ class ApplicationAuthorizationProperty extends JsonProperty {
         });
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
- * *********************************************************************************************************************
- * PROPERTIES LOADER FOR ASYNC LOADING OF CONFIGURATION
- * *********************************************************************************************************************
- */
 class PropertyLoader {
     /**
      * @param {Object} object
@@ -1353,11 +1361,6 @@ class PropertyLoader {
         });
     }
 }
-/*
- * *********************************************************************************************************************
- * SECURITY
- * *********************************************************************************************************************
- */
 class BaseSubject {
     /**
      * @param {string} id
@@ -1669,23 +1672,18 @@ class FunctionRoleProperty extends JsonProperty {
         });
     }
 }
-/*
- * *********************************************************************************************************************
- * CONFIGURATION
- * *********************************************************************************************************************
- */
 /**
  * @type {{_name:StringProperty|string, managed:BooleanProperty|boolean}}
  */
 class Configuration {
     /** @type {string} */
-    static CELASTRINA_CONFIG_APPLICATION_AUTHORIZATION = "celastrinajs.core.authorization.application";
+    static CONFIG_APPLICATION_AUTHORIZATION = "celastrinajs.core.authorization.application";
     /** @type {string} */
-    static CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION    = "celastrinajs.core.authorization.resource";
+    static CONFIG_RESOURCE_AUTHORIZATION    = "celastrinajs.core.authorization.resource";
     /** @type {string} */
-    static CELASTRINA_CONFIG_ROLES                     = "celastrinajs.core.roles";
+    static CONFIG_ROLES                     = "celastrinajs.core.roles";
     /** @type {string} */
-    static CELASTRINA_CONFIG_LOCAL_DEV                 = "celastringjs.core.deployment.local.development";
+    static CONFIG_LOCAL_DEV                 = "celastringjs.core.deployment.local.development";
 
     /**
      * @param {StringProperty|string} name
@@ -1706,11 +1704,11 @@ class Configuration {
         /** @type {null|JsonProperty|PropertyHandler} */
         this._handler = null;
         /** @type {Array.<JsonProperty|ApplicationAuthorization>} **/
-        this._config[Configuration.CELASTRINA_CONFIG_APPLICATION_AUTHORIZATION] = [];
+        this._config[Configuration.CONFIG_APPLICATION_AUTHORIZATION] = [];
         /** @type {Array.<StringProperty|string>} **/
-        this._config[Configuration.CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION] = [];
+        this._config[Configuration.CONFIG_RESOURCE_AUTHORIZATION] = [];
         /** @type {Array.<JsonProperty|FunctionRole>} */
-        this._config[Configuration.CELASTRINA_CONFIG_ROLES] = [];
+        this._config[Configuration.CONFIG_ROLES] = [];
     }
 
     /**
@@ -1735,7 +1733,7 @@ class Configuration {
     }
 
     /**
-     * @param {null|JsonProperty|PropertyHandler} handler
+     * @param {null|CachePropertyHandler|PropertyHandler} handler
      * @returns {Configuration}
      */
     setPropertyHandler(handler) {
@@ -1772,7 +1770,7 @@ class Configuration {
      * @returns {Configuration}
      */
     addApplicationAuthorization(application) {
-        this._config[Configuration.CELASTRINA_CONFIG_APPLICATION_AUTHORIZATION].unshift(application);
+        this._config[Configuration.CONFIG_APPLICATION_AUTHORIZATION].unshift(application);
         return this;
     }
 
@@ -1781,7 +1779,7 @@ class Configuration {
      * @returns {Array<ApplicationAuthorization>}
      */
     get applicationAuthorizations() {
-        return this._config[Configuration.CELASTRINA_CONFIG_APPLICATION_AUTHORIZATION];
+        return this._config[Configuration.CONFIG_APPLICATION_AUTHORIZATION];
     }
 
     /**
@@ -1789,7 +1787,7 @@ class Configuration {
      * @returns {Configuration}
      */
     addResourceAuthorization(resource) {
-        this._config[Configuration.CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION].unshift(resource);
+        this._config[Configuration.CONFIG_RESOURCE_AUTHORIZATION].unshift(resource);
         return this;
     }
 
@@ -1797,7 +1795,7 @@ class Configuration {
      * @returns {Array<string>}
      */
     get resourceAuthorizations() {
-        return this._config[Configuration.CELASTRINA_CONFIG_RESOURCE_AUTHORIZATION];
+        return this._config[Configuration.CONFIG_RESOURCE_AUTHORIZATION];
     }
 
     /**
@@ -1805,7 +1803,7 @@ class Configuration {
      * @returns {Configuration}
      */
     addFunctionRole(role) {
-        this._config[Configuration.CELASTRINA_CONFIG_ROLES].unshift(role);
+        this._config[Configuration.CONFIG_ROLES].unshift(role);
         return this;
     }
 
@@ -1813,7 +1811,7 @@ class Configuration {
      * @returns {Array<FunctionRole>}
      */
     get roles() {
-        return this._config[Configuration.CELASTRINA_CONFIG_ROLES];
+        return this._config[Configuration.CONFIG_ROLES];
     }
 
     /**
@@ -1853,9 +1851,12 @@ class Configuration {
                         "defaulting to AppSettingsPropertyHandler.");
             this._handler = new AppSettingsPropertyHandler(); // One was not set by the implementor, use default.
         }
+        else if(this._handler instanceof CacheHandlerProperty)
+            this._handler = this._handler.configure();
+
         if(!this._handler.loaded) {
             // Checking to see if we need to override for local development.
-            let deployment = process.env[Configuration.CELASTRINA_CONFIG_LOCAL_DEV];
+            let deployment = process.env[Configuration.CONFIG_LOCAL_DEV];
             if(typeof deployment === "string")
                 // There is a local development mode config.
                 if(deployment.trim().toLowerCase() === "true") {
@@ -1903,11 +1904,6 @@ class Configuration {
         });
     }
 }
-/*
- * *********************************************************************************************************************
- * CRYPTOGRAPHY
- * *********************************************************************************************************************
- */
 /**
  * @abstract
  */
@@ -2063,11 +2059,6 @@ class Cryptography {
         });
     }
 }
-/*
- * *********************************************************************************************************************
- * FUNCTION
- * *********************************************************************************************************************
- */
 /**
  * @type {{LEVEL_TRACE: number, LEVEL_INFO: number, LEVEL_VERBOSE: number, LEVEL_WARN: number, LEVEL_ERROR: number}}
  */
@@ -2134,7 +2125,7 @@ class MonitorResponse {
  */
 class RoleResolver {
     /** @type {string} */
-    static CELASTRINA_CONFIG_SENTRY_ROLE_RESOLVER = "celastrinajs.core.function.roles.resolver";
+    static CONFIG_SENTRY_ROLE_RESOLVER = "celastrinajs.core.function.roles.resolver";
 
     constructor() {}
 
@@ -2148,7 +2139,6 @@ class RoleResolver {
         });
     }
 }
-
 /**
  * @type {RoleResolver}
  */
@@ -2384,7 +2374,7 @@ class BaseSentry {
             if(typeof this._localAppId !== "string")
                 this._localAppId = configuration.context.invocationId;
 
-            this._roleresolver = configuration.getValue(RoleResolver.CELASTRINA_CONFIG_SENTRY_ROLE_RESOLVER,
+            this._roleresolver = configuration.getValue(RoleResolver.CONFIG_SENTRY_ROLE_RESOLVER,
                                                        null);
             if(this._roleresolver == null)
                 this._roleresolver = new SessionRoleResolver();

@@ -1312,13 +1312,13 @@ class Configuration {
     /**@param{StringProperty|string} name*/
     constructor(name) {
         if(typeof name === "string") {
-            // Checking its length
             if(name.trim().length === 0)
                 throw CelastrinaError.newError("Invalid configuration. Name cannot be undefined, null or 0 length.");
         }
         else if(!(name instanceof StringProperty))
             throw CelastrinaError.newError("Invalid configuration. Name must be string or StringProperty.");
-        this._config  = {}; // Class for storing named configurations.
+        this._config = {};
+        /**@type{boolean}*/this._loadBase = true;
         /**@type{null|_AzureFunctionContext}*/this._config[Configuration.CONFIG_CONTEXT] = null;
         /**@type{null|JsonProperty|PropertyHandler}*/this._config[Configuration.CONFIG_HANDLER] = null;
         /**@type{string|StringProperty}*/this._config[Configuration.CONFIG_NAME] = name;
@@ -1333,14 +1333,8 @@ class Configuration {
     /**@returns{Array<string>}*/get resourceAuthorizations(){return this._config[Configuration.CONFIG_RESOURCE_AUTHORIZATION];}
     /**@returns{Array<FunctionRole>}*/get roles(){return this._config[Configuration.CONFIG_ROLES];}
     /**@returns{_AzureFunctionContext}*/get context(){return this._config[Configuration.CONFIG_CONTEXT];}
-    /**@returns{boolean}*/
-    get loaded() {
-        let _properties = this.properties;
-        if(typeof _properties === "undefined" || _properties == null)
-            return false;
-        else
-            return this.properties.loaded;
-    }
+    /**@returns{boolean}*/get loadBase(){return this._loadBase;}
+    /**@param{boolean}load*/set loadBase(load){this._loadBase = load;}
     /**
      * @param {null|CachePropertyHandler|PropertyHandler} handler
      * @returns {Configuration}
@@ -1842,7 +1836,7 @@ class BaseSentry {
     async initialize() {
         return new Promise((resolve, reject) => {
             // Set up the local application id.
-            if(!this._configuration.loaded) {
+            if(this._configuration.loadBase) {
                 this._configuration.context.log.verbose("[BaseSentry.initialize()]: Loading Sentry objects.");
                 let _roleresolver = this._configuration.getValue(RoleResolver.CONFIG_SENTRY_ROLE_RESOLVER, null);
                 if (_roleresolver == null)
@@ -2056,6 +2050,7 @@ class BaseFunction {
                     .then((results) => {
                         this._context = results[1];
                         this._context.sentry = results[0];
+                        this._configuration.loadBase = false;
                         resolve();
                     })
                     .catch((exception) => {

@@ -21,18 +21,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
 /**
  * @author Robert R Murrell
  * @copyright Robert R Murrell
  * @license MIT
  */
-
 "use strict";
-
-/**
- * @type {{lat: number, lon: number}}
- */
+/**@type {{lat: number, lon: number}}*/
 class Point {
     /**
      * @param {number} lat
@@ -42,19 +37,9 @@ class Point {
         this.lat = lat;
         this.lon = lon;
     }
-
-    /**
-     * @returns {string}
-     */
-    toString() {
-        return "{type: 'Point', coordinates: [" + this.lon + ", " + this.lat + "]}";
-    }
-
-    toJSON() {
-        return {type: "Point", coordinates: [this.lon, this.lat]};
-    }
+    /**@returns{string}*/toString() {return "{type: 'Point', coordinates: [" + this.lon + ", " + this.lat + "]}";}
+    toJSON() {return {type: "Point", coordinates: [this.lon, this.lat]};}
 }
-
 module.exports = {
     Point: Point
 };

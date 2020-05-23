@@ -21,18 +21,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
 /**
  * @author Robert R Murrell
  * @copyright Robert R Murrell
  * @license MIT
  */
-
 "use strict";
-
 const axios  = require("axios").default;
 const {CelastrinaError} = require("./CelastrinaError");
-
 /**
  * @typedef _AppConfigKeyValue
  * @property {string} key
@@ -43,7 +39,7 @@ const {CelastrinaError} = require("./CelastrinaError");
  * @property {boolean} locked
  * @property {object} tags
  */
-
+/** */
 class AppConfiguration {
     /**
      * @param {string} token
@@ -57,21 +53,8 @@ class AppConfiguration {
         this._url = "https://management.azure.com" + resourceId + "/listKeyValue";
         this._label = label;
     }
-
-    /**
-     * @returns {string}
-     */
-    get token() {
-        return this.config.headers["Authorization"].slice(7);
-    }
-
-    /**
-     * @param {string} token
-     */
-    set token(token) {
-        this.config.headers["Authorization"] = "Bearer " + token;
-    }
-
+    /**@returns{string}*/get token(){return this.config.headers["Authorization"].slice(7);}
+    /**@param {string} token*/set token(token){this.config.headers["Authorization"] = "Bearer " + token;}
     /**
      * @param {string} key
      * @returns {Promise<string>}
@@ -84,13 +67,9 @@ class AppConfiguration {
                     resolve(response.data.value);
                 })
                 .catch((exception) => {
-                    reject(CelastrinaError.newError("Error '" + exception.response.status +
-                                                    "' getting value for '" + key + "'. " + JSON.stringify(exception)));
+                    reject(CelastrinaError.newError("Error '" + exception.response.status + "' getting value for '" + key + "'. " + JSON.stringify(exception)));
                 });
         });
     }
 }
-
-module.exports = {
-    AppConfiguration: AppConfiguration
-};
+module.exports = {AppConfiguration: AppConfiguration};

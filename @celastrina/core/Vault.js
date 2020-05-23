@@ -21,45 +21,23 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
 /**
  * @author Robert R Murrell
  * @copyright Robert R Murrell
  * @license MIT
  */
-
 "use strict";
-
 const axios  = require("axios").default;
 const {CelastrinaError} = require("./CelastrinaError");
-
-/**
- * @author Robert R Murrell
- */
 class Vault {
-    /**
-     * @param {string} token
-     */
+    /**@param{string}token*/
     constructor(token) {
         let params = new URLSearchParams();
         params.append("api-version", "7.0");
-        this.config = {params: params, headers: {"Authorization": "Bearer " + token}};
+        this.config = {params: params,headers:{"Authorization":"Bearer " + token}};
     }
-
-    /**
-     * @returns {string}
-     */
-    get token() {
-        return this.config.headers["Authorization"].slice(7);
-    }
-
-    /**
-     * @param {string} token
-     */
-    set token(token) {
-        this.config.headers["Authorization"] = "Bearer " + token;
-    }
-
+    /**@returns{string}*/get token(){return this.config.headers["Authorization"].slice(7);}
+    /**@param{string} token*/set token(token){this.config.headers["Authorization"] = "Bearer " + token;}
     /**
      * @param {string} identifier
      * @returns {Promise<string>}
@@ -76,11 +54,4 @@ class Vault {
         });
     }
 }
-/*
- * *********************************************************************************************************************
- * EXPORTS
- * *********************************************************************************************************************
- */
-module.exports = {
-    Vault: Vault
-};
+module.exports = {Vault: Vault};

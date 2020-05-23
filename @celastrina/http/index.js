@@ -21,32 +21,19 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
+"use strict";
 const {JwtSubject, Issuer, IssuerProperty, JwtConfiguration, HTTPContext, HTTPParameterFetch, HeaderParameterFetch,
        QueryParameterFetch, BodyParameterFetch, HTTPParameterFetchProperty, JwtSentry, CookieSessionResolver,
        CookieSessionResolverProperty, SecureCookieSessionResolver, SecureCookieSessionResolverProperty, HTTPFunction,
        JwtHTTPFunction, JSONHTTPContext, JSONHTTPFunction, JwtJSONHTTPFunction} = require("./HttpFunction");
 const {Recaptcha, RecaptchaFunctionRole} = require("./Recaptcha");
-
 module.exports = {
-    JwtSubject: JwtSubject,
-    Issuer: Issuer,
-    IssuerProperty: IssuerProperty,
-    JwtConfiguration: JwtConfiguration,
-    HTTPContext: HTTPContext,
-    HTTPParameterFetch: HTTPParameterFetch,
-    HeaderParameterFetch: HeaderParameterFetch,
-    QueryParameterFetch: QueryParameterFetch,
-    BodyParameterFetch: BodyParameterFetch,
-    HTTPParameterFetchProperty: HTTPParameterFetchProperty,
-    CookieSessionResolver: CookieSessionResolver,
-    CookieSessionResolverProperty: CookieSessionResolverProperty,
-    SecureCookieSessionResolver: SecureCookieSessionResolver,
-    SecureCookieSessionResolverProperty: SecureCookieSessionResolverProperty,
-    JwtSentry: JwtSentry,
-    HTTPFunction: HTTPFunction,
-    JwtHTTPFunction: JwtHTTPFunction,
-    JSONHTTPContext: JSONHTTPContext,
-    JSONHTTPFunction: JSONHTTPFunction,
+    JwtSubject: JwtSubject, Issuer: Issuer, IssuerProperty: IssuerProperty, JwtConfiguration: JwtConfiguration,
+    HTTPContext: HTTPContext, HTTPParameterFetch: HTTPParameterFetch, HeaderParameterFetch: HeaderParameterFetch,
+    QueryParameterFetch: QueryParameterFetch, BodyParameterFetch: BodyParameterFetch,
+    HTTPParameterFetchProperty: HTTPParameterFetchProperty, CookieSessionResolver: CookieSessionResolver,
+    CookieSessionResolverProperty: CookieSessionResolverProperty, SecureCookieSessionResolver: SecureCookieSessionResolver,
+    SecureCookieSessionResolverProperty: SecureCookieSessionResolverProperty, JwtSentry: JwtSentry,
+    HTTPFunction: HTTPFunction, JwtHTTPFunction: JwtHTTPFunction, JSONHTTPContext: JSONHTTPContext, JSONHTTPFunction: JSONHTTPFunction,
     JwtJSONHTTPFunction: JwtJSONHTTPFunction
 };

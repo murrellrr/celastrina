@@ -21,15 +21,12 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
 /**
  * @author Robert R Murrell
  * @copyright Robert R Murrell
  * @license MIT
  */
-
 "use strict";
-
 class CelastrinaError {
     /**
      * @param {Error} cause
@@ -41,18 +38,8 @@ class CelastrinaError {
         this.code  = code;
         this.drop  = drop;
     }
-
-    /**
-     * @returns {string}
-     */
-    toString() {
-        return "[" + this.code + "][" + this.drop + "]: " + this.cause.message;
-    }
-
-    toJSON() {
-        return {message: this.cause.message, code: this.code, drop: this.drop};
-    }
-
+    /**@returns{string}*/toString() {return "[" + this.code + "][" + this.drop + "]: " + this.cause.message;}
+    toJSON() {return {message: this.cause.message, code: this.code, drop: this.drop};}
     /**
      * @param {string} message
      * @param {int} code
@@ -62,7 +49,6 @@ class CelastrinaError {
     static newError(message, code = 500, drop = false) {
         return new CelastrinaError(new Error(message), code, drop);
     }
-
     /**
      * @param {Error} error
      * @param {int} code
@@ -73,9 +59,7 @@ class CelastrinaError {
         return new CelastrinaError(error, code, drop);
     }
 }
-/**
- * @type {CelastrinaError}
- */
+/**@type{CelastrinaError}*/
 class CelastrinaValidationError extends CelastrinaError {
     /**
      * @param {Error} error
@@ -87,18 +71,8 @@ class CelastrinaValidationError extends CelastrinaError {
         super(error, code, drop);
         this.tag = tag;
     }
-
-    /**
-     * @returns {string}
-     */
-    toString() {
-        return "[" + this.tag + "]" + super.toString();
-    }
-
-    toJSON() {
-        return {message: this.cause.message, code: this.code, tag: this.tag, drop: this.drop};
-    }
-
+    /**@returns{string}*/toString(){return "[" + this.tag + "]" + super.toString();}
+    toJSON(){return {message: this.cause.message, code: this.code, tag: this.tag, drop: this.drop};}
     /**
      * @param {string} message
      * @param {int} code
@@ -110,7 +84,6 @@ class CelastrinaValidationError extends CelastrinaError {
     static newValidationError(message, tag = "", drop = false, code = 400) {
         return new CelastrinaValidationError(new Error(message), code, drop, tag);
     }
-
     /**
      * @param {Error} error
      * @param {int} code
@@ -122,8 +95,6 @@ class CelastrinaValidationError extends CelastrinaError {
         return new CelastrinaValidationError(error, code, drop, tag);
     }
 }
-
 module.exports = {
-    CelastrinaError:           CelastrinaError,
-    CelastrinaValidationError: CelastrinaValidationError
+    CelastrinaError: CelastrinaError, CelastrinaValidationError: CelastrinaValidationError
 };

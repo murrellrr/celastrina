@@ -72,7 +72,7 @@ class CosmosStatement {
                                 else {
                                     let value = resolved.resources[0];
                                     if((typeof value === "undefined" || value == null) && !allowNull)
-                                        reject(CelastrinaError.newError("Item not found.", 404));
+                                        reject(CelastrinaError.newError("Not found.", 404));
                                     else
                                         resolve(value);
                                 }
@@ -92,33 +92,49 @@ class CosmosStatement {
 }
 
 
+class Connection {
+    constructor(subscription, rg, account, database) {
+        this._subscription = subscription;
+        this._rg = rg;
+        this._account = account;
+        this._database = database;
+    }
+}
+
+
+
+
 /**
  * @abstract
  */
 class Entity {
-    constructor(type, version = "1.0.0") {
+    constructor(connection, type, version = "1.0") {
         this._source = {};
+        this._connection = connection;
         this._source._object = {_type: type, _version: version};
     }
 
-    async create() {
-        let nowthis = this;
+    async find() {
         return new Promise((resolve, reject) => {
-            resolve(nowthis);
+            resolve();
+        });
+    }
+
+    async create() {
+        return new Promise((resolve, reject) => {
+            resolve();
         });
     }
 
     async read() {
-        let nowthis = this;
         return new Promise((resolve, reject) => {
-            resolve(nowthis);
+            resolve();
         });
     }
 
     async update() {
-        let nowthis = this;
         return new Promise((resolve, reject) => {
-            resolve(nowthis);
+            resolve();
         });
     }
 

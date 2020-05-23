@@ -21,22 +21,17 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
 /**
  * @author Robert R Murrell
  * @copyright Robert R Murrell
  * @license MIT
  */
-
 "use strict";
-
 const moment = require("moment");
-const jwt    = require("jsonwebtoken");
-
+const jwt = require("jsonwebtoken");
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Configuration, BaseSubject, BaseSentry,
        ValueMatch, MatchAll, MatchAny, MatchNone, Algorithm, AES256Algorithm, Cryptography, RoleResolver, BaseContext,
        BaseFunction} = require("@celastrina/core");
-
 /**
  * @typedef _jwtpayload
  * @property {string} aud
@@ -58,9 +53,7 @@ const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Conf
  * @property {string} subject
  * @property {string} issuer
  */
-/**
- * @type {BaseSubject}
- */
+/**@type{BaseSubject}*/
 class JwtSubject extends BaseSubject {
     /**
      * @param {string} sub
@@ -82,82 +75,32 @@ class JwtSubject extends BaseSubject {
         this._expires  = moment.unix(exp);
         this._token    = token;
     }
-
-    /**
-     * @returns {string}
-     */
-    get nonce() {
-        return this._nonce;
-    }
-
-    /**
-     * @returns {string}
-     */
-    get audience() {
-        return this._audience;
-    }
-
-    /**
-     * @returns {string}
-     */
-    get issuer() {
-        return this._issuer;
-    }
-
-    /**
-     * @returns {moment.Moment}
-     */
-    get issued() {
-        return this._issued;
-    }
-
-    /**
-     * @returns {moment.Moment}
-     */
-    get expires() {
-        return this._expires;
-    }
-
-    /**
-     * @returns {string}
-     */
-    get token() {
-        return this._token;
-    }
-
-    /**
-     * @returns {boolean}
-     */
+    /**@returns{string}*/get nonce(){return this._nonce;}
+    /**@returns{string}*/get audience() {return this._audience;}
+    /**@returns{string}*/get issuer(){return this._issuer;}
+    /**@returns{moment.Moment}*/get issued(){return this._issued;}
+    /**@returns{moment.Moment}*/get expires(){return this._expires;}
+    /**@returns{string}*/get token(){return this._token;}
+    /**@returns{boolean}*/
     isExpired() {
         let now = moment();
         return now.isSameOrAfter(this._expires);
     }
-
-    /**
-     * @param {string[]} headers
-     */
+    /**@param{string[]}headers*/
     setAuthorizationHeader(headers) {
         if(typeof headers !== "undefined" && headers != null)
             headers["Authorization"] = "Bearer " + this.token;
     }
-
-    /**
-     * @returns {{subject:string, roles: Array.<string>, nounce:string, audience: string, issuer: string,
-     *            issued: string, expires: string}}
-     */
     toJSON() {
         let json = super.toJSON();
-        json.nonce    = this._nonce;
+        json.nonce = this._nonce;
         json.audience = this._audience;
-        json.issuer   = this._issuer;
-        json.issued   = this._issued.format();
-        json.expires  = this._expires.format();
+        json.issuer = this._issuer;
+        json.issued = this._issued.format();
+        json.expires = this._expires.format();
         return json;
     }
-
-    /**
-     * @param {JwtSubject} source
-     */
+    /**@param{JwtSubject}source*/
     copy(source) {
         //sub, aud, iss, iat, exp, nonce, token
         if(source instanceof JwtSubject)
@@ -166,7 +109,6 @@ class JwtSubject extends BaseSubject {
         else
             throw CelastrinaError.newError("Source must be an instance of JwtUser.")
     }
-
     /**
      * @param {string} token
      * @return {Promise<JwtSubject>}
@@ -189,9 +131,6 @@ class JwtSubject extends BaseSubject {
         });
     }
 }
-/**
- * @author Robert R Murrell
- */
 class Issuer {
     /**
      * @param {string|StringProperty} name
@@ -199,35 +138,15 @@ class Issuer {
      * @param {JsonProperty|Array.<string>} [roles=[]]
      * @param {(null|string|StringProperty)} [nonce=null]
      */
-    constructor(name, audience, roles = [],
-                nonce = null) {
-        this._name     = name;
+    constructor(name, audience, roles = [], nonce = null) {
+        this._name = name;
         this._audience = audience;
-        this._nonce    = nonce;
-        this._roles    = roles;
+        this._nonce = nonce;
+        this._roles = roles;
     }
-
-    /**
-     * @returns {string}
-     */
-    get name() {
-        return this._name;
-    }
-
-    /**
-     * @returns {string}
-     */
-    get audience() {
-        return this._audience;
-    }
-
-    /**
-     * @returns {Array<string>}
-     */
-    get roles() {
-        return this._roles;
-    }
-
+    /**@returns{string}*/get name(){return this._name;}
+    /**@returns {string}*/get audience(){return this._audience;}
+    /**@returns {Array<string>}*/get roles(){return this._roles;}
     /**
      * @param {JwtSubject} subject
      * @param {boolean} [validateNonce=false]
@@ -239,7 +158,6 @@ class Issuer {
                 if(subject.issuer === this._name && subject.audience === this._audience) {
                     if(validateNonce) {
                         if(this._nonce === subject.nonce) {
-                            // Add roles to the subject if there are any specified.
                             subject.addRoles(this._roles);
                             resolve(true);
                         }
@@ -247,7 +165,6 @@ class Issuer {
                             reject(false);
                     }
                     else {
-                        // Add roles to the subject if there are any specified.
                         subject.addRoles(this._roles);
                         resolve(true);
                     }
@@ -261,18 +178,13 @@ class Issuer {
         });
     }
 }
-/**
- * @type {JsonProperty}
- */
+/**@type{JsonProperty}*/
 class IssuerProperty extends JsonProperty {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
      */
-    constructor(name, defaultValue = null) {
-        super(name, defaultValue);
-    }
-
+    constructor(name, defaultValue = null){super(name, defaultValue);}
     /**
      * @param {string} value
      * @returns {Promise<null|Object>}
@@ -305,17 +217,10 @@ class IssuerProperty extends JsonProperty {
         });
     }
 }
-/**
- * @abstract
- */
+/**@abstract*/
 class HTTPParameterFetch {
-    /**
-     * @param {string} [type]
-     */
-    constructor(type = "HTTPParameterFetch") {
-        this._type = type;
-    }
-
+    /**@param{string}[type]*/
+    constructor(type = "HTTPParameterFetch") {this._type = type;}
     /**
      * @param {HTTPContext} context
      * @param {string} key
@@ -323,11 +228,8 @@ class HTTPParameterFetch {
      * @returns {Promise<string>}
      */
     async fetch(context, key, defaultValue = null) {
-        return new Promise((resolve) => {
-            resolve(defaultValue);
-        });
+        return new Promise((resolve) => {resolve(defaultValue);});
     }
-
     /**
      * @param {HTTPContext} context
      * @param {string} key
@@ -351,14 +253,9 @@ class HTTPParameterFetch {
         });
     }
 }
-/**
- * @type {HTTPParameterFetch}
- */
+/**@type {HTTPParameterFetch}*/
 class HeaderParameterFetch extends HTTPParameterFetch {
-    constructor() {
-        super("header");
-    }
-
+    constructor(){super("header");}
     /**
      * @param {HTTPContext} context
      * @param {string} key
@@ -376,14 +273,9 @@ class HeaderParameterFetch extends HTTPParameterFetch {
         });
     }
 }
-/**
- * @type {HTTPParameterFetch}
- */
+/**@type{HTTPParameterFetch}*/
 class QueryParameterFetch extends HTTPParameterFetch {
-    constructor() {
-        super("query");
-    }
-
+    constructor(){super("query");}
     /**
      * @param {HTTPContext} context
      * @param {string} key
@@ -401,14 +293,9 @@ class QueryParameterFetch extends HTTPParameterFetch {
         });
     }
 }
-/**
- * @type {HTTPParameterFetch}
- */
+/**@type{HTTPParameterFetch}*/
 class BodyParameterFetch extends HTTPParameterFetch {
-    constructor(key) {
-        super("body");
-    }
-
+    constructor(key){super("body");}
     /**
      * @param {HTTPContext} context
      * @param {string} key
@@ -430,18 +317,13 @@ class BodyParameterFetch extends HTTPParameterFetch {
         });
     }
 }
-/**
- * @type {JsonProperty}
- */
+/**@type{JsonProperty}*/
 class HTTPParameterFetchProperty extends JsonProperty {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
      */
-    constructor(name, defaultValue = null) {
-        super(name, defaultValue);
-    }
-
+    constructor(name, defaultValue = null){super(name, defaultValue);}
     /**
      * @param {string} value
      * @returns {Promise<null|Object>}
@@ -483,9 +365,7 @@ class HTTPParameterFetchProperty extends JsonProperty {
     }
 }
 class JwtConfiguration {
-    /** @type {string} */
-    static CONFIG_JWT = "celastrinajs.http.jwt";
-
+    /** @type{string}*/static CONFIG_JWT = "celastrinajs.http.jwt";
     /**
      * @param {Array.<IssuerProperty|Issuer>} [issures=[]]
      * @param {(HTTPParameterFetchProperty|HTTPParameterFetch)} [param={HeaderParameterFetch}]
@@ -496,20 +376,19 @@ class JwtConfiguration {
      */
     constructor(issures = [], param = new HeaderParameterFetch(), scheme = "Bearer ",
                 remove = true, token = "authorization", validateNonce = false) {
-        /** @type {Array.<(IssuerProperty|Issuer)>} */
-        this._issuers = issures;
-        /** @type {null|HTTPParameterFetchProperty|HTTPParameterFetch} */
-        this._param  = param; // Header or query param
-        /** @type {string|StringProperty} */
-        this._scheme = scheme;
-        /** @type {boolean|BooleanProperty} */
-        this._remove = remove;
-        /** @type {string|StringProperty} */
-        this._token  = token;
-        /** @type {boolean|BooleanProperty} */
-        this._validateNonce = validateNonce;
+        /** @type{Array.<(IssuerProperty|Issuer)>}*/this._issuers = issures;
+        /** @type{null|HTTPParameterFetchProperty|HTTPParameterFetch}*/this._param  = param;
+        /** @type{string|StringProperty}*/this._scheme = scheme;
+        /** @type{boolean|BooleanProperty}*/this._remove = remove;
+        /** @type{string|StringProperty}*/this._token  = token;
+        /** @type{boolean|BooleanProperty}*/this._validateNonce = validateNonce;
     }
-
+    /**@returns{Array.<Issuer>}*/get issuers(){return this._issuers;}
+    /**@returns{HTTPParameterFetch}*/get param(){return this._param;}
+    /**@returns{string}*/get scheme(){return this._scheme;}
+    /**@returns{boolean}*/get removeScheme(){return this._remove;}
+    /**@returns{string}*/get token(){return this._token;}
+    /**@returns{boolean}*/get validateNonce(){return this._validateNonce;}
     /**
      * @param {IssuerProperty|Issuer} issuer
      * @returns {JwtConfiguration}
@@ -518,7 +397,6 @@ class JwtConfiguration {
         this._issuers.unshift(issuer);
         return this;
     }
-
     /**
      * @param {Array.<(IssuerProperty|Issuer)>} [issuers=[]]
      * @returns {JwtConfiguration}
@@ -527,14 +405,6 @@ class JwtConfiguration {
         this._issuers = issuers;
         return this;
     }
-
-    /**
-     * @returns {Array.<Issuer>}
-     */
-    get issuers() {
-        return this._issuers;
-    }
-
     /**
      * @param {HTTPParameterFetchProperty|HTTPParameterFetch} [param={HeaderParameterFetch}]
      * @return {JwtConfiguration}
@@ -543,14 +413,6 @@ class JwtConfiguration {
         this._param = param;
         return this;
     }
-
-    /**
-     * @returns {HTTPParameterFetch}
-     */
-    get param() {
-        return this._param;
-    }
-
     /**
      * @param {string|StringProperty} [scheme="Bearer "]
      * @return {JwtConfiguration}
@@ -559,14 +421,6 @@ class JwtConfiguration {
         this._scheme = scheme;
         return this;
     }
-
-    /**
-     * @returns {string}
-     */
-    get scheme() {
-        return this._scheme;
-    }
-
     /**
      * @param {boolean|BooleanProperty} [remove=true]
      * @return {JwtConfiguration}
@@ -575,21 +429,6 @@ class JwtConfiguration {
         this._remove = remove;
         return this;
     }
-
-    /**
-     * @returns {boolean}
-     */
-    get removeScheme() {
-        return this._remove;
-    }
-
-    /**
-     * @returns {string}
-     */
-    get token() {
-        return this._token;
-    }
-
     /**
      * @param {string|StringProperty} [token="authorization"]
      * @return {JwtConfiguration}
@@ -598,14 +437,6 @@ class JwtConfiguration {
         this._token = token;
         return this;
     }
-
-    /**
-     * @returns {boolean}
-     */
-    get validateNonce() {
-        return this._validateNonce;
-    }
-
     /**
      * @param {(boolean|BooleanProperty)} [validateNonce=false]
      * @returns {JwtConfiguration}
@@ -615,9 +446,7 @@ class JwtConfiguration {
         return this;
     }
 }
-/**
- * @type {BaseContext}
- */
+/**@type{BaseContext}*/
 class HTTPContext extends BaseContext {
     /**
      * @param {_AzureFunctionContext} context
@@ -627,14 +456,19 @@ class HTTPContext extends BaseContext {
     constructor(context, name, properties) {
         super(context, name, properties);
         // Setting up the default response.
-        this._context.res = {status: 200,
-            headers: {"Content-Type": "text/html; charset=ISO-8859-1"},
-            body: "<html lang=\"en\"><head><title>" + this._name +
-                "</title></head><body>200, Success</body></html>"};
+        this._context.res = {status: 200,headers:{"Content-Type": "text/html; charset=ISO-8859-1"},body:"<html lang=\"en\"><head><title>" + this._name + "</title></head><body>200, Success</body></html>"};
         this._action = this._context.req.method.toLowerCase();
         this._cookies = {};
     }
-
+    /**@returns{string}*/get method(){return this._action;}
+    /**@returns{string}*/get url(){return this._context.req.originalUrl;}
+    /**@returns{_AzureFunctionRequest}*/get request(){return this._context.req;}
+    /**@returns{_AzureFunctionResponse}*/get response(){return this._context.res;}
+    /**@returns{Object}*/get params(){return this._context.req.params;}
+    /**@returns{Object}*/get query(){return this._context.req.query;}
+    /**@returns{string}*/get raw(){return this._context.req.rawBody;}
+    /**@returns{_Body}*/get requestBody(){return this._context.req.body;}
+    /**@returns{_Body}*/get responseBody(){return this._context.res.body;}
     /**
      * @returns {Promise<void>}
      * @private
@@ -644,9 +478,9 @@ class HTTPContext extends BaseContext {
             try {
                 // Override the request ID if its there.
                 let id = this._context.req.query["requestId"];
-                if (typeof id === "undefined" || id == null)
+                if(typeof id === "undefined" || id == null)
                     id = this._context.req.headers["x-celastrina-requestId"];
-                if (typeof id === "string")
+                if(typeof id === "string")
                     this._requestId = id;
                 resolve();
             }
@@ -655,7 +489,6 @@ class HTTPContext extends BaseContext {
             }
         });
     }
-
     /**
      * @returns {Promise<void>}
      * @private
@@ -663,7 +496,6 @@ class HTTPContext extends BaseContext {
     async _setMonitorMode() {
         return new Promise((resolve, reject) => {
             try {
-                // Checking to see if we are in monitoring mode
                 let monitor;
                 if(this.method === "trace")
                     monitor = true;
@@ -681,7 +513,6 @@ class HTTPContext extends BaseContext {
             }
         });
     }
-
     /**
      * @returns {Promise<void>}
      * @private
@@ -690,8 +521,7 @@ class HTTPContext extends BaseContext {
         return new Promise((resolve, reject) => {
             try {
                 let cookie = this.getRequestHeader("cookie");
-                if (typeof cookie === "string" && cookie.trim().length > 0) {
-                    // Parse the values in the cookiw.
+                if(typeof cookie === "string" && cookie.trim().length > 0) {
                     let parts = cookie.split(";");
                     for(const part of parts) {
                         let peices = part.split("=");
@@ -705,20 +535,17 @@ class HTTPContext extends BaseContext {
             }
         });
     }
-
     /**
      * @param configuration
      * @returns {Promise<BaseContext & HTTPContext>}
      */
     async initialize(configuration) {
         return new Promise((resolve, reject) => {
-            Promise.all([super.initialize(configuration), this._setRequestId(), this._setMonitorMode(),
-                               this._parseCookies()])
+            Promise.all([super.initialize(configuration), this._setRequestId(), this._setMonitorMode(), this._parseCookies()])
                 .then((results) => {
-                    let sessioResolver = configuration.getValue(
-                        CookieSessionResolver.CONFIG_HTTP_SESSION_RESOLVER, null);
+                    let sessioResolver = configuration.getValue(CookieSessionResolver.CONFIG_HTTP_SESSION_RESOLVER, null);
                     if(sessioResolver instanceof CookieSessionResolver) {
-                        sessioResolver.resolve(/** @type {HTTPContext} */ results[0])
+                        sessioResolver.resolve(/**@type{HTTPContext}*/ results[0])
                             .then((_context) => {
                                 resolve(_context);
                             })
@@ -734,56 +561,6 @@ class HTTPContext extends BaseContext {
                 });
         });
     }
-
-    /**
-     * @returns {string}
-     */
-    get method() {
-        return this._action;
-    }
-
-    /**
-     * @returns {string}
-     */
-    get url() {
-        return this._context.req.originalUrl;
-    }
-
-    /**
-     * @returns {_AzureFunctionRequest}
-     */
-    get request() {
-        return this._context.req;
-    }
-
-    /**
-     * @returns {_AzureFunctionResponse}
-     */
-    get response() {
-        return this._context.res;
-    }
-
-    /**
-     * @returns {Object}
-     */
-    get params() {
-        return this._context.req.params;
-    }
-
-    /**
-     * @returns {Object}
-     */
-    get query() {
-        return this._context.req.query;
-    }
-
-    /**
-     * @returns {string}
-     */
-    get raw() {
-        return this._context.req.rawBody;
-    }
-
     /**
      * @param {string} name
      * @param {null|string} [defaultValue=null]
@@ -796,7 +573,6 @@ class HTTPContext extends BaseContext {
         else
             return cookie;
     }
-
     /**
      * @param {string} name
      * @param {null|string} [defaultValue=null]
@@ -809,7 +585,6 @@ class HTTPContext extends BaseContext {
         else
             return qry;
     }
-
     /**
      * @param {string} name
      * @param {null|string} [defaultValue=null]
@@ -822,7 +597,6 @@ class HTTPContext extends BaseContext {
         else
             return header;
     }
-
     /**
      * @param {string} name
      * @param {null|string} [defaultValue=null]
@@ -835,7 +609,6 @@ class HTTPContext extends BaseContext {
         else
             return header;
     }
-
     /**
      * @param {string} name
      * @param {string} value
@@ -843,21 +616,6 @@ class HTTPContext extends BaseContext {
     setResponseHeader(name, value) {
         this._context.res.headers[name] = value;
     }
-
-    /**
-     * @returns {_Body}
-     */
-    get requestBody() {
-        return this._context.req.body;
-    }
-
-    /**
-     * @returns {_Body}
-     */
-    get responseBody() {
-        return this._context.res.body;
-    }
-
     /**
      * @param {*} [body]
      * @param {number} [status] The HTTP status code, default is 200.
@@ -865,30 +623,22 @@ class HTTPContext extends BaseContext {
     send(body = null, status = 200) {
         this._context.res.status = status;
         this._context.res.headers["X-celastrina-request-uuid"] = this._requestId;
-
         if(status !== 204) {
             if (body === null) {
                 let content = this._name + ", " + status + ".";
-                this._context.res.body = "<html lang=\"en\"><head><title>" + content +
-                    "</title></head><body>" + content +
-                    "</body></html>";
+                this._context.res.body = "<html lang=\"en\"><head><title>" + content + "</title></head><body>" + content + "</body></html>";
             }
             else
                 body = body.toString();
         }
-
         this._context.res.body = body;
     }
-
-    /**
-     * @param {null|CelastrinaValidationError} [error]
-     */
+    /**@param{null|Error|CelastrinaError|*}[error=null]*/
     sendValidationError(error = null) {
         if(!(error instanceof CelastrinaValidationError))
             error = CelastrinaValidationError.newValidationError("Bad request.", this._requestId);
         this.send(error, error.code);
     }
-
     /**
      * @param {string} url
      * @param {null|Object} [body]
@@ -897,64 +647,48 @@ class HTTPContext extends BaseContext {
         this._context.res.headers["Location"] = url;
         this.send(body, 302);
     }
-
-    /**
-     * @param {string} url
-     */
+    /**@param{string}url*/
     sendRedirectForwardBody(url) {
         this.sendRedirect(url, this._context.req.body);
     }
-
-    /**
-     * @param {null|CelastrinaError} [error]
-     */
+    /**@param{null|Error|CelastrinaError|*}[error=null]*/
     sendServerError(error = null) {
         if(!(error instanceof CelastrinaError))
             error = CelastrinaError.newError("Server Error.");
         this.send(error, error.code);
     }
-
-    /**
-     * @param {null|CelastrinaError} [error]
-     */
+    /**@param{null|CelastrinaError}[error=null]*/
     sendNotAuthorizedError(error= null) {
         if(!(error instanceof CelastrinaError))
             error = CelastrinaError.newError("Not Authorized.", 401);
         this.send(error, 401);
     }
-
-    /**
-     * @param {null|CelastrinaError} [error]
-     */
+    /**@param{null|CelastrinaError}[error=null]*/
     sendForbiddenError(error = null) {
         if(!(error instanceof CelastrinaError))
             error = CelastrinaError.newError("Forbidden.", 403);
         this.send(error, 403);
     }
 }
-/**
- * @type {BaseSentry}
- */
+/**@type{BaseSentry}*/
 class JwtSentry extends BaseSentry {
-    constructor() {
-        super();
-        /** @type {null|JwtConfiguration} */
-        this._config = null;
+    /**@param{Configuration}config*/
+    constructor(config) {
+        super(config);
+        /**@type{JwtConfiguration}*/this._jwtconfig = null;
     }
-
     /**
-     * @param {Configuration} configuration
      * @returns {Promise<(JwtSentry & BaseSentry)>}
      */
-    async initialize(configuration) {
+    async initialize() {
         return new Promise((resolve, reject) => {
-            super.initialize(configuration)
+            super.initialize()
                 .then((sentry) => {
                     try {
                         // Going to initialize the acceptable issuers.
-                        this._config = configuration.getValue(JwtConfiguration.CONFIG_JWT);
-                        if(this._config == null) {
-                            configuration.context.log.error("JwtConfiguration missing or invalid.");
+                        this._jwtconfig = this._configuration.getValue(JwtConfiguration.CONFIG_JWT);
+                        if(this._jwtconfig == null) {
+                            this._configuration.context.log.error("JwtConfiguration missing or invalid.");
                             reject(CelastrinaError.newError("Invalid configration."));
                         }
                         else
@@ -969,7 +703,6 @@ class JwtSentry extends BaseSentry {
                 });
         });
     }
-
     /**
      * @param {HTTPContext} context
      * @returns {Promise<string>}
@@ -977,25 +710,22 @@ class JwtSentry extends BaseSentry {
      */
     async _getToken(context) {
         return new Promise((resolve, reject) => {
-            this._config.param.fetch(context, this._config.token)
+            this._jwtconfig.param.fetch(context, this._jwtconfig.token)
                 .then((auth) => {
                     if(typeof auth !== "string") {
-                        context.log("Expected JWT token but none was found.", LOG_LEVEL.LEVEL_WARN,
-                                     "JwtSentry._getToken(context)");
+                        context.log("Expected JWT token but none was found.", LOG_LEVEL.LEVEL_WARN, "JwtSentry._getToken(context)");
                         reject(CelastrinaError.newError("Not Authorized.", 401));
                     }
                     else {
-                        // Checking to see if we need to validate the scheme
-                        let scheme = this._config.scheme;
+                        let scheme = this._jwtconfig.scheme;
                         if(typeof scheme === "string" && scheme.length > 0) {
                             if(auth.startsWith(scheme)) { // and that it starts with the scheme...
-                                if(this._config.removeScheme)
+                                if(this._jwtconfig.removeScheme)
                                     auth = auth.slice(scheme.length); // and remove it...
                                 resolve(auth);
                             }
                             else {
-                                context.log("Expected token scheme '" + scheme + "' but none was found.",
-                                             LOG_LEVEL.LEVEL_WARN, "JwtSentry._getToken(context)");
+                                context.log("Expected token scheme '" + scheme + "' but none was found.", LOG_LEVEL.LEVEL_WARN, "JwtSentry._getToken(context)");
                                 reject(CelastrinaError.newError("Not Authorized.", 401));
                             }
                         }
@@ -1008,12 +738,7 @@ class JwtSentry extends BaseSentry {
                 });
         });
     }
-
     /**
-     * @brief
-     * @description <p><strong>WARNING:</strong>This function DOES NOT validate the JWT token, it only decodes it.
-     *              Token validation should be performed by API Manager or Azure Front Door, prior to invoking this
-     *              function.</p>
      * @param {BaseContext | HTTPContext} context
      * @returns {Promise<BaseSubject>}
      */
@@ -1037,7 +762,7 @@ class JwtSentry extends BaseSentry {
                             // No we check the issuers to see if we match any.
                             /** @type {Array.<Promise<boolean>>} */
                             let promises = [];
-                            let issuers = this._config.issuers;
+                            let issuers = this._jwtconfig.issuers;
                             for (const issuer of issuers) {
                                 promises.unshift(issuer.authenticate(subject)); // Performs the role escalations too.
                             }
@@ -1068,20 +793,11 @@ class JwtSentry extends BaseSentry {
         });
     }
 }
-/**
- * @type {RoleResolver}
- */
+/**@type{RoleResolver}*/
 class CookieSessionResolver {
-    /** @type {string} */
-    static CONFIG_HTTP_SESSION_RESOLVER = "celastrinajs.http.function.session.resolver";
-
-    /**
-     * @param {string} [name="celastrina_session"]
-     */
-    constructor(name = "celastrina_session") {
-        this._name = name;
-    }
-
+    /** @type{string}*/static CONFIG_HTTP_SESSION_RESOLVER = "celastrinajs.http.function.session.resolver";
+    /**@param{string}[name="celastrina_session"]*/
+    constructor(name = "celastrina_session"){this._name = name;}
     /**
      * @param {HTTPContext} context
      * @returns {Promise<string>}
@@ -1099,7 +815,6 @@ class CookieSessionResolver {
                 resolve(session);
         });
     }
-
     /**
      * @param {HTTPContext} context
      * @param {string} cookie
@@ -1115,7 +830,6 @@ class CookieSessionResolver {
             }
         });
     }
-
     /**
      * @param {HTTPContext} context
      * @returns {Promise<HTTPContext>}
@@ -1136,9 +850,7 @@ class CookieSessionResolver {
         });
     }
 }
-/**
- * @type {CookieSessionResolver}
- */
+/**@type{CookieSessionResolver}*/
 class SecureCookieSessionResolver extends CookieSessionResolver {
     /**
      * @param {Cryptography} crypto
@@ -1148,7 +860,6 @@ class SecureCookieSessionResolver extends CookieSessionResolver {
         super(name);
         this._crypto = crypto;
     }
-
     /**
      * @param {HTTPContext} context
      * @param {string} cookie
@@ -1170,18 +881,13 @@ class SecureCookieSessionResolver extends CookieSessionResolver {
         });
     }
 }
-/**
- * @type {JsonProperty}
- */
+/**@type{JsonProperty}*/
 class CookieSessionResolverProperty extends JsonProperty {
     /**
      * @param {string} name
-     * @param {null|string} defaultValue
+     * @param {null|string} [defaultValue=null]
      */
-    constructor(name, defaultValue = null) {
-        super(name, defaultValue);
-    }
-
+    constructor(name, defaultValue = null) {super(name, defaultValue);}
     /**
      * @param {string} value
      * @returns {Promise<null|Object>}
@@ -1192,8 +898,7 @@ class CookieSessionResolverProperty extends JsonProperty {
                 .then((obj) => {
                     if(!obj.hasOwnProperty("name"))
                         reject(CelastrinaValidationError.newValidationError(
-                            "Invalid CookieSessionResolver. _name is required.",
-                                    "CookieSessionResolver._name"));
+                            "Invalid CookieSessionResolver. _name is required.", "CookieSessionResolver._name"));
                     else
                         resolve(new CookieSessionResolver(obj._name));
                 })
@@ -1203,19 +908,13 @@ class CookieSessionResolverProperty extends JsonProperty {
         });
     }
 }
-
-/**
- * @type {JsonProperty}
- */
+/**@type{JsonProperty}*/
 class SecureCookieSessionResolverProperty extends JsonProperty {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
      */
-    constructor(name, defaultValue = null) {
-        super(name, defaultValue);
-    }
-
+    constructor(name, defaultValue = null){super(name, defaultValue);}
     /**
      * @param {string} value
      * @returns {Promise<null|Object>}
@@ -1225,17 +924,11 @@ class SecureCookieSessionResolverProperty extends JsonProperty {
             super.resolve(value)
                 .then((obj) => {
                     if(!obj.hasOwnProperty("_name"))
-                        reject(CelastrinaValidationError.newValidationError(
-                            "Invalid SecureCookieSessionResolver. _name is required.",
-                            "SecureCookieSessionResolver._name"));
+                        reject(CelastrinaValidationError.newValidationError("Invalid SecureCookieSessionResolver. _name is required.", "SecureCookieSessionResolver._name"));
                     else if(!obj.hasOwnProperty("_key"))
-                        reject(CelastrinaValidationError.newValidationError(
-                            "Invalid SecureCookieSessionResolver. _key is required.",
-                            "SecureCookieSessionResolver._key"));
+                        reject(CelastrinaValidationError.newValidationError("Invalid SecureCookieSessionResolver. _key is required.","SecureCookieSessionResolver._key"));
                     else if(!obj.hasOwnProperty("_iv"))
-                        reject(CelastrinaValidationError.newValidationError(
-                            "Invalid SecureCookieSessionResolver. _iv is required.",
-                            "SecureCookieSessionResolver._iv"));
+                        reject(CelastrinaValidationError.newValidationError("Invalid SecureCookieSessionResolver. _iv is required.","SecureCookieSessionResolver._iv"));
                     else {
                         let crypto = new Cryptography(new AES256Algorithm(obj._key, obj._iv));
                         crypto.initialize()
@@ -1258,31 +951,23 @@ class SecureCookieSessionResolverProperty extends JsonProperty {
  * @abstract
  */
 class HTTPFunction extends BaseFunction {
-    /**
-     * @param {Configuration} configuration
-     */
-    constructor(configuration) {
-        super(configuration);
-    }
-
+    /**@param{Configuration}configuration*/
+    constructor(configuration) {super(configuration);}
     /**
      * @param {_AzureFunctionContext} context
-     * @param {string} name
-     * @param {PropertyHandler} properties
+     * @param {Configuration} config
      * @returns {Promise<BaseContext & HTTPContext>}
      */
-    async createContext(context, name, properties) {
-        return new Promise(
-            (resolve, reject) => {
+    async createContext(context, config) {
+        return new Promise((resolve, reject) => {
                 try {
-                    resolve(new HTTPContext(context, name, properties));
+                    resolve(new HTTPContext(context, config.name, config.properties));
                 }
                 catch(exception) {
                     reject(exception);
                 }
             });
     }
-
     /**
      * @param {HTTPContext} context
      * @returns {Promise<void>}
@@ -1294,7 +979,6 @@ class HTTPFunction extends BaseFunction {
             resolve();
         });
     }
-
     /**
      * @param {HTTPContext} context
      * @returns {Promise<void>}
@@ -1305,7 +989,6 @@ class HTTPFunction extends BaseFunction {
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
-
     /**
      * @param {HTTPContext} context
      * @returns {Promise<void>}
@@ -1316,7 +999,6 @@ class HTTPFunction extends BaseFunction {
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
-
     /**
      * @param {HTTPContext} context
      * @returns {Promise<void>}
@@ -1327,7 +1009,6 @@ class HTTPFunction extends BaseFunction {
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
-
     /**
      * @param {HTTPContext} context
      * @returns {Promise<void>}
@@ -1338,7 +1019,6 @@ class HTTPFunction extends BaseFunction {
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
-
     /**
      * @param {HTTPContext} context
      * @returns {Promise<void>}
@@ -1349,7 +1029,6 @@ class HTTPFunction extends BaseFunction {
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
-
     /**
      * @param {HTTPContext} context
      * @returns {Promise<void>}
@@ -1361,7 +1040,6 @@ class HTTPFunction extends BaseFunction {
             resolve();
         });
     }
-
     /**
      * @param {BaseContext | HTTPContext} context
      * @returns {Promise<void>}
@@ -1374,7 +1052,6 @@ class HTTPFunction extends BaseFunction {
             resolve();
         });
     }
-
     /**
      * @param {BaseContext | HTTPContext} context
      * @returns {Promise<void>}
@@ -1383,8 +1060,7 @@ class HTTPFunction extends BaseFunction {
         return new Promise((resolve, reject) => {
             this._trace(context)
                 .then(() => {
-                    let response = [{test: context.name, passed: context.monitorResponse.passed,
-                        failed: context.monitorResponse.failed, result: context.monitorResponse.result}];
+                    let response = [{test: context.name,passed: context.monitorResponse.passed,failed: context.monitorResponse.failed,result: context.monitorResponse.result}];
                     context.send(response, 200);
                     resolve();
                 })
@@ -1393,40 +1069,35 @@ class HTTPFunction extends BaseFunction {
                 });
         });
     }
-
     /**
      * @param {BaseContext | HTTPContext} context
-     * @param {*} exception
+     * @param {null|Error|CelastrinaError|*} exception
      * @returns {Promise<void>}
      */
     async exception(context, exception) {
-        return new Promise(
-            (resolve, reject) => {
-                let ex = exception;
-                if(ex instanceof CelastrinaValidationError)
-                    context.sendValidationError(ex);
-                else if(ex instanceof CelastrinaError)
-                    context.sendServerError(ex);
-                else if(ex instanceof Error) {
-                    ex = CelastrinaError.wrapError(ex);
-                    context.sendServerError(ex);
-                }
-                else if(typeof ex === "undefined" || ex == null) {
-                    ex = CelastrinaError.newError("Unhandled server error.");
-                    context.sendServerError(ex);
-                }
-                else {
-                    ex = CelastrinaError.newError(ex.toString());
-                    context.sendServerError(ex);
-                }
+        return new Promise((resolve, reject) => {
+            /**@type{null|Error|CelastrinaError|*}*/let ex = exception;
+            if(ex instanceof CelastrinaValidationError)
+                context.sendValidationError(ex);
+            else if(ex instanceof CelastrinaError)
+                context.sendServerError(ex);
+            else if(ex instanceof Error) {
+                ex = CelastrinaError.wrapError(ex);
+                context.sendServerError(ex);
+            }
+            else if(typeof ex === "undefined" || ex == null) {
+                ex = CelastrinaError.newError("Unhandled server error.");
+                context.sendServerError(ex);
+            }
+            else {
+                ex = CelastrinaError.newError(ex.toString());
+                context.sendServerError(ex);
+            }
 
-                context.log("Request failed to process. (NAME:" + ex.cause.name + ") (MESSAGE:" +
-                    ex.cause.message + ") (STACK:" + ex.cause.stack + ")", LOG_LEVEL.LEVEL_ERROR,
-                    "HTTPFunction.exception(context, exception)");
-                resolve();
-            });
+            context.log("Request failed to process. (NAME:" + ex.cause.name + ") (MESSAGE:" + ex.cause.message + ") (STACK:" + ex.cause.stack + ")", LOG_LEVEL.LEVEL_ERROR, "HTTPFunction.exception(context, exception)");
+            resolve();
+        });
     }
-
     /**
      * @param {BaseContext & HTTPContext} context
      * @returns {Promise<void>}
@@ -1436,7 +1107,6 @@ class HTTPFunction extends BaseFunction {
             reject(CelastrinaError.newError("HTTP Method '" + context.method + "' not supported.", 400));
         });
     }
-
     /**
      * @param {BaseContext | HTTPContext} context
      * @returns {Promise<void>}
@@ -1445,12 +1115,10 @@ class HTTPFunction extends BaseFunction {
         return new Promise((resolve, reject) => {
             let httpMethodHandler = this["_" + context.method];
             let promise;
-
             if(typeof httpMethodHandler === "undefined")
                 promise = this.unhandledRequestMethod(context);
             else
                 promise = httpMethodHandler(context);
-
             promise.then(() => {
                     resolve();
                 })
@@ -1469,25 +1137,19 @@ class JwtHTTPFunction extends HTTPFunction {
      * @brief
      * @param {Configuration} configuration
      */
-    constructor(configuration) {
-        super(configuration);
-    }
-
-    async createSentry() {
-        return new Promise(
-            (resolve, reject) => {
-                try {
-                    resolve(new JwtSentry());
-                }
-                catch(exception) {
-                    reject(exception);
-                }
-            });
+    constructor(configuration){super(configuration);}
+    async createSentry(context, config) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(new JwtSentry(config));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
 }
-/**
- * @type {HTTPContext}
- */
+/**@type{HTTPContext}*/
 class JSONHTTPContext extends HTTPContext {
     /**
      * @param {_AzureFunctionContext} context
@@ -1496,13 +1158,11 @@ class JSONHTTPContext extends HTTPContext {
      */
     constructor(context, name, properties) {
         super(context, name, properties);
-        // Setting up the default response.
         this._context.res = {status: 200,
                              headers: {"Content-Type": "application/json; charset=utf-8",
                                        "X-celastrina-requestId": this._requestId},
                              body: {name: this._name, code: 200, message: "success"}};
     }
-
     /**
      * @brief Sets the body of the response and invoked done on the context.
      * @param {*} [body]
@@ -1519,13 +1179,8 @@ class JSONHTTPContext extends HTTPContext {
  * @abstract
  */
 class JSONHTTPFunction extends HTTPFunction {
-    /**
-     * @param {Configuration} configuration
-     */
-    constructor(configuration) {
-        super(configuration);
-    }
-
+    /**@param{Configuration}configuration*/
+    constructor(configuration) {super(configuration);}
     /**
      * @param {_AzureFunctionContext} context
      * @param {string} name
@@ -1533,15 +1188,14 @@ class JSONHTTPFunction extends HTTPFunction {
      * @returns {Promise<HTTPContext & JSONHTTPContext>}
      */
     async createContext(context, name, properties) {
-        return new Promise(
-            (resolve, reject) => {
-                try {
-                    resolve(new JSONHTTPContext(context, name, properties));
-                }
-                catch(exception) {
-                    reject(exception);
-                }
-            });
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(new JSONHTTPContext(context, name, properties));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
 }
 /**
@@ -1549,49 +1203,26 @@ class JSONHTTPFunction extends HTTPFunction {
  * @abstract
  */
 class JwtJSONHTTPFunction extends JSONHTTPFunction {
-    /**
-     * @param {Configuration} configuration
-     */
-    constructor(configuration) {
-        super(configuration);
-    }
-
-    async createSentry() {
-        return new Promise(
-            (resolve, reject) => {
-                try {
-                    resolve(new JwtSentry());
-                }
-                catch(exception) {
-                    reject(exception);
-                }
-            });
+    /**@param{Configuration}configuration*/
+    constructor(configuration){super(configuration);}
+    async createSentry(context, config) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(new JwtSentry(config));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
 }
-/*
- * *********************************************************************************************************************
- * EXPORTS
- * *********************************************************************************************************************
- */
 module.exports = {
-    JwtSubject: JwtSubject,
-    Issuer: Issuer,
-    IssuerProperty: IssuerProperty,
-    JwtConfiguration: JwtConfiguration,
-    HTTPContext: HTTPContext,
-    HTTPParameterFetch: HTTPParameterFetch,
-    HeaderParameterFetch: HeaderParameterFetch,
-    QueryParameterFetch: QueryParameterFetch,
-    BodyParameterFetch: BodyParameterFetch,
-    HTTPParameterFetchProperty: HTTPParameterFetchProperty,
-    CookieSessionResolver: CookieSessionResolver,
-    CookieSessionResolverProperty: CookieSessionResolverProperty,
-    SecureCookieSessionResolver: SecureCookieSessionResolver,
-    SecureCookieSessionResolverProperty: SecureCookieSessionResolverProperty,
-    JwtSentry: JwtSentry,
-    HTTPFunction: HTTPFunction,
-    JwtHTTPFunction: JwtHTTPFunction,
-    JSONHTTPContext: JSONHTTPContext,
-    JSONHTTPFunction: JSONHTTPFunction,
+    JwtSubject: JwtSubject, Issuer: Issuer, IssuerProperty: IssuerProperty, JwtConfiguration: JwtConfiguration,
+    HTTPContext: HTTPContext, HTTPParameterFetch: HTTPParameterFetch, HeaderParameterFetch: HeaderParameterFetch,
+    QueryParameterFetch: QueryParameterFetch, BodyParameterFetch: BodyParameterFetch,
+    HTTPParameterFetchProperty: HTTPParameterFetchProperty, CookieSessionResolver: CookieSessionResolver,
+    CookieSessionResolverProperty: CookieSessionResolverProperty, SecureCookieSessionResolver: SecureCookieSessionResolver,
+    SecureCookieSessionResolverProperty: SecureCookieSessionResolverProperty, JwtSentry: JwtSentry,
+    HTTPFunction: HTTPFunction, JwtHTTPFunction: JwtHTTPFunction, JSONHTTPContext: JSONHTTPContext, JSONHTTPFunction: JSONHTTPFunction,
     JwtJSONHTTPFunction: JwtJSONHTTPFunction
 };

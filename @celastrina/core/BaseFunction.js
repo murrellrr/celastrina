@@ -1318,9 +1318,7 @@ class Configuration {
         }
         else if(!(name instanceof StringProperty))
             throw CelastrinaError.newError("Invalid configuration. Name must be string or StringProperty.");
-
         this._config  = {}; // Class for storing named configurations.
-
         /**@type{null|_AzureFunctionContext}*/this._config[Configuration.CONFIG_CONTEXT] = null;
         /**@type{null|JsonProperty|PropertyHandler}*/this._config[Configuration.CONFIG_HANDLER] = null;
         /**@type{string|StringProperty}*/this._config[Configuration.CONFIG_NAME] = name;
@@ -1335,6 +1333,14 @@ class Configuration {
     /**@returns{Array<string>}*/get resourceAuthorizations(){return this._config[Configuration.CONFIG_RESOURCE_AUTHORIZATION];}
     /**@returns{Array<FunctionRole>}*/get roles(){return this._config[Configuration.CONFIG_ROLES];}
     /**@returns{_AzureFunctionContext}*/get context(){return this._config[Configuration.CONFIG_CONTEXT];}
+    /**@returns{boolean}*/
+    get loaded() {
+        let _properties = this.properties;
+        if(typeof _properties === "undefined" || _properties == null)
+            return false;
+        else
+            return this.properties.loaded;
+    }
     /**
      * @param {null|CachePropertyHandler|PropertyHandler} handler
      * @returns {Configuration}
@@ -1832,25 +1838,30 @@ class BaseSentry {
                 resolve();
         });
     }
-    /**@returns {Promise<BaseSentry>}*/
+    /**@returns {Promise<void>}*/
     async initialize() {
         return new Promise((resolve, reject) => {
             // Set up the local application id.
-            let _roleresolver = this._configuration.getValue(RoleResolver.CONFIG_SENTRY_ROLE_RESOLVER, null);
-            if(_roleresolver == null)
-                _roleresolver = new SessionRoleResolver();
-            this._configuration.setValue(RoleResolver.CONFIG_SENTRY_ROLE_RESOLVER, _roleresolver);
-            this._loadResourceAuthorizations();
-            this._loadApplicationAuthorizations()
-                .then(() => {
-                    return this._loadFunctionRoles();
-                })
-                .then(() => {
-                    resolve(this);
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            if(!this._configuration.loaded) {
+                this._configuration.context.log.verbose("[BaseSentry.initialize()]: Loading Sentry objects.");
+                let _roleresolver = this._configuration.getValue(RoleResolver.CONFIG_SENTRY_ROLE_RESOLVER, null);
+                if (_roleresolver == null)
+                    _roleresolver = new SessionRoleResolver();
+                this._configuration.setValue(RoleResolver.CONFIG_SENTRY_ROLE_RESOLVER, _roleresolver);
+                this._loadResourceAuthorizations();
+                this._loadApplicationAuthorizations()
+                    .then(() => {
+                        return this._loadFunctionRoles();
+                    })
+                    .then(() => {
+                        resolve(this);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            else
+                resolve(this);
         });
     }
 }
@@ -1874,19 +1885,17 @@ class BaseContext {
         /**@type{object}*/this._session = {};
     }
     /**
-     * @brief {Configuration} configration
+     * @param {Configuration} configration
      * @returns {Promise<BaseContext>}
      */
-    async initialize(configuration) {
+    async initialize(configration) {
         return new Promise((resolve, reject) => {
             if(this._monitor)
                 this._monitorResponse = new MonitorResponse();
-
             /** @type {{traceparent: string}} */
             let _traceContext = this._context.traceContext;
             if(typeof _traceContext !== "undefined")
                 this._traceId = _traceContext.traceparent;
-
             resolve(this);
         });
     }
@@ -2042,7 +2051,7 @@ class BaseFunction {
                     })
                     .then((results) => {
                         return Promise.all([results[0].initialize(),
-                                                  results[1].initialize()]);
+                                                  results[1].initialize(this._configuration)]);
                     })
                     .then((results) => {
                         this._context = results[1];

@@ -536,12 +536,12 @@ class HTTPContext extends BaseContext {
         });
     }
     /**
-     * @param configuration
+     * @param {Configuration} configuration
      * @returns {Promise<BaseContext & HTTPContext>}
      */
     async initialize(configuration) {
         return new Promise((resolve, reject) => {
-            Promise.all([super.initialize(configuration), this._setRequestId(), this._setMonitorMode(), this._parseCookies()])
+            Promise.all([super.initialize(), this._setRequestId(), this._setMonitorMode(), this._parseCookies()])
                 .then((results) => {
                     let sessioResolver = configuration.getValue(CookieSessionResolver.CONFIG_HTTP_SESSION_RESOLVER, null);
                     if(sessioResolver instanceof CookieSessionResolver) {
@@ -1183,14 +1183,13 @@ class JSONHTTPFunction extends HTTPFunction {
     constructor(configuration) {super(configuration);}
     /**
      * @param {_AzureFunctionContext} context
-     * @param {string} name
-     * @param {PropertyHandler} properties
+     * @param {Configuration} config
      * @returns {Promise<HTTPContext & JSONHTTPContext>}
      */
-    async createContext(context, name, properties) {
+    async createContext(context, config) {
         return new Promise((resolve, reject) => {
             try {
-                resolve(new JSONHTTPContext(context, name, properties));
+                resolve(new JSONHTTPContext(context, config.name, config.properties));
             }
             catch(exception) {
                 reject(exception);

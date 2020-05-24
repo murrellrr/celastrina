@@ -13,11 +13,11 @@ customization and code, potentially lowering your time-to-value.
 2. You gotta know Javascript and Node.js, duh.
 
 ##Recent Changes
-1. Removed `managed` mode from the `Configuration`. Adopting Azure Key Vault and App Configuration changed how to 
-managed resources are handled internally and now no longer required indicating the system uses managed services like 
-Vault.
-2. Support for Application Settings, App Configurations, and a hybrid Application Settings and Vault.
-3. Repaired issue in JwtSentry when expired tokens are allowed.
+1. Support for Application Settings, App Configurations, and a hybrid Application Settings and Vault.
+2. Fixed JwtSentry that allowed expired JWT tokens to pass authorization.
+3. Fixed HTTPContext initialization issue.
+4. Updated BaseSentry to cache all function roles, resource, and application authorizations.
+5. Reduced overall file size of core and http packages.
 
 ##Quick-start
 To use Celastrina.js simply deploy the following to your Microsoft Azure HTTP Trigger function:
@@ -25,12 +25,12 @@ To use Celastrina.js simply deploy the following to your Microsoft Azure HTTP Tr
 ```
 "use strict";
 
-const {StringProperty, BooleanProperty, Configuration} = require("@celastrina/core");
-const {JSONHTTPContext, JSONHTTPFunction} = require("@celastrina/http");
+const {StringProperty, Configuration} = require("@celastrina/core");
+const {JSONHTTPFunction} = require("@celastrina/http");
 
 const config = new Configuration(new StringProperty("function.name"));
 
-class MyNewHTTPTriggerFunction extends JSONHTTPFunction {
+class MyFunction extends JSONHTTPFunction {
     async _get(context) {
         return new Promise((resolve, reject) => {
             context.send({message: "_get invoked."});
@@ -46,7 +46,7 @@ class MyNewHTTPTriggerFunction extends JSONHTTPFunction {
     }
 }
 
-module.exports = new MyNewHTTPTriggerFunction(config);
+module.exports = new MyFunction(config);
 
 ```
 
@@ -209,7 +209,7 @@ in the class. For example, if the HTTP method is GET, then `_get(context)` is in
 might look like:
 
 ```
-class MyNewHTTPTriggerFunction extends JSONHTTPFunction {
+class MyFunction extends JSONHTTPFunction {
     async initialize(context) {
         return new Promise((resolve, reject) => {
             // Do some initialization stuff
@@ -253,35 +253,28 @@ class MyNewHTTPTriggerFunction extends JSONHTTPFunction {
     }
 }
 
-module.exports = new MyNewHTTPTriggerFunction(config);
+module.exports = new MyFunction(config);
 ```
 
-####Back to Managed Resources
+####Managed Resources
 You can add authorizations for any other supported managed resource using the `Configration`. For a list of supported 
 service please visit [https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/services-support-managed-identities](https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/services-support-managed-identities).
 
 To add a resource authorization:
 
 ```
-const config = new Configuration(new StringProperty("function.name"),
-                                 new BooleanProperty("function.managed"));
+const config = new Configuration(new StringProperty("function.name"));
 
-config.config.addResourceAuthorization("https://datalake.azure.net/");
+config.addResourceAuthorization("https://datalake.azure.net/");
 
 // OR
 
-config.config.addResourceAuthorization(new StringProperty("YOUR_RESOURCE_AUTHORIZATION"));
+config.addResourceAuthorization(new StringProperty("YOUR_RESOURCE_AUTHORIZATION"));
 ```
 
-More about actually using a resource authorization later.
+More about using a resource authorization later.
 
 ####Wait, what about Applications Registrations?
-Awesome! So you finally realized that roll'n your own user management system is a bad idea and have set up Azure AD B2C!
-I'm proud of you, that's a big step! If I was wrong and you haven't, I choose not to help you. Just don't. If you're gonna 
-use Azure, use Azure AD. If you are an enterprise and writing an application for employees, you're almost there. If not, 
-use Azure AD B2C for your customers. Its basically free for most small to medium application so there is really no reason 
-not to. Please, don't fight this. BTW, heres a good link on configuring Azure AD B2C [https://docs.microsoft.com/en-us/azure/active-directory-b2c/](https://docs.microsoft.com/en-us/azure/active-directory-b2c/)
-
 If you've made it this far, you probably have Azure AD, or Azure AD B2C and want to access resources not as a function 
 managed identity, but as an application. No problem, Celastrina.js makes this pretty easy to do as well, enter 
 `ApplicationAuthorization`. 
@@ -301,8 +294,7 @@ portal at Home > Azure AD B2C | App registrations (Preview) > \[Your Application
 Using the  `ApplicationAuthorization` in code:
 
 ```
-const config = new Configuration(new StringProperty("function.name"),
-                                 new BooleanProperty("function.managed"));
+const config = new Configuration(new StringProperty("function.name"));
 
 config.addApplicationAuthorization(new ApplicationAuthorization("https://login.microsoftonline.com", 
     "c7b24e39-37e9-4fcf-bbf0-480309764eef", "f396619a-f2dc-455c-8f71-0fc77d424b46", "x?=/4ZkXh<Yv'4_m2&n]<B[L", 
@@ -313,7 +305,7 @@ There is also a custom `Property` instance called `ApplicationAuthorizationPrope
 to load from and application authorization from a application setting.
 
 ```
-config.addApplicationAuthorization(new ApplicationAuthorizationProperty("YOUR PROPERTY NAME", true));
+config.addApplicationAuthorization(new ApplicationAuthorizationProperty("YOUR PROPERTY NAME"));
 ```
 
 In Azure Key Vault add the following json string:
@@ -336,15 +328,12 @@ recommend giving out application secrets to developers!
 For more information on Application registrations and MSAL, see [https://docs.microsoft.com/en-us/azure/active-directory/develop/msal-client-application-configuration](https://docs.microsoft.com/en-us/azure/active-directory/develop/msal-client-application-configuration).
 
 ####How do I use the resource registrations and application authorizations?
-Use them is as simple as assing the bearer token to the `authorization` header of your RESTful requests to azure 
-resources.
-
-Accessing these bearer tokens introduces another concept of Celastrina.js, the Sentry! Queue menacing music! The sentry
+Accessing the authorization bearer tokens introduces another concept of Celastrina.js, the Sentry! _Queue menacing music!_ The sentry
 handles all security matters in Celastrina.js from managed resources registrations, authentication, to authorization. The
 sentry is derrived from the base class `BaseSentry`, and is contained in the context of any life-cycle function.
 
 To use an application authorization bearer token simply look up the resource by the application ID. Let say I want the 
-bearer token for Azure Datalake for the application authorization above:
+bearer token for Azure Data Lake for the application authorization above:
 
 ```
     async _get(context) {
@@ -356,7 +345,7 @@ bearer token for Azure Datalake for the application authorization above:
     }
 ```
 
-If you want to get the Datalake bearer token for the Azure function's managed identity simply omit the optional 
+If you want to get the Data Lake bearer token for the Azure function's managed identity simply omit the optional 
 application ID:
 
 ```
@@ -369,8 +358,7 @@ application ID:
 ```
 
 All bearer tokens are fetched and cached during the bootstrap life-cycle. Tokens are also lazy refreshed during access if 
-the token has expired. Because of this, a call to `getAuthorizationToken` may take longer then expected if the token 
-has expired.
+the token has expired. A call to `getAuthorizationToken` may take longer then expected if the token has expired.
 
 ###WOW, this is awesome! Wait, what about authentication and authorization of users?
 Yes! Of course! Now that you are using Azure AD B2C you have authentication and are iching to get your users to login. 
@@ -403,14 +391,13 @@ API Manager [https://docs.microsoft.com/en-us/azure/api-management/](https://doc
 
 **WARNING** I'm going to state this now in case it wasn't obvious above; **_Celastrina.js DOES NOT validate JWT. It 
 only decodes it!_** One more time, it doesn't validate, it only decodes it. There, now don't go gett'n mad at me when you
-use out-of-the-box Celastrina.js JWT, don't use Azure API manager, you get compromised, and all your users are after 
-you with torches and pitch forks.
+don't use Azure API manager, you get compromised, and all your users are after you with torches and pitch forks.
 
 Using JWT requires changes to the core sentry we talked about earlier. To make these changes you simply extend the base 
 class called `JwtJSONHTTPFunction`.
 
 ```
-class MyNewSecureHTTPTriggerFunction extends JwtJSONHTTPFunction {
+class MyFunction extends JwtJSONHTTPFunction {
     async initialize(context) {
         return new Promise((resolve, reject) => {
             // Do some initialization stuff
@@ -454,7 +441,7 @@ class MyNewSecureHTTPTriggerFunction extends JwtJSONHTTPFunction {
     }
 }
 
-module.exports = new MyNewSecureHTTPTriggerFunction(config);
+module.exports = new MyFunction(config);
 ```
 
 Then you will need to set up the allowed issuers in your configuration. An `Issuer` tells Celastrina.js which JWT 
@@ -475,8 +462,7 @@ match any `Issuer` then your request will fail with a 401. If the subject matche
 Now, let's configure JWT:
 
 ```
-const config = new Configuration(new StringProperty("function.name"),
-                                 new BooleanProperty("function.managed"));
+const config = new Configuration(new StringProperty("function.name"));
 
 const jwtconfig = new JwtConfiguration();
 
@@ -512,7 +498,7 @@ need a different level of authentication per HTTP method you'll need to split th
 
 BAM! That's it!
 
-####Wait, you said Authentication and Authorization, what about roles?
+####Wait, you said Authentication AND Authorization, what about roles?
 Whoa, slow your role child! _Queue Batman and Robin *slap* meme and slapping sound_ I got a soap box for this one... 
 
 _Queue wavy line fade-out_
@@ -545,8 +531,7 @@ between the function and the subject. The default is `MatchAny`. There are 3 typ
     - `MatchNone`: No roles in subject match no roles in functions.
 
 ```
-const config = new Configuration(new StringProperty("function.name"),
-                                 new BooleanProperty("function.managed"));
+const config = new Configuration(new StringProperty("function.name"));
 
 config.addFunctionRole(new FunctionRole("post", ["role1", "role2", "role3"])); // Default MatchAny
 ```
@@ -555,10 +540,9 @@ Of course, you may also use any of the `Property` types in the constructor of `F
 `Property` type `FunctionRoleProperty` that resolves a `FunctionRole` from a JSON string.
 
 ```
-const config = new Configuration(new StringProperty("function.name"),
-                                 new BooleanProperty("function.managed"));
+const config = new Configuration(new StringProperty("function.name"));
 
-config.addFunctionRole(new FunctionRoleProperty("function.role.post")); // Default MatchAny
+config.addFunctionRole(new FunctionRoleProperty("function.role.post"));
 ```
 
 A application setting or Azure Key Vault attribute must be created with the follow JSON:
@@ -591,19 +575,17 @@ the custom property you are forced into AES256, specifically aes-256-cbc. If you
  your own.
 
 ```
-const config = new Configuration(new StringProperty("function.name"),
-                                 new BooleanProperty("function.managed"));
+const config = new Configuration(new StringProperty("function.name"));
 
 const jwtconfig = new JwtConfiguration();
 
-jwtconfig.addIssuer(new IssuerProperty("function.jwt.issuer.user", true))
-         .addIssuer(new IssuerProperty("function.jwt.issuer.admin", true)));
+jwtconfig.addIssuer(new IssuerProperty("function.jwt.issuer.user"))
+         .addIssuer(new IssuerProperty("function.jwt.issuer.admin")));
 
-config.addFunctionRole(new FunctionRoleProperty("function.role.post", true))
-      .addValue(JwtConfiguration.CELASTRINAJS_CONFIG_JWT, 
-                jwtconfig)
-      .addValue(CookieSessionResolver.CELASTRINA_CONFIG_HTTP_SESSION_RESOLVER,
-                new SecureCookieSessionResolverProperty("function.cookie.secure", true));
+config.addFunctionRole(new FunctionRoleProperty("function.role.post"))
+      .addValue(JwtConfiguration.CONFIG_JWT, jwtconfig)
+      .addValue(CookieSessionResolver.CONFIG_HTTP_SESSION_RESOLVER,
+                new SecureCookieSessionResolverProperty("function.cookie.secure"));
 
 ```
 
@@ -629,8 +611,7 @@ HTTP method requested.
 Setting up the index.js:
 
 ```
-const config = new Configuration(new StringProperty("function.name"),
-                                 new BooleanProperty("function.managed"));
+const config = new Configuration(new StringProperty("function.name"));
 const jwtconfig = new JwtConfiguration();
 
 jwtconfig.addIssuer(new IssuerProperty("function.jwt.issuer.user"))
@@ -639,9 +620,8 @@ jwtconfig.addIssuer(new IssuerProperty("function.jwt.issuer.user"))
 config.addFunctionRole(new FunctionRoleProperty("function.role.post"))
       .addResourceAuthorization(new StringProperty("function.resource.local.graph"))
       .addApplicationAuthorization(new ApplicationAuthorizationProperty("function.resource.app.datalake"))
-      .addValue(JwtConfiguration.CELASTRINAJS_CONFIG_JWT, 
-                jwtconfig)
-      .addValue(CookieSessionResolver.CELASTRINA_CONFIG_HTTP_SESSION_RESOLVER,
+      .addValue(JwtConfiguration.CONFIG_JWT, jwtconfig)
+      .addValue(CookieSessionResolver.CONFIG_HTTP_SESSION_RESOLVER,
                 new SecureCookieSessionResolverProperty("function.cookie.secure"));
 
 class MyFunction extends JwtJSONHTTPFunction {
@@ -716,10 +696,11 @@ Function application settings and `local.settings`.json:
 }
 ```
 
-Notice for the `local.settings.json` `managed` is set `false`. This is because the managed identity settings are **NOT** 
-available when running locally. Azure func uses the VisualStudio credentials to access resources instead. Also, please 
-make a note to use `secure` set to `true` when using `Property` instances that should be secured and replace the 
-application settings with Key Vault Secret resource URL's.
+**WARNING:** Managed identity settings are **NOT** available when running locally. Azure `func` uses the VisualStudio 
+credentials to access resources instead.
+
+**WARNING:** Please, please, please use Azure Key Value or App Configuration with Key Vault reference for all your 
+secure stuff.
 
 your function.json:
 

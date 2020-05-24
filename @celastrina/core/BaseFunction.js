@@ -112,10 +112,7 @@ class ApplicationAuthorization {
      * @param {StringProperty|string} resource
      * @returns {ApplicationAuthorization}
      */
-    addResource(resource) {
-        this._resources.unshift(resource);
-        return this;
-    }
+    addResource(resource){this._resources.unshift(resource); return this;}
     /**
      * @param {string} resource
      * @returns {Promise<string>}
@@ -124,8 +121,7 @@ class ApplicationAuthorization {
         return new Promise((resolve, reject) => {
             /** @type {_CelastrinaToken} */
             let token = this._tokens[resource];
-            if(typeof token !== "object")
-                reject(CelastrinaError.newError("Resource '" + resource + "' not authorized for " + "application '" + this._id + "'.", 401));
+            if(typeof token !== "object") reject(CelastrinaError.newError("Resource '" + resource + "' not authorized for " + "application '" + this._id + "'.", 401));
             else {
                 let exp = token.expires;
                 let now = moment();
@@ -172,16 +168,14 @@ class ApplicationAuthorization {
     async _refreshApplicationToken(resource) {
         return new Promise((resolve, reject) => {
             let adContext = new AuthenticationContext(this._authority + "/" + this._tenant);
-            adContext.acquireTokenWithClientCredentials(resource, this._id, this._secret,
-                (err, response) => {
-                    if(err)
-                        reject(CelastrinaError.newError("Not authorized.", 401));
-                    else {
-                        let token = {resource:resource,token:response.accessToken,expires:moment(response.expiresOn)};
-                        this._tokens[token.resource] = token;
-                        resolve(token.token);
-                    }
-                });
+            adContext.acquireTokenWithClientCredentials(resource, this._id, this._secret, (err, response) => {
+                if(err) reject(CelastrinaError.newError("Not authorized.", 401));
+                else {
+                    let token = {resource:resource,token:response.accessToken,expires:moment(response.expiresOn)};
+                    this._tokens[token.resource] = token;
+                    resolve(token.token);
+                }
+            });
         });
     }
     /**
@@ -191,10 +185,8 @@ class ApplicationAuthorization {
     async refreshToken(resource) {
         return new Promise((resolve, reject) => {
             let promise;
-            if(this._managed)
-                promise = this._refreshManagedToken(resource);
-            else
-                promise = this._refreshApplicationToken(resource);
+            if(this._managed) promise = this._refreshManagedToken(resource);
+            else promise = this._refreshApplicationToken(resource);
             promise.then((token) => {
                     resolve(token);
                 })
@@ -249,8 +241,7 @@ class ApplicationAuthorization {
             params.append("resource", "");
             params.append("api-version", "2017-09-01");
             let config = {/**@type{URLSearchParams}*/params:params,headers: {"secret": this._secret}};
-            /**@type{Array.<Promise<_CelastrinaToken>>}*/
-            let promises = [];
+            /**@type{Array.<Promise<_CelastrinaToken>>}*/let promises = [];
             for(const resource of this._resources) {
                 promises.unshift(this._initializeManagedResource(config, resource));
             }
@@ -276,10 +267,8 @@ class ApplicationAuthorization {
         return new Promise((resolve, reject) => {
             adContext.acquireTokenWithClientCredentials(resource, this._id, this._secret,
                 (err, response) => {
-                    if(err)
-                        reject(CelastrinaError.newError("Not authorized.", 401));
-                    else
-                        resolve({resource:resource,token:response.accessToken,expires:moment(response.expiresOn)});
+                    if(err) reject(CelastrinaError.newError("Not authorized.", 401));
+                    else resolve({resource:resource,token:response.accessToken,expires:moment(response.expiresOn)});
                 });
         });
     }
@@ -291,12 +280,10 @@ class ApplicationAuthorization {
         return new Promise((resolve, reject) => {
             try {
                 let adContext = new AuthenticationContext(this._authority + "/" + this._tenant);
-                /**@type{Array.<Promise<_CelastrinaToken>>}*/
-                let promises = [];
+                /**@type{Array.<Promise<_CelastrinaToken>>}*/let promises = [];
                 for(const resource of this._resources) {
                     promises.unshift(this._initializeAppResource(adContext, resource));
                 }
-
                 Promise.all(promises)
                     .then((results) => {
                         return this._setResourceTokens(results);
@@ -316,14 +303,11 @@ class ApplicationAuthorization {
     /**@returns{Promise<void>}*/
     async initialize() {
         return new Promise((resolve, reject) => {
-            if(this._resources.length === 0)
-                reject(CelastrinaError.newError("No resources defined for authorization '" + this._id + "'."));
+            if(this._resources.length === 0) reject(CelastrinaError.newError("No resources defined for authorization '" + this._id + "'."));
             else {
                 let promise;
-                if(this._managed)
-                    promise = this._initializeManagedResources();
-                else
-                    promise = this._initializeAppResources();
+                if(this._managed) promise = this._initializeManagedResources();
+                else promise = this._initializeAppResources();
                 promise
                     .then(() => {
                         resolve();
@@ -364,8 +348,7 @@ class PropertyHandler {
                         reject(exception);
                     });
             }
-            else
-                resolve(false);
+            else resolve(false);
         });
     }
     /**
@@ -399,8 +382,7 @@ class AppSettingsPropertyHandler extends PropertyHandler {
     async getProperty(key, defaultValue = null) {
         return new Promise((resolve, reject) => {
             let value = process.env[key];
-            if(typeof value === "undefined")
-                value = defaultValue;
+            if(typeof value === "undefined") value = defaultValue;
             resolve(value);
         });
     }
@@ -441,9 +423,7 @@ class ManagedResourcePropertyHandler extends PropertyHandler {
      * @returns {Promise<void>}
      * @abstract
      */
-    async _refreshSource(token) {
-        return new Promise((resolve, reject) => {resolve();});
-    }
+    async _refreshSource(token){return new Promise((resolve, reject) => {resolve();});}
     /**@returns{Promise<void>}*/
     async refresh() {
         return new Promise(async (resolve, reject) => {
@@ -453,8 +433,7 @@ class ManagedResourcePropertyHandler extends PropertyHandler {
                     await this._refreshSource(token);
                     resolve();
                 }
-                else
-                    resolve();
+                else resolve();
             }
             catch(exception) {
                 reject(exception);
@@ -470,15 +449,13 @@ class ManagedResourcePropertyHandler extends PropertyHandler {
             try {
                 this._endpoint = process.env["IDENTITY_ENDPOINT"];
                 this._secret = process.env["IDENTITY_HEADER"];
-                if((typeof this._endpoint !== "string" || this._endpoint.trim().length === 0) ||
-                    (typeof this._secret !== "string" || this._secret.trim().length === 0)) {
+                if((typeof this._endpoint !== "string" || this._endpoint.trim().length === 0) || (typeof this._secret !== "string" || this._secret.trim().length === 0)) {
                     context.log.error("[VaultAppSettingPropertyHandler.initialize(context)] IDENTITY_ENDPOINT and/or IDENTITY_HEADER environment property missing. Are you sure this Azure Function is using a Managed Identity?");
                     reject(CelastrinaError.newError("Function not configured for Managed Identity."));
                 }
                 else {
                     await this.refresh();
-                    context.log.verbose("[ManagedResourcePropertyHandler._initialize(context, config)]: " +
-                        "ManagedResourcePropertyHandler initialized for resource '" + this._resource + "'.");
+                    context.log.verbose("[ManagedResourcePropertyHandler._initialize(context, config)]: ManagedResourcePropertyHandler initialized for resource '" + this._resource + "'.");
                     resolve();
                 }
             }
@@ -502,10 +479,8 @@ class VaultAppSettingPropertyHandler extends ManagedResourcePropertyHandler {
     async _refreshSource(token) {
         return new Promise((resolve, reject) => {
             try {
-                if(this._vault == null)
-                    this._vault = new Vault(token);
-                else
-                    this._vault.token = token;
+                if(this._vault == null) this._vault = new Vault(token);
+                else this._vault.token = token;
                 resolve();
             }
             catch(exception) {
@@ -522,10 +497,8 @@ class VaultAppSettingPropertyHandler extends ManagedResourcePropertyHandler {
         return new Promise(async (resolve, reject) => {
             try {
                 let value = await this._settings.getProperty(key, null);
-                if(typeof value === "undefined" || value == null)
-                    resolve(defaultValue);
-                else if(typeof value !== "string") // No sure this should happen, but could.
-                    resolve(value);
+                if(typeof value === "undefined" || value == null) resolve(defaultValue);
+                else if(typeof value !== "string") resolve(value);
                 else {
                     let jsontest = value.trim();
                     if(jsontest.startsWith("{") && jsontest.endsWith("}")) { // loose attempt at detecting JSON
@@ -533,15 +506,12 @@ class VaultAppSettingPropertyHandler extends ManagedResourcePropertyHandler {
                         let source = JSON.parse(jsontest);
                         if ((typeof source === "object") && source.hasOwnProperty("_type") &&
                             (typeof source._type === "string") && (source._type === "celastrinajs.vault.reference")) {
-                            // Looks like we are a vault reference.
                             await this.refresh();
                             resolve(await this._vault.getSecret(source._resourceId));
                         }
-                        else
-                            resolve(value);
+                        else resolve(value);
                     }
-                    else
-                        resolve(value);
+                    else resolve(value);
                 }
             }
             catch(exception) {
@@ -569,10 +539,8 @@ class AppConfigPropertyHandler extends ManagedResourcePropertyHandler {
     async _refreshSource(token) {
         return new Promise((resolve, reject) => {
             try {
-                if(this._appconfig == null)
-                    this._appconfig = new AppConfiguration(token, this._resourceId);
-                else
-                    this._appconfig.token = token;
+                if(this._appconfig == null) this._appconfig = new AppConfiguration(token, this._resourceId);
+                else this._appconfig.token = token;
                 resolve();
             }
             catch(exception) {
@@ -590,8 +558,7 @@ class AppConfigPropertyHandler extends ManagedResourcePropertyHandler {
             try {
                 await this.refresh();
                 let value = await this._appconfig.getValue(key);
-                if(typeof value === "undefined" || value == null)
-                    value = defaultValue;
+                if(typeof value === "undefined" || value == null) value = defaultValue;
                 resolve(value);
             }
             catch(exception) {
@@ -619,17 +586,13 @@ class CachedProperty {
     set value(value) {
         this._value = value;
         this._lastUpdate = moment();
-        if(this._time === 0 || value == null)
-            this._expires = null;
-        else
-            this._expires = moment().add(this._time, this._unit);
+        if(this._time === 0 || value == null) this._expires = null;
+        else this._expires = moment().add(this._time, this._unit);
     }
     /**@returns{boolean}*/
     isExpired() {
-        if(this._expires == null)
-            return true;
-        else
-            return (moment().isSameOrAfter(this._expires));
+        if(this._expires == null) return true;
+        else return (moment().isSameOrAfter(this._expires));
     }
     /**@returns{Promise<void>}*/
     async clear() {
@@ -666,9 +629,7 @@ class CachePropertyHandler extends PropertyHandler {
             /**@type{Array.<Promise<void>>}*/let promises = [];
             for(let prop in this._cache) {
                 let cached = this._cache[prop];
-                if(cached instanceof CachedProperty) {
-                    promises.unshift(cached.clear());
-                }
+                if(cached instanceof CachedProperty) promises.unshift(cached.clear());
             }
             Promise.all(promises)
                 .then(() => {
@@ -687,15 +648,12 @@ class CachePropertyHandler extends PropertyHandler {
                 let unit = await this._handler.getProperty(CachePropertyHandler.CONFIG_CACHE_DEFAULT_EXPIRE_UNIT, "s");
                 this._defaultTime = time;
                 this._defaultUnit = /**@type{DurationInputArg2}*/unit;
-                let override = await this._handler.getProperty(
-                    CachePropertyHandler.CONFIG_CACHE_DEFAULT_EXPIRE_OVERRIDE, null);
+                let override = await this._handler.getProperty(CachePropertyHandler.CONFIG_CACHE_DEFAULT_EXPIRE_OVERRIDE, null);
                 if(typeof override === "string") {
-                    // Load the JSON
                     let tempovr = JSON.parse(override);
                     if((typeof tempovr === "object") && tempovr.hasOwnProperty("_type") &&
                         (typeof tempovr._type === "string") &&
                         (tempovr._type === CachePropertyHandler.CONFIG_CACHE_DEFAULT_EXPIRE_OVERRIDE)) {
-                        // Loop through and apply the overrides.
                         /**@type{{_overrides:Array.<object>}}*/
                         let overrides = tempovr._overrides;
                         for(/**@type{{_property:string,_time:number,_unit:DurationInputArg2}}*/const ovr of overrides) {
@@ -714,9 +672,7 @@ class CachePropertyHandler extends PropertyHandler {
      * @param {_AzureFunctionContext} context
      * @returns {Promise<void>}
      */
-    async _initialize(context) {
-        return this._handler._initialize(context);
-    }
+    async _initialize(context){return this._handler._initialize(context);}
     /**
      * @param {_AzureFunctionContext} context
      * @param {boolean} [force=false]
@@ -736,8 +692,7 @@ class CachePropertyHandler extends PropertyHandler {
                                 reject(exception);
                             });
                     }
-                    else
-                        resolve(first);
+                    else resolve(first);
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -751,10 +706,8 @@ class CachePropertyHandler extends PropertyHandler {
     async getCacheInfo(key) {
         return new Promise((resolve, reject) => {
             let cached = this._cache[key];
-            if(!(cached instanceof CachedProperty))
-                resolve(null);
-            else
-                resolve(cached);
+            if(!(cached instanceof CachedProperty)) resolve(null);
+            else resolve(cached);
         });
     }
     /**
@@ -770,8 +723,7 @@ class CachePropertyHandler extends PropertyHandler {
                 let value;
                 if(!(cached instanceof CachedProperty)) {
                     value = await this._handler.getProperty(key, null);
-                    if(value == null)
-                        value = defaultValue;
+                    if(value == null) value = defaultValue;
                     else {
                         cached = new CachedProperty(this._defaultTime, this._defaultUnit);
                         cached.value = value;
@@ -781,11 +733,9 @@ class CachePropertyHandler extends PropertyHandler {
                 else if(cached.isExpired()) {
                     value = await this._handler.getProperty(key, null);
                     cached.value = value;
-                    if(value == null)
-                        value = defaultValue;
+                    if(value == null) value = defaultValue;
                 }
-                else
-                    value = cached.value;
+                else value = cached.value;
                 resolve(value);
             }
             catch(exception) {
@@ -863,10 +813,8 @@ class JsonProperty extends Property {
     async resolve(value) {
         return new Promise((resolve, reject) => {
             try {
-                if(value == null)
-                    resolve(null);
-                else
-                    resolve(JSON.parse(value));
+                if(value == null) resolve(null);
+                else resolve(JSON.parse(value));
             }
             catch(exception) {
                 reject(exception);
@@ -956,11 +904,8 @@ class CacheHandlerProperty {
         try {
             /**@type{{cached:boolean}}*/let source  = JSON.parse(process.env[CacheHandlerProperty.CONFIG_PROPERTY]);
             let handler = this._createPropertyHandler(source);
-            if(source.hasOwnProperty("chached") && typeof source.chached === "boolean" &&
-                    source.chached === true)
-                return new CachePropertyHandler(handler);
-            else
-                return handler;
+            if(source.hasOwnProperty("chached") && typeof source.chached === "boolean" && source.chached === true) return new CachePropertyHandler(handler);
+            else return handler;
         }
         catch(exception) {
             throw CelastrinaError.wrapError(exception);
@@ -975,9 +920,7 @@ class VaultAppSettingHandlerProperty extends CacheHandlerProperty {
      * @param {object} source
      * @returns {PropertyHandler}
      */
-    async _createPropertyHandler(source) {
-        return new VaultAppSettingPropertyHandler();
-    }
+    async _createPropertyHandler(source){return new VaultAppSettingPropertyHandler();}
 }
 /**@type{CacheHandlerProperty}*/
 class AppConfigHandlerProperty extends CacheHandlerProperty {
@@ -988,16 +931,12 @@ class AppConfigHandlerProperty extends CacheHandlerProperty {
      * @returns {PropertyHandler}
      */
     async _createPropertyHandler(source) {
-        if(source.hasOwnProperty("resourceId") && typeof source.resourceId === "string" &&
-                source.resourceId.trim().length > 0) {
+        if(source.hasOwnProperty("resourceId") && typeof source.resourceId === "string" && source.resourceId.trim().length > 0) {
             let label = "development";
-            if(source.hasOwnProperty("label") && typeof source.label === "string" &&
-                    source.label.trim().length > 0)
-                label = source.label;
+            if(source.hasOwnProperty("label") && typeof source.label === "string" && source.label.trim().length > 0) label = source.label;
             return new AppConfigPropertyHandler(source.resourceId, label);
         }
-        else
-            throw CelastrinaError.newError("Invalid AppConfigHandlerProperty, missing 'resourceId'");
+        else throw CelastrinaError.newError("Invalid AppConfigHandlerProperty, missing 'resourceId'");
     }
 }
 /**@type{JsonProperty}*/
@@ -1020,20 +959,13 @@ class ApplicationAuthorizationProperty extends JsonProperty {
                 super.resolve(value)
                     .then((source) => {
                         if(source != null) {
-                            if(!source.hasOwnProperty("_authority"))
-                                reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _authority required."));
-                            else if(!source.hasOwnProperty("_tenant"))
-                                reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _tenant required."));
-                            else if(!source.hasOwnProperty("_id"))
-                                reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _id required."));
-                            else if(!source.hasOwnProperty("_secret"))
-                                reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _secret required."));
-                            else if(!source.hasOwnProperty("_resources"))
-                                reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _resources required."));
-                            else if (!Array.isArray(source._resources))
-                                reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _resources must be array."));
-                            else
-                                source = new ApplicationAuthorization(source._authority, source._tenant, source._id, source._secret, source._resources);
+                            if(!source.hasOwnProperty("_authority")) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _authority required."));
+                            else if(!source.hasOwnProperty("_tenant")) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _tenant required."));
+                            else if(!source.hasOwnProperty("_id")) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _id required."));
+                            else if(!source.hasOwnProperty("_secret")) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _secret required."));
+                            else if(!source.hasOwnProperty("_resources")) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _resources required."));
+                            else if (!Array.isArray(source._resources)) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _resources must be array."));
+                            else source = new ApplicationAuthorization(source._authority, source._tenant, source._id, source._secret, source._resources);
                         }
                         resolve(source);
                     })
@@ -1080,13 +1012,9 @@ class BaseSubject {
     /**@returns{string}*/get id(){return this._id;}
     /**@returns{Array.<string>}*/get roles(){return this._roles;}
     /**@param{string}role*/
-    addRole(role) {
-        this._roles.unshift(role);
-    }
+    addRole(role){this._roles.unshift(role);}
     /**@param{Array.<string>}roles*/
-    addRoles(roles) {
-        this._roles = roles.concat(this._roles);
-    }
+    addRoles(roles){this._roles = roles.concat(this._roles);}
     /**
      * @param {string} role
      * @returns {Promise<boolean>}
@@ -1179,7 +1107,7 @@ class MatchNone extends ValueMatch {
             try {
                 let match = false;
                 for(const role of values) {
-                    if((match = assertion.includes(role)))break;
+                    if((match = assertion.includes(role))) break;
                 }
                 resolve(!match);
             }
@@ -1206,10 +1134,7 @@ class FunctionRole {
      * @param {string} role
      * @returns {FunctionRole}
      */
-    addRole(role) {
-        this._roles.unshift(role);
-        return this;
-    }
+    addRole(role){this._roles.unshift(role); return this;}
     /**
      * @param {string} action
      * @param {BaseContext} context
@@ -1226,8 +1151,7 @@ class FunctionRole {
                         reject(exception);
                     });
             }
-            else
-                resolve(false);
+            else resolve(false);
         });
     }
 }
@@ -1246,17 +1170,10 @@ class FunctionRoleProperty extends JsonProperty {
     static async _getMatchType(type) {
         return new Promise((resolve, reject) => {
             switch (type) {
-                case "MatchAny":
-                    resolve(new MatchAny());
-                    break;
-                case "MatchAll":
-                    resolve(new MatchAll());
-                    break;
-                case "MatchNone":
-                    resolve(new MatchNone());
-                    break;
-                default:
-                    reject(CelastrinaError.newError("Invalid Match Type."));
+                case "MatchAny": resolve(new MatchAny()); break;
+                case "MatchAll": resolve(new MatchAll()); break;
+                case "MatchNone": resolve(new MatchNone()); break;
+                default: reject(CelastrinaError.newError("Invalid Match Type."));
             }
         });
     }
@@ -1270,16 +1187,11 @@ class FunctionRoleProperty extends JsonProperty {
                 super.resolve(value)
                     .then((source) => {
                         if(source != null) {
-                            if(!source.hasOwnProperty("_roles"))
-                                reject(CelastrinaError.newError("Invalid FunctionRole, _roles required."));
-                            else if(!Array.isArray(source._roles))
-                                reject(CelastrinaError.newError("Invalid FunctionRole, _roles must be an array."));
-                            else if(!source.hasOwnProperty("_action"))
-                                reject(CelastrinaError.newError("Invalid FunctionRole, _action required."));
-                            else if(!source.hasOwnProperty("_match"))
-                                reject(CelastrinaError.newError("Invalid FunctionRole, _match required."));
-                            else if(!source._match.hasOwnProperty("_type"))
-                                reject(CelastrinaError.newError("Invalid FunctionRole._match._type, _type required."));
+                            if(!source.hasOwnProperty("_roles")) reject(CelastrinaError.newError("Invalid FunctionRole, _roles required."));
+                            else if(!Array.isArray(source._roles)) reject(CelastrinaError.newError("Invalid FunctionRole, _roles must be an array."));
+                            else if(!source.hasOwnProperty("_action")) reject(CelastrinaError.newError("Invalid FunctionRole, _action required."));
+                            else if(!source.hasOwnProperty("_match")) reject(CelastrinaError.newError("Invalid FunctionRole, _match required."));
+                            else if(!source._match.hasOwnProperty("_type")) reject(CelastrinaError.newError("Invalid FunctionRole._match._type, _type required."));
                             else {
                                 FunctionRoleProperty._getMatchType(source._match._type)
                                     .then((match) => {
@@ -1312,11 +1224,9 @@ class Configuration {
     /**@param{StringProperty|string} name*/
     constructor(name) {
         if(typeof name === "string") {
-            if(name.trim().length === 0)
-                throw CelastrinaError.newError("Invalid configuration. Name cannot be undefined, null or 0 length.");
+            if(name.trim().length === 0) throw CelastrinaError.newError("Invalid configuration. Name cannot be undefined, null or 0 length.");
         }
-        else if(!(name instanceof StringProperty))
-            throw CelastrinaError.newError("Invalid configuration. Name must be string or StringProperty.");
+        else if(!(name instanceof StringProperty)) throw CelastrinaError.newError("Invalid configuration. Name must be string or StringProperty.");
         this._config = {};
         /**@type{boolean}*/this._loadBase = true;
         /**@type{null|_AzureFunctionContext}*/this._config[Configuration.CONFIG_CONTEXT] = null;
@@ -1339,20 +1249,15 @@ class Configuration {
      * @param {null|CachePropertyHandler|PropertyHandler} handler
      * @returns {Configuration}
      */
-    setPropertyHandler(handler) {
-        this._config[Configuration.CONFIG_HANDLER] = handler;
-        return this;
-    }
+    setPropertyHandler(handler){this._config[Configuration.CONFIG_HANDLER] = handler; return this;}
     /**
      * @param {string} key
      * @param {*} value
      * @returns {Configuration}
      */
     setValue(key , value) {
-        if(typeof key !== "string" || key.trim().length === 0)
-            throw CelastrinaError.newError("Invalid configuration. Key cannot be undefined, null or 0 length.");
-        this._config[key] = value;
-        return this;
+        if(typeof key !== "string" || key.trim().length === 0) throw CelastrinaError.newError("Invalid configuration. Key cannot be undefined, null or 0 length.");
+        this._config[key] = value; return this;
     }
     /**
      * @param {string} key
@@ -1361,34 +1266,24 @@ class Configuration {
      */
     getValue(key, defaultValue = null) {
         let value = this._config[key];
-        if(typeof value === "undefined" || value == null)
-            value = defaultValue;
+        if(typeof value === "undefined" || value == null) value = defaultValue;
         return value;
     }
     /**
      * @param {ApplicationAuthorizationProperty|ApplicationAuthorization} application
      * @returns {Configuration}
      */
-    addApplicationAuthorization(application) {
-        this._config[Configuration.CONFIG_APPLICATION_AUTHORIZATION].unshift(application);
-        return this;
-    }
+    addApplicationAuthorization(application){this._config[Configuration.CONFIG_APPLICATION_AUTHORIZATION].unshift(application); return this;}
     /**
      * @param {StringProperty|string} resource
      * @returns {Configuration}
      */
-    addResourceAuthorization(resource) {
-        this._config[Configuration.CONFIG_RESOURCE_AUTHORIZATION].unshift(resource);
-        return this;
-    }
+    addResourceAuthorization(resource){this._config[Configuration.CONFIG_RESOURCE_AUTHORIZATION].unshift(resource); return this;}
     /**
      * @param {FunctionRoleProperty|FunctionRole} role
      * @returns {Configuration}
      */
-    addFunctionRole(role) {
-        this._config[Configuration.CONFIG_ROLES].unshift(role);
-        return this;
-    }
+    addFunctionRole(role){this._config[Configuration.CONFIG_ROLES].unshift(role); return this;}
     /**
      * @param {Object} obj
      * @param {Array.<Promise>} promises
@@ -1400,10 +1295,8 @@ class Configuration {
             for(let prop in obj) {
                 let local = obj[prop];
                 if(typeof local !== "undefined" && local != null) {
-                    if(local instanceof Property)
-                        promises.unshift(PropertyLoader.load(obj, prop, local, _handler));
-                    else
-                        this._load(local, promises);
+                    if(local instanceof Property) promises.unshift(PropertyLoader.load(obj, prop, local, _handler));
+                    else this._load(local, promises);
                 }
             }
         }
@@ -1417,10 +1310,9 @@ class Configuration {
         let _handler = this._config[Configuration.CONFIG_HANDLER];
         if(typeof _handler === "undefined" || _handler == null) {
             context.log.verbose("[Configuration._getPropertyHandler(context)]: No property handler specified, defaulting to AppSettingsPropertyHandler.");
-            _handler = new AppSettingsPropertyHandler(); // One was not set by the implementor, use default.
+            _handler = new AppSettingsPropertyHandler();
         }
         if(!_handler.loaded) {
-            // Checking to see if we need to override for local development.
             let deployment = process.env[Configuration.CONFIG_LOCAL_DEV];
             if(typeof deployment === "string")
                 // There is a local development mode config.
@@ -1473,17 +1365,11 @@ class Algorithm {
     constructor(name){this._name = name;}
     /**@returns{string}*/get name(){return this._name;}
     /**@returns{Promise<void>}*/
-    async initialize() {
-        return new Promise((resolve, reject) => {resolve();});
-    }
+    async initialize() {return new Promise((resolve, reject) => {resolve();});}
     /**@returns{Promise<Cipher>}*/
-    async createCipher() {
-        return new Promise((resolve, reject) => {reject(CelastrinaError.newError("Not supported."));});
-    }
+    async createCipher(){return new Promise((resolve, reject) => {reject(CelastrinaError.newError("Not supported."));});}
     /**@returns{Promise<Decipher>}*/
-    async createDecipher() {
-        return new Promise((resolve, reject) => {reject(CelastrinaError.newError("Not supported."));});
-    }
+    async createDecipher(){return new Promise((resolve, reject) => {reject(CelastrinaError.newError("Not supported."));});}
 }
 /**@type{Algorithm}*/
 class AES256Algorithm extends Algorithm {
@@ -1581,16 +1467,8 @@ class Cryptography {
         });
     }
 }
-/**
- * @type {{LEVEL_TRACE: number, LEVEL_INFO: number, LEVEL_VERBOSE: number, LEVEL_WARN: number, LEVEL_ERROR: number}}
- */
-const LOG_LEVEL = {
-    LEVEL_TRACE:   0,
-    LEVEL_VERBOSE: 1,
-    LEVEL_INFO:    2,
-    LEVEL_WARN:    3,
-    LEVEL_ERROR:   4
-};
+/**@type{{LEVEL_TRACE: number, LEVEL_INFO: number, LEVEL_VERBOSE: number, LEVEL_WARN: number, LEVEL_ERROR: number}}*/
+const LOG_LEVEL = {LEVEL_TRACE: 0, LEVEL_VERBOSE: 1, LEVEL_INFO: 2, LEVEL_WARN: 3, LEVEL_ERROR: 4};
 class MonitorResponse {
     constructor() {
         this._passed = {};
@@ -1603,9 +1481,7 @@ class MonitorResponse {
      * @param {string} probe
      * @param {string} message
      */
-    addPassedDiagnostic(probe, message) {
-        this._passed[probe] = message;
-    }
+    addPassedDiagnostic(probe, message){this._passed[probe] = message;}
     /**
      * @param {string} probe
      * @param {string} message
@@ -1616,10 +1492,8 @@ class MonitorResponse {
     }
     /**@returns{string}*/
     get result() {
-        if(this._passedCheck)
-            return "FAILED";
-        else
-            return "PASSED";
+        if(this._passedCheck) return "FAILED";
+        else return "PASSED";
     }
 }
 /**@abstract*/
@@ -1631,9 +1505,7 @@ class RoleResolver {
      * @returns {Promise<BaseSubject>}
      */
     async resolve(context) {
-        return new Promise((resolve, reject) => {
-            reject(CelastrinaError.newError("Not Implemented."));
-        });
+        return new Promise((resolve, reject) => {reject(CelastrinaError.newError("Not Implemented."));});
     }
 }
 /**@type{RoleResolver}*/
@@ -1670,14 +1542,11 @@ class BaseSentry {
      */
     async getAuthorizationToken(resource, id = null) {
         return new Promise((resolve, reject) => {
-            if(id == null)
-                id = BaseSentry.CONFIG_SENTRY_IDENTITY;
+            if(id == null) id = BaseSentry.CONFIG_SENTRY_IDENTITY;
             let _appauth = this._configuration.getValue(BaseSentry.CONFIG_SENTRY_APPAUTH);
             /** @type{ApplicationAuthorization}*/let appobj = _appauth[id];
-            if(appobj instanceof ApplicationAuthorization)
-                resolve(appobj.getToken(resource));
-            else
-                reject(CelastrinaError.newError("Application ID '" + id + "' not found for resource '" + resource + "'."));
+            if(appobj instanceof ApplicationAuthorization) resolve(appobj.getToken(resource));
+            else reject(CelastrinaError.newError("Application ID '" + id + "' not found for resource '" + resource + "'."));
         });
     }
     /**
@@ -1775,21 +1644,13 @@ class BaseSentry {
                         reject(exception);
                     });
             }
-            else
-                resolve();
+            else resolve();
         });
     }
     /**@private*/
     _loadResourceAuthorizations() {
-        if(this._configuration.resourceAuthorizations.length > 0) {
-            this._configuration.addApplicationAuthorization(
-                new ApplicationAuthorization(process.env["IDENTITY_ENDPOINT"],
-                                           "",
-                                            BaseSentry.CONFIG_SENTRY_IDENTITY,
-                                            process.env["IDENTITY_HEADER"],
-                                            this._configuration.resourceAuthorizations,
-                                            true));
-        }
+        if(this._configuration.resourceAuthorizations.length > 0)
+            this._configuration.addApplicationAuthorization(new ApplicationAuthorization(process.env["IDENTITY_ENDPOINT"], "", BaseSentry.CONFIG_SENTRY_IDENTITY, process.env["IDENTITY_HEADER"], this._configuration.resourceAuthorizations, true));
     }
     /**
      * @param {FunctionRole} role
@@ -1828,8 +1689,7 @@ class BaseSentry {
                         reject(exception);
                     });
             }
-            else
-                resolve();
+            else resolve();
         });
     }
     /**@returns {Promise<void>}*/
@@ -1854,8 +1714,7 @@ class BaseSentry {
                         reject(exception);
                     });
             }
-            else
-                resolve(this);
+            else resolve(this);
         });
     }
 }
@@ -1884,12 +1743,10 @@ class BaseContext {
      */
     async initialize(configration) {
         return new Promise((resolve, reject) => {
-            if(this._monitor)
-                this._monitorResponse = new MonitorResponse();
+            if(this._monitor) this._monitorResponse = new MonitorResponse();
             /** @type {{traceparent: string}} */
             let _traceContext = this._context.traceContext;
-            if(typeof _traceContext !== "undefined")
-                this._traceId = _traceContext.traceparent;
+            if(typeof _traceContext !== "undefined") this._traceId = _traceContext.traceparent;
             resolve(this);
         });
     }
@@ -1907,16 +1764,12 @@ class BaseContext {
     /**@returns{object}*/get session(){return this._session;}
     /**@returns{PropertyHandler}*/get propertHandler(){return this._properties;}
     /**@param{string}name*/
-    getBinding(name) {
-        return this._context.bindings[name];
-    }
+    getBinding(name){return this._context.bindings[name];}
     /**
      * @param {string} name
      * @param {Object} value
      */
-    setBinding(name, value) {
-        this._context.bindings[name] = value;
-    }
+    setBinding(name, value){this._context.bindings[name] = value;}
     /**
      * @param {string} name
      * @param {*} [defaultValue=null]
@@ -1924,10 +1777,8 @@ class BaseContext {
      */
     getSessionProperty(name, defaultValue = null) {
         let prop = this._session[name];
-        if(typeof prop === "undefined" || prop == null)
-            return defaultValue;
-        else
-            return prop;
+        if(typeof prop === "undefined" || prop == null) return defaultValue;
+        else return prop;
     }
     /**
      * @param {string} name
@@ -1935,25 +1786,21 @@ class BaseContext {
      * @returns {BaseContext}
      */
     setSessionProperty(name, value) {
-        this._session[name] = value;
-        return this;
+        this._session[name] = value; return this;
     }
     /**
      * @param {object} source
      * @returns {BaseContext}
      */
     loadSessionProperties(source) {
-        Object.assign(this._session, source);
-        return this;
+        Object.assign(this._session, source); return this;
     }
     /**
      * @param {string} key
      * @param {null|string} [defaultValue=null]
      * @return {Promise<string>}
      */
-    async getProperty(key, defaultValue = null) {
-        return this._properties.getProperty(key, defaultValue);
-    }
+    async getProperty(key, defaultValue = null){return this._properties.getProperty(key, defaultValue);}
     /**
      * @param {Object} message
      * @param {LOG_LEVEL} [level] default is trace.
@@ -1961,8 +1808,7 @@ class BaseContext {
      */
     log(message = "[NO MESSAGE]", level = LOG_LEVEL.LEVEL_VERBOSE, subject = null) {
         let out = "[" + this._name + "][LEVEL " + level + "]";
-        if(typeof subject === "string")
-            out += "[" + subject + "]";
+        if(typeof subject === "string") out += "[" + subject + "]";
         out += "[" + this._context.invocationId + "]:" + "[" + this._requestId + "]:" + message.toString();
         switch(level) {
             case LOG_LEVEL.LEVEL_INFO:this._context.log.info(out); break;
@@ -1982,10 +1828,8 @@ class BaseContext {
     }
     /**@param{null|Object}[value=null]*/
     done(value = null) {
-        if(value === null)
-            this._context.done();
-        else
-            this._context.done(value);
+        if(value === null) this._context.done();
+        else this._context.done(value);
     }
 }
 /**@abstract*/
@@ -2018,15 +1862,14 @@ class BaseFunction {
      * @returns {Promise<BaseContext>}
      */
     async createContext(context, config) {
-        return new Promise(
-            (resolve, reject) => {
-                try {
-                    resolve(new BaseContext(context, config.name, config.properties));
-                }
-                catch(exception) {
-                    reject(exception);
-                }
-            });
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(new BaseContext(context, config.name, config.properties));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
     /**
      * @param {_AzureFunctionContext} context
@@ -2034,37 +1877,31 @@ class BaseFunction {
      * @throws {CelastrinaError}
      */
     async bootstrap(context) {
-        return new Promise(
-            (resolve, reject) => {
-                // First we load the configuration.
-                this._configuration.load(context)
-                    .then(() => {
-                        // Create the sentry
-                        return Promise.all([this.createSentry(context, this._configuration),
-                                                  this.createContext(context, this._configuration)]);
-                    })
-                    .then((results) => {
-                        return Promise.all([results[0].initialize(),
-                                                  results[1].initialize(this._configuration)]);
-                    })
-                    .then((results) => {
-                        this._context = results[1];
-                        this._context.sentry = results[0];
-                        this._configuration.loadBase = false;
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            });
+        return new Promise((resolve, reject) => {
+            this._configuration.load(context)
+                .then(() => {
+                    // Create the sentry
+                    return Promise.all([this.createSentry(context, this._configuration), this.createContext(context, this._configuration)]);
+                })
+                .then((results) => {
+                    return Promise.all([results[0].initialize(), results[1].initialize(this._configuration)]);
+                })
+                .then((results) => {
+                    this._context = results[1];
+                    this._context.sentry = results[0];
+                    this._configuration.loadBase = false;
+                    resolve();
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
     }
     /**
      * @param {BaseContext} context
      * @returns {Promise<void>}
      */
-    async initialize(context) {
-        return new Promise((resolve, reject) => {resolve();});
-    }
+    async initialize(context) {return new Promise((resolve, reject) => {resolve();});}
     /**
      * @param {BaseContext} context
      * @returns {Promise<BaseSubject>}
@@ -2103,57 +1940,44 @@ class BaseFunction {
      * @param {BaseContext} context
      * @returns {Promise<void>}
      */
-    async validate(context) {
-        return new Promise((resolve, reject) => {resolve();});
-    }
+    async validate(context) {return new Promise((resolve, reject) => {resolve();});}
     /**
      * @param {BaseContext} context
      * @returns {Promise<void>}
      */
     async monitor(context) {
-        return new Promise(
-            (resolve, reject) => {
-                context.log("No monitoring checks performed, monitor not overridden.", LOG_LEVEL.LEVEL_VERBOSE, "BaseFunction.monitor(context)");
-                context.monitorResponse.addPassedDiagnostic("default", "Monitor not overridden.");
-                resolve();
-            });
+        return new Promise((resolve, reject) => {
+            context.log("No monitoring checks performed, monitor not overridden.", LOG_LEVEL.LEVEL_VERBOSE, "BaseFunction.monitor(context)");
+            context.monitorResponse.addPassedDiagnostic("default", "Monitor not overridden.");
+            resolve();
+        });
     }
     /**
      * @param {BaseContext} context
      * @returns {Promise<void>}
      */
-    async load(context) {
-        return new Promise((resolve, reject) => {resolve();});
-    }
+    async load(context) {return new Promise((resolve, reject) => {resolve();});}
     /**
      * @param {BaseContext} context
      * @returns {Promise<void>}
      */
-    async process(context) {
-        return new Promise((resolve, reject) => {resolve();});
-    }
+    async process(context) {return new Promise((resolve, reject) => {resolve();});}
     /**
      * @param {BaseContext} context
      * @returns {Promise<void>}
      */
-    async save(context) {
-        return new Promise((resolve, reject) => {resolve();});
-    }
+    async save(context) {return new Promise((resolve, reject) => {resolve();});}
     /**
      * @param {BaseContext} context
      * @param {*} exception
      * @returns {Promise<void>}
      */
-    async exception(context, exception) {
-        return new Promise((resolve, reject) => {resolve();});
-    }
+    async exception(context, exception) {return new Promise((resolve, reject) => {resolve();});}
     /**
      * @param {BaseContext} context
      * @returns {Promise<void>}
      */
-    async terminate(context) {
-        return new Promise((resolve, reject) => {resolve();});
-    }
+    async terminate(context) {return new Promise((resolve, reject) => {resolve();});}
     /**
      * @brief Method called by the Azure Function to execute the lifecycle.
      * @param {_AzureFunctionContext} context The context of the function.
@@ -2231,18 +2055,13 @@ class BaseFunction {
     _unhandled(context, exception) {
         /**@type{exception|Error|CelastrinaError|*}*/let ex = exception;
         if(!(ex instanceof CelastrinaError)) {
-            if(ex instanceof Error)
-                ex = CelastrinaError.wrapError(ex);
-            else if (typeof ex === "undefined" || ex == null)
-                ex = CelastrinaError.newError("Unhandled server error.");
-            else
-                ex = CelastrinaError.newError(ex.toString());
+            if(ex instanceof Error) ex = CelastrinaError.wrapError(ex);
+            else if (typeof ex === "undefined" || ex == null) ex = CelastrinaError.newError("Unhandled server error.");
+            else ex = CelastrinaError.newError(ex.toString());
         }
         context.log.error("[BaseFunction._unhandled(context, exception)][exception](NAME:" + ex.cause.name + ") (MESSAGE:" + ex.cause.message + ") (STACK:" + ex.cause.stack + ")");
-        if(ex.drop)
-            context.done();
-        else
-            context.done(ex);
+        if(ex.drop) context.done();
+        else context.done(ex);
     }
 }
 module.exports = {

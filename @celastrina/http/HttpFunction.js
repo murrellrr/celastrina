@@ -41,10 +41,8 @@ const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Conf
  * @property {number} iat
  * @property {number} exp
  * @property {string} nonce
- *
  * @typedef _jwt
  * @property {_jwtpayload} payload
- *
  * @typedef _ClaimsPayload
  * @property {moment.Moment} issued
  * @property {moment.Moment} expires
@@ -65,15 +63,14 @@ class JwtSubject extends BaseSubject {
      * @param {string} token
      * @param {Array.<string>} [roles]
      */
-    constructor(sub, aud, iss, iat, exp, nonce, token,
-                roles = []) {
+    constructor(sub, aud, iss, iat, exp, nonce, token, roles = []) {
         super(sub, roles);
-        this._nonce    = nonce;
+        this._nonce = nonce;
         this._audience = aud;
-        this._issuer   = iss;
-        this._issued   = moment.unix(iat);
-        this._expires  = moment.unix(exp);
-        this._token    = token;
+        this._issuer = iss;
+        this._issued = moment.unix(iat);
+        this._expires = moment.unix(exp);
+        this._token = token;
     }
     /**@returns{string}*/get nonce(){return this._nonce;}
     /**@returns{string}*/get audience() {return this._audience;}
@@ -88,8 +85,7 @@ class JwtSubject extends BaseSubject {
     }
     /**@param{string[]}headers*/
     setAuthorizationHeader(headers) {
-        if(typeof headers !== "undefined" && headers != null)
-            headers["Authorization"] = "Bearer " + this.token;
+        if(typeof headers !== "undefined" && headers != null) headers["Authorization"] = "Bearer " + this.token;
     }
     toJSON() {
         let json = super.toJSON();
@@ -103,11 +99,8 @@ class JwtSubject extends BaseSubject {
     /**@param{JwtSubject}source*/
     copy(source) {
         //sub, aud, iss, iat, exp, nonce, token
-        if(source instanceof JwtSubject)
-            return new JwtSubject(source.id, source._audience, source._issuer, source._issued.unix(),
-                                  source._expires.unix(), source._nonce, source._token);
-        else
-            throw CelastrinaError.newError("Source must be an instance of JwtUser.")
+        if(source instanceof JwtSubject) return new JwtSubject(source.id, source._audience, source._issuer, source._issued.unix(), source._expires.unix(), source._nonce, source._token);
+        else throw CelastrinaError.newError("Source must be an instance of JwtUser.")
     }
     /**
      * @param {string} token
@@ -121,8 +114,7 @@ class JwtSubject extends BaseSubject {
                 try {
                     /** @type {_jwtpayload} */
                     let payload = jwt.decode(token);
-                    resolve(new JwtSubject(payload.sub, payload.aud, payload.iss, payload.iat, payload.exp,
-                                           payload.nonce, token));
+                    resolve(new JwtSubject(payload.sub, payload.aud, payload.iss, payload.iat, payload.exp, payload.nonce, token));
                 }
                 catch (exception) {
                     reject(exception);
@@ -195,16 +187,11 @@ class IssuerProperty extends JsonProperty {
                 super.resolve(value)
                     .then((source) => {
                         if(source != null) {
-                            if(!source.hasOwnProperty("_name"))
-                                reject(CelastrinaError.newError("Invalid Issuer, _name required."));
-                            else if(!source.hasOwnProperty("_audience"))
-                                reject(CelastrinaError.newError("Invalid Issuer, _audience required."));
-                            else if(!source.hasOwnProperty("_roles"))
-                                reject(CelastrinaError.newError("Invalid Issuer, _roles required."));
-                            else if(!Array.isArray(source._roles))
-                                reject(CelastrinaError.newError("Invalid Issuer, _roles must be an Array."));
-                            else
-                                resolve(new Issuer(source._name, source._audience, source._roles, source._nonce));
+                            if(!source.hasOwnProperty("_name")) reject(CelastrinaError.newError("Invalid Issuer, _name required."));
+                            else if(!source.hasOwnProperty("_audience")) reject(CelastrinaError.newError("Invalid Issuer, _audience required."));
+                            else if(!source.hasOwnProperty("_roles")) reject(CelastrinaError.newError("Invalid Issuer, _roles required."));
+                            else if(!Array.isArray(source._roles)) reject(CelastrinaError.newError("Invalid Issuer, _roles must be an Array."));
+                            else resolve(new Issuer(source._name, source._audience, source._roles, source._nonce));
                         }
                     })
                     .catch((exception) => {
@@ -307,8 +294,7 @@ class BodyParameterFetch extends HTTPParameterFetch {
             try {
                 let body = context.requestBody;
                 let value = body[key];
-                if(typeof value === "undefined" || value == null)
-                    value = defaultValue;
+                if(typeof value === "undefined" || value == null) value = defaultValue;
                 resolve(value);
             }
             catch(exception) {
@@ -335,21 +321,13 @@ class HTTPParameterFetchProperty extends JsonProperty {
                     .then((source) => {
                         if(source != null) {
                             if(!source.hasOwnProperty("_type"))
-                                reject(CelastrinaError.newError(
-                                    "Invalid HTTPParameterFetch, _type required."));
+                                reject(CelastrinaError.newError("Invalid HTTPParameterFetch, _type required."));
                             else {
                                 switch(source._type) {
-                                    case "header":
-                                        resolve(new HeaderParameterFetch());
-                                        break;
-                                    case "query":
-                                        resolve(new MatchAll());
-                                        break;
-                                    case "body":
-                                        resolve(new MatchNone());
-                                        break;
-                                    default:
-                                        reject(CelastrinaError.newError("Invalid Match Type."));
+                                    case "header": resolve(new HeaderParameterFetch()); break;
+                                    case "query": resolve(new MatchAll()); break;
+                                    case "body": resolve(new MatchNone());break;
+                                    default: reject(CelastrinaError.newError("Invalid Match Type."));
                                 }
                             }
                         }
@@ -393,58 +371,37 @@ class JwtConfiguration {
      * @param {IssuerProperty|Issuer} issuer
      * @returns {JwtConfiguration}
      */
-    addIssuer(issuer) {
-        this._issuers.unshift(issuer);
-        return this;
-    }
+    addIssuer(issuer){this._issuers.unshift(issuer); return this;}
     /**
      * @param {Array.<(IssuerProperty|Issuer)>} [issuers=[]]
      * @returns {JwtConfiguration}
      */
-    setIssuers(issuers = []) {
-        this._issuers = issuers;
-        return this;
-    }
+    setIssuers(issuers = []){this._issuers = issuers; return this;}
     /**
      * @param {HTTPParameterFetchProperty|HTTPParameterFetch} [param={HeaderParameterFetch}]
      * @return {JwtConfiguration}
      */
-    setParam(param= new HeaderParameterFetch()) {
-        this._param = param;
-        return this;
-    }
+    setParam(param= new HeaderParameterFetch()){this._param = param; return this;}
     /**
      * @param {string|StringProperty} [scheme="Bearer "]
      * @return {JwtConfiguration}
      */
-    setScheme(scheme = "Bearer ") {
-        this._scheme = scheme;
-        return this;
-    }
+    setScheme(scheme = "Bearer "){this._scheme = scheme; return this;}
     /**
      * @param {boolean|BooleanProperty} [remove=true]
      * @return {JwtConfiguration}
      */
-    setRemoveScheme(remove = true) {
-        this._remove = remove;
-        return this;
-    }
+    setRemoveScheme(remove = true){this._remove = remove; return this;}
     /**
      * @param {string|StringProperty} [token="authorization"]
      * @return {JwtConfiguration}
      */
-    setToken(token = "authorization") {
-        this._token = token;
-        return this;
-    }
+    setToken(token = "authorization"){this._token = token; return this;}
     /**
      * @param {(boolean|BooleanProperty)} [validateNonce=false]
      * @returns {JwtConfiguration}
      */
-    setValidateNonce(validateNonce = false) {
-        this._validateNonce = validateNonce;
-        return this;
-    }
+    setValidateNonce(validateNonce = false){this._validateNonce = validateNonce; return this;}
 }
 /**@type{BaseContext}*/
 class HTTPContext extends BaseContext {
@@ -476,12 +433,9 @@ class HTTPContext extends BaseContext {
     async _setRequestId() {
         return new Promise((resolve, reject) => {
             try {
-                // Override the request ID if its there.
                 let id = this._context.req.query["requestId"];
-                if(typeof id === "undefined" || id == null)
-                    id = this._context.req.headers["x-celastrina-requestId"];
-                if(typeof id === "string")
-                    this._requestId = id;
+                if(typeof id === "undefined" || id == null) id = this._context.req.headers["x-celastrina-requestId"];
+                if(typeof id === "string") this._requestId = id;
                 resolve();
             }
             catch(exception) {
@@ -501,8 +455,7 @@ class HTTPContext extends BaseContext {
                     monitor = true;
                 else {
                     monitor = this._context.req.query["monitor"];
-                    if (typeof monitor === "undefined" || monitor == null)
-                        monitor = this._context.req.headers["x-celastrina-monitor"];
+                    if (typeof monitor === "undefined" || monitor == null) monitor = this._context.req.headers["x-celastrina-monitor"];
                     monitor = (typeof monitor === "string") ? (monitor === "true") : false;
                 }
                 this._monitor = monitor;
@@ -541,7 +494,8 @@ class HTTPContext extends BaseContext {
      */
     async initialize(configuration) {
         return new Promise((resolve, reject) => {
-            Promise.all([super.initialize(), this._setRequestId(), this._setMonitorMode(), this._parseCookies()])
+            Promise.all([super.initialize(configuration), this._setRequestId(), this._setMonitorMode(),
+                               this._parseCookies()])
                 .then((results) => {
                     let sessioResolver = configuration.getValue(CookieSessionResolver.CONFIG_HTTP_SESSION_RESOLVER, null);
                     if(sessioResolver instanceof CookieSessionResolver) {
@@ -553,8 +507,7 @@ class HTTPContext extends BaseContext {
                                 reject(exception);
                             });
                     }
-                    else
-                        resolve(results[0]);
+                    else resolve(results[0]);
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -568,10 +521,8 @@ class HTTPContext extends BaseContext {
      */
     getCookie(name, defaultValue = null) {
         let cookie = this._cookies[name];
-        if(typeof cookie !== "string")
-            return defaultValue
-        else
-            return cookie;
+        if(typeof cookie !== "string") return defaultValue
+        else return cookie;
     }
     /**
      * @param {string} name
@@ -580,10 +531,8 @@ class HTTPContext extends BaseContext {
      */
     getQuery(name, defaultValue = null) {
         let qry = this._context.req.query[name];
-        if(typeof qry !== "string")
-            return defaultValue;
-        else
-            return qry;
+        if(typeof qry !== "string") return defaultValue;
+        else return qry;
     }
     /**
      * @param {string} name
@@ -592,10 +541,8 @@ class HTTPContext extends BaseContext {
      */
     getRequestHeader(name, defaultValue = null) {
         let header = this._context.req.headers[name];
-        if(typeof header !== "string")
-            return defaultValue;
-        else
-            return header;
+        if(typeof header !== "string") return defaultValue;
+        else return header;
     }
     /**
      * @param {string} name
@@ -604,18 +551,14 @@ class HTTPContext extends BaseContext {
      */
     getResponseHeader(name, defaultValue = null) {
         let header = this._context.res.headers[name];
-        if(typeof header !== "string")
-            return defaultValue;
-        else
-            return header;
+        if(typeof header !== "string") return defaultValue;
+        else return header;
     }
     /**
      * @param {string} name
      * @param {string} value
      */
-    setResponseHeader(name, value) {
-        this._context.res.headers[name] = value;
-    }
+    setResponseHeader(name, value){this._context.res.headers[name] = value;}
     /**
      * @param {*} [body]
      * @param {number} [status] The HTTP status code, default is 200.
@@ -628,15 +571,13 @@ class HTTPContext extends BaseContext {
                 let content = this._name + ", " + status + ".";
                 this._context.res.body = "<html lang=\"en\"><head><title>" + content + "</title></head><body>" + content + "</body></html>";
             }
-            else
-                body = body.toString();
+            else body = body.toString();
         }
         this._context.res.body = body;
     }
     /**@param{null|Error|CelastrinaError|*}[error=null]*/
     sendValidationError(error = null) {
-        if(!(error instanceof CelastrinaValidationError))
-            error = CelastrinaValidationError.newValidationError("Bad request.", this._requestId);
+        if(!(error instanceof CelastrinaValidationError)) error = CelastrinaValidationError.newValidationError("Bad request.", this._requestId);
         this.send(error, error.code);
     }
     /**
@@ -648,25 +589,20 @@ class HTTPContext extends BaseContext {
         this.send(body, 302);
     }
     /**@param{string}url*/
-    sendRedirectForwardBody(url) {
-        this.sendRedirect(url, this._context.req.body);
-    }
+    sendRedirectForwardBody(url) {this.sendRedirect(url, this._context.req.body);}
     /**@param{null|Error|CelastrinaError|*}[error=null]*/
     sendServerError(error = null) {
-        if(!(error instanceof CelastrinaError))
-            error = CelastrinaError.newError("Server Error.");
+        if(!(error instanceof CelastrinaError)) error = CelastrinaError.newError("Server Error.");
         this.send(error, error.code);
     }
     /**@param{null|CelastrinaError}[error=null]*/
     sendNotAuthorizedError(error= null) {
-        if(!(error instanceof CelastrinaError))
-            error = CelastrinaError.newError("Not Authorized.", 401);
+        if(!(error instanceof CelastrinaError)) error = CelastrinaError.newError("Not Authorized.", 401);
         this.send(error, 401);
     }
     /**@param{null|CelastrinaError}[error=null]*/
     sendForbiddenError(error = null) {
-        if(!(error instanceof CelastrinaError))
-            error = CelastrinaError.newError("Forbidden.", 403);
+        if(!(error instanceof CelastrinaError)) error = CelastrinaError.newError("Forbidden.", 403);
         this.send(error, 403);
     }
 }
@@ -691,8 +627,7 @@ class JwtSentry extends BaseSentry {
                             this._configuration.context.log.error("JwtConfiguration missing or invalid.");
                             reject(CelastrinaError.newError("Invalid configration."));
                         }
-                        else
-                            resolve(sentry);
+                        else resolve(sentry);
                     }
                     catch(exception) {
                         reject(exception);
@@ -719,9 +654,8 @@ class JwtSentry extends BaseSentry {
                     else {
                         let scheme = this._jwtconfig.scheme;
                         if(typeof scheme === "string" && scheme.length > 0) {
-                            if(auth.startsWith(scheme)) { // and that it starts with the scheme...
-                                if(this._jwtconfig.removeScheme)
-                                    auth = auth.slice(scheme.length); // and remove it...
+                            if(auth.startsWith(scheme)) {
+                                if(this._jwtconfig.removeScheme) auth = auth.slice(scheme.length);
                                 resolve(auth);
                             }
                             else {
@@ -729,8 +663,7 @@ class JwtSentry extends BaseSentry {
                                 reject(CelastrinaError.newError("Not Authorized.", 401));
                             }
                         }
-                        else
-                            resolve(auth);
+                        else resolve(auth);
                     }
                 })
                 .catch((exception) => {
@@ -745,11 +678,10 @@ class JwtSentry extends BaseSentry {
     async authenticate(context) {
         return new Promise((resolve, reject) => {
             try {
-                /** @type {JwtSubject} */
-                let subject = null;
+                /**@type{JwtSubject}*/let subject = null;
                 this._getToken(context)
                     .then((auth) => {
-                        // WARNING: Only decodes, does not validate!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                        // WARNING: Only decodes, does not validate!
                         return JwtSubject.decode(auth);
                     })
                     .then((jwtsub) => {
@@ -770,13 +702,10 @@ class JwtSentry extends BaseSentry {
                                 .then((results) => {
                                     let authenticated = false;
                                     for(const result of results) {
-                                        if((authenticated = result))
-                                            break;
+                                        if((authenticated = result)) break;
                                     }
-                                    if(authenticated)
-                                        resolve(subject);
-                                    else
-                                        reject(CelastrinaError.newError("Not Authorized.", 401));
+                                    if(authenticated) resolve(subject);
+                                    else reject(CelastrinaError.newError("Not Authorized.", 401));
                                 })
                                 .catch((exception) => {
                                     reject(exception);
@@ -807,8 +736,7 @@ class CookieSessionResolver {
         return new Promise((resolve, reject) => {
             let session = context.getCookie(this._name, null);
             if(typeof session !== "string" || session.trim().length === 0) {
-                context.log("Cookie '" + this._name + "' not found.", LOG_LEVEL.LEVEL_VERBOSE,
-                            "CookieRoleResolver._getCookie(context)");
+                context.log("Cookie '" + this._name + "' not found.", LOG_LEVEL.LEVEL_VERBOSE, "CookieRoleResolver._getCookie(context)");
                 reject(CelastrinaError.newError("Not Authorized.", 401));
             }
             else
@@ -896,11 +824,8 @@ class CookieSessionResolverProperty extends JsonProperty {
         return new Promise((resolve, reject) => {
             super.resolve(value)
                 .then((obj) => {
-                    if(!obj.hasOwnProperty("name"))
-                        reject(CelastrinaValidationError.newValidationError(
-                            "Invalid CookieSessionResolver. _name is required.", "CookieSessionResolver._name"));
-                    else
-                        resolve(new CookieSessionResolver(obj._name));
+                    if(!obj.hasOwnProperty("name")) reject(CelastrinaValidationError.newValidationError("Invalid CookieSessionResolver. _name is required.", "CookieSessionResolver._name"));
+                    else resolve(new CookieSessionResolver(obj._name));
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -923,12 +848,9 @@ class SecureCookieSessionResolverProperty extends JsonProperty {
         return new Promise((resolve, reject) => {
             super.resolve(value)
                 .then((obj) => {
-                    if(!obj.hasOwnProperty("_name"))
-                        reject(CelastrinaValidationError.newValidationError("Invalid SecureCookieSessionResolver. _name is required.", "SecureCookieSessionResolver._name"));
-                    else if(!obj.hasOwnProperty("_key"))
-                        reject(CelastrinaValidationError.newValidationError("Invalid SecureCookieSessionResolver. _key is required.","SecureCookieSessionResolver._key"));
-                    else if(!obj.hasOwnProperty("_iv"))
-                        reject(CelastrinaValidationError.newValidationError("Invalid SecureCookieSessionResolver. _iv is required.","SecureCookieSessionResolver._iv"));
+                    if(!obj.hasOwnProperty("_name")) reject(CelastrinaValidationError.newValidationError("Invalid SecureCookieSessionResolver. _name is required.", "SecureCookieSessionResolver._name"));
+                    else if(!obj.hasOwnProperty("_key")) reject(CelastrinaValidationError.newValidationError("Invalid SecureCookieSessionResolver. _key is required.","SecureCookieSessionResolver._key"));
+                    else if(!obj.hasOwnProperty("_iv")) reject(CelastrinaValidationError.newValidationError("Invalid SecureCookieSessionResolver. _iv is required.","SecureCookieSessionResolver._iv"));
                     else {
                         let crypto = new Cryptography(new AES256Algorithm(obj._key, obj._iv));
                         crypto.initialize()
@@ -1047,8 +969,7 @@ class HTTPFunction extends BaseFunction {
     async _trace(context) {
         return new Promise((resolve, reject) => {
             context.log("TRACE Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._trace(context)");
-            context.monitorResponse.addPassedDiagnostic("Default HTTPFunction",
-                "HTTPFunction._trace(context): Not implemented.");
+            context.monitorResponse.addPassedDiagnostic("Default HTTPFunction", "HTTPFunction._trace(context): Not implemented.");
             resolve();
         });
     }
@@ -1115,10 +1036,8 @@ class HTTPFunction extends BaseFunction {
         return new Promise((resolve, reject) => {
             let httpMethodHandler = this["_" + context.method];
             let promise;
-            if(typeof httpMethodHandler === "undefined")
-                promise = this.unhandledRequestMethod(context);
-            else
-                promise = httpMethodHandler(context);
+            if(typeof httpMethodHandler === "undefined") promise = this.unhandledRequestMethod(context);
+            else promise = httpMethodHandler(context);
             promise.then(() => {
                     resolve();
                 })
@@ -1158,10 +1077,7 @@ class JSONHTTPContext extends HTTPContext {
      */
     constructor(context, name, properties) {
         super(context, name, properties);
-        this._context.res = {status: 200,
-                             headers: {"Content-Type": "application/json; charset=utf-8",
-                                       "X-celastrina-requestId": this._requestId},
-                             body: {name: this._name, code: 200, message: "success"}};
+        this._context.res = {status: 200, headers: {"Content-Type":"application/json; charset=utf-8","X-celastrina-requestId":this._requestId}, body: {name: this._name,code: 200,message:"success"}};
     }
     /**
      * @brief Sets the body of the response and invoked done on the context.

@@ -1,0 +1,30 @@
+{
+  "name": "@celastrina/timer",
+  "version": "1.0.0",
+  "description": "Timer Function Module for Celastrina",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/murrellrr/celastrina.git"
+  },
+  "keywords": [
+    "Microsoft",
+    "Azure",
+    "Function",
+    "Javascript",
+    "Node.js",
+    "Timer"
+  ],
+  "author": "Robert R Murrell",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/murrellrr/celastrina/issues"
+  },
+  "homepage": "https://github.com/murrellrr/celastrina#readme",
+  "dependencies": {
+    "@celastrina/core": "^1.2.1"
+  }
+}

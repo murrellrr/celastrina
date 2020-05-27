@@ -1,14 +1,12 @@
 #celastrina
 Javascript Framework for simplifying Microsoft Azure Functions and supporting resources.
-##Prerequisite
-1. You gotta know Azure, at least a little.
-2. You gotta know Javascript and Node.js, duh.
 ##Recent Changes
 1. Support for Application Settings, App Configurations, and a hybrid Application Settings and Vault.
 2. Fixed JwtSentry that allowed expired JWT tokens to pass authorization.
 3. Fixed HTTPContext initialization issue.
-4. Updated BaseSentry to cache all function roles, resource, and application authorizations.
-5. Reduced overall file size of core and http packages.
+4. Fixed Issue with CacheHandlerProperty that doesnt use property name specified.
+5. Updated BaseSentry to cache all function roles, resource, and application authorizations.
+6. Reduced overall file size of core and http packages.
 ##Quick-start
 To use Celastrina.js simply deploy the following to your Microsoft Azure HTTP Trigger function:
 ```

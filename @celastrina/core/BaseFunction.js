@@ -892,8 +892,9 @@ class NumericProperty extends Property {
 }
 class CacheHandlerProperty {
     /**@type{string}*/static CONFIG_PROPERTY = "celastrinajs.core.property";
-    /**@param{string}name*/
-    constructor(name){this._name = name;}
+    /**@param{null|string}[name=null]*/
+    constructor(name = null){this._name = name;}
+    /**@returns{string}*/get name(){return this._name}
     /**
      * @returns {PropertyHandler}
      * @abstract
@@ -902,7 +903,10 @@ class CacheHandlerProperty {
     /**@returns{PropertyHandler}*/
     configure() {
         try {
-            /**@type{{cached:boolean}}*/let source  = JSON.parse(process.env[CacheHandlerProperty.CONFIG_PROPERTY]);
+            let lname = this._name;
+            if(typeof name === "undefined" || name == null)
+                lname = CacheHandlerProperty.CONFIG_PROPERTY;
+            /**@type{{cached:boolean}}*/let source  = JSON.parse(process.env[lname]);
             let handler = this._createPropertyHandler(source);
             if(source.hasOwnProperty("chached") && typeof source.chached === "boolean" && source.chached === true) return new CachePropertyHandler(handler);
             else return handler;
@@ -914,8 +918,8 @@ class CacheHandlerProperty {
 }
 /**@type{CacheHandlerProperty}*/
 class VaultAppSettingHandlerProperty extends CacheHandlerProperty {
-    /**@param{string}name*/
-    constructor(name){super(name);}
+    /**@param{null|string}[name=null]*/
+    constructor(name = null){super(name);}
     /**
      * @param {object} source
      * @returns {PropertyHandler}
@@ -924,8 +928,8 @@ class VaultAppSettingHandlerProperty extends CacheHandlerProperty {
 }
 /**@type{CacheHandlerProperty}*/
 class AppConfigHandlerProperty extends CacheHandlerProperty {
-    /**@param{string}name*/
-    constructor(name){super(name);}
+    /**@param{null|string}[name=null]*/
+    constructor(name = null){super(name);}
     /**
      * @param {{resourceId:string, label?:string}} source
      * @returns {PropertyHandler}
@@ -1307,10 +1311,16 @@ class Configuration {
      * @private
      */
     _getPropertyHandler(context) {
-        let _handler = this._config[Configuration.CONFIG_HANDLER];
+        /**@type{undefined|null|CacheHandlerProperty|PropertyHandler}*/let _handler = this._config[Configuration.CONFIG_HANDLER];
         if(typeof _handler === "undefined" || _handler == null) {
             context.log.verbose("[Configuration._getPropertyHandler(context)]: No property handler specified, defaulting to AppSettingsPropertyHandler.");
             _handler = new AppSettingsPropertyHandler();
+            this._config[Configuration.CONFIG_HANDLER] = _handler;
+        }
+        else if(_handler instanceof CacheHandlerProperty) {
+            context.log.verbose("[Configuration._getPropertyHandler(context)]: Loading handler from application settings configuration.");
+            _handler = _handler.configure();
+            this._config[Configuration.CONFIG_HANDLER] = _handler;
         }
         if(!_handler.loaded) {
             let deployment = process.env[Configuration.CONFIG_LOCAL_DEV];
@@ -1319,9 +1329,9 @@ class Configuration {
                 if(deployment.trim().toLowerCase() === "true") {
                     context.log.verbose("[Configuration._getPropertyHandler(context)]: Local development override, using AppSettingsPropertyHandler.");
                     _handler = new AppSettingsPropertyHandler();
+                    this._config[Configuration.CONFIG_HANDLER] = _handler;
                 }
         }
-        this._config[Configuration.CONFIG_HANDLER] = _handler;
         return _handler;
     }
     /**
@@ -2067,7 +2077,8 @@ class BaseFunction {
 module.exports = {
     PropertyHandler: PropertyHandler, AppSettingsPropertyHandler: AppSettingsPropertyHandler,
     VaultAppSettingPropertyHandler: VaultAppSettingPropertyHandler, AppConfigPropertyHandler: AppConfigPropertyHandler,
-    CachedProperty: CachedProperty, CachePropertyHandler: CachePropertyHandler, Property: Property,
+    CachedProperty: CachedProperty, CachePropertyHandler: CachePropertyHandler, CacheHandlerProperty: CacheHandlerProperty,
+    VaultAppSettingHandlerProperty: VaultAppSettingHandlerProperty, AppConfigHandlerProperty: AppConfigHandlerProperty, Property: Property,
     StringProperty: StringProperty, BooleanProperty: BooleanProperty, NumericProperty: NumericProperty,
     JsonProperty: JsonProperty, ApplicationAuthorization: ApplicationAuthorization,
     ApplicationAuthorizationProperty: ApplicationAuthorizationProperty, ValueMatch: ValueMatch, MatchAny: MatchAny,

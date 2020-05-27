@@ -21,21 +21,12 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
 "use strict";
-
 const moment    = require("moment");
 const validator = require("validator").default;
 const uuidv4    = require("uuid/v4");
+const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, BaseContext, BaseFunction} = require("@celastrina/core");
 
-const {CelastrinaError, CelastrinaValidationError, BaseContext, BaseFunction} = require("@celastrina/core");
-
-/**
- * @brief
- * @author Robert R Murrell
- * @type {{_uid:string, _timestamp: moment.Moment, _expires: moment.Moment, _environment: string, _domain: string,
- *         _topic: string, _action: string}}
- */
 class Header {
     /**
      * @brief
@@ -56,116 +47,46 @@ class Header {
         if(typeof action !== "string" || action.trim().length === 0)
             throw CelastrinaValidationError.newValidationError("Invalid Header. Action is required.",
                                                                "Header._action");
-        this._uid          = uid;
-        this._timestamp    = timestamp;
-        this._expires      = expires;
-        this._environment  = environment;
-        this._domain       = domain;
-        this._topic        = topic;
-        this._action       = action;
-    }
-
-    /**
-     * @brief
-     * @returns {boolean}
-     */
-    get development() {
-        return this._environment === "development";
-    }
-
-    /**
-     * @brief
-     * @returns {string}
-     */
-    get uid() {
-        return this._uid;
-    }
-
-    /**
-     * @brief
-     * @returns {moment.Moment}
-     */
-    get timestam() {
-        return this._timestamp;
-    }
-
-    /**
-     * @brief
-     * @returns {null|moment.Moment}
-     */
-    get expires() {
-        return this._expires;
-    }
-
-    /**
-     * @brief
-     * @param {null|moment.Moment} expires
-     */
-    set expires(expires) {
+        this._uid = uid;
+        this._timestamp = timestamp;
         this._expires = expires;
+        this._environment = environment;
+        this._domain = domain;
+        this._topic = topic;
+        this._action = action;
     }
-
+    /**@returns{boolean}*/get development(){return this._environment === "development";}
+    /**@returns{string}*/get uid(){return this._uid;}
+    /**@returns{moment.Moment}*/get timestam(){return this._timestamp;}
+    /**@returns{null|moment.Moment}*/get expires(){return this._expires;}
+    /**@param{null|moment.Moment}expires*/set expires(expires){this._expires = expires;}
+    /**@returns{string}*/get environment(){return this._environment;}
+    /**@returns{null|string}*/get domain(){return this._domain;}
+    /**@returns{string}*/get topic(){return this._topic;}
+    /**@returns{string}*/get action(){return this._action;}
     /**
-     * @brief
-     * @returns {string}
-     */
-    get environment() {
-        return this._environment;
-    }
-
-    /**
-     * @brief
-     * @returns {null|string}
-     */
-    get domain() {
-        return this._domain;
-    }
-
-    /**
-     * @brief
-     * @returns {string}
-     */
-    get topic() {
-        return this._topic;
-    }
-
-    /**
-     * @brief
-     * @returns {string}
-     */
-    get action() {
-        return this._action;
-    }
-
-    /**
-     * @brief
      * @param {number} [amount=24]
      * @param {string} [increment="h"]
      */
     setExpiresIn(amount = 24, increment = "h") {
         if(this._expires == null)
-            this._expires = moment(); // Make it now if it was null.
+            this._expires = moment();
         this._expires.add(amount, increment);
     }
-
     /**
-     * @brief
      * @returns {Promise<boolean>}
      */
     async isExpired() {
         return new Promise((resolve, reject) => {
             try {
-                let now = moment();
-                resolve(now.isSameOrAfter(this._expires));
+                resolve(moment().isSameOrAfter(this._expires));
             }
             catch(exception) {
                 reject(exception);
             }
         });
     }
-
     /**
-     * @brief
      * @param {null|string} domain
      * @returns {Promise<boolean>}
      */
@@ -179,9 +100,7 @@ class Header {
             }
         });
     }
-
     /**
-     * @brief
      * @param {null|string} topic
      * @returns {Promise<boolean>}
      */
@@ -195,9 +114,7 @@ class Header {
             }
         });
     }
-
     /**
-     * @brief
      * @param {null|string} action
      * @returns {Promise<boolean>}
      */
@@ -211,9 +128,7 @@ class Header {
             }
         });
     }
-
     /**
-     * @brief
      * @param {string} topic
      * @param {string} action
      * @param {null|string} [domain=null]
@@ -230,59 +145,45 @@ class Header {
                 });
         });
     }
-
     /**
-     * @brief
      * @param {object} source
      */
     static create(source) {
         if(typeof source === "undefined" || source == null)
-            throw CelastrinaValidationError.newValidationError("Invalid Header. Source is required.",
-                                                               "Header");
-        if(source instanceof Header)
-            return source;
-
+            throw CelastrinaValidationError.newValidationError("Invalid Header. Source is required.", "Header");
+        if(source instanceof Header) return source;
         if(source.hasOwnProperty("_action") && (typeof source._action !== "string"))
-            throw CelastrinaValidationError.newValidationError("Invalid Header. _action is required.",
-                                                               "Header._action");
+            throw CelastrinaValidationError.newValidationError("Invalid Header. _action is required.", "Header._action");
         if(source.hasOwnProperty("_topic") && (typeof source._topic !== "string"))
-            throw CelastrinaValidationError.newValidationError("Invalid Header. _topic is required.",
-                                                               "Header._topic");
-
-        return new Header(source._topic, source._action, source._action, source._uid, source._timestamp,
-                          source._expires, source._environment);
+            throw CelastrinaValidationError.newValidationError("Invalid Header. _topic is required.", "Header._topic");
+        return new Header(source._topic, source._action, source._action, source._uid, source._timestamp, source._expires, source._environment);
     }
 }
-
-
-/**
- * @brief
- * @author Robert R Murrell
- */
 class Message {
     constructor(body = null, header = null) {
-        this._body   = body;
-        this._header = header;
+        /**@type{*}*/this._body   = body;
+        /**@type{null|Header}*/this._header = header;
     }
+    /**@type{Header}*/get header(){return this._header;};
+    /**@param{Header}header*/set header(header){this._header = header;};
+    /**@type{*}*/get body(){return this._body;};
+    /**@param{*}body*/set body(body){this._body = body;};
 }
-
 /**
- * @brief
- * @author Robert R Murrell
+ * @type {BaseContext}
  */
 class MessageContext extends BaseContext {
     /**
-     * @brief
      * @param {_AzureFunctionContext} context
      * @param {string} name
      * @param {PropertyHandler} properties
      */
     constructor(context, name, properties) {
         super(context, name, properties);
+        /**@type{Message}*/this._message = null;
     }
-
+    /**@type{Message}*/get message(){return this._message;};
     /**
-     * @brief
      * @brief {Configuration} configration
      * @returns {Promise<BaseContext>}
      */
@@ -290,6 +191,8 @@ class MessageContext extends BaseContext {
         return new Promise((resolve, reject) => {
             super.initialize(configuration)
                 .then((context) => {
+                    // Gonna pull the message out of the binding and do all the checks.
+
                     resolve(context);
                 })
                 .catch((exception) => {
@@ -298,29 +201,61 @@ class MessageContext extends BaseContext {
         });
     }
 }
-
-/**
- * @brief
- * @author Robert R Murrell
- */
+/**@type{BaseFunction}*/
 class MessageFunction extends BaseFunction {
+    constructor(config){super(config);}
     /**
-     * @brief Creates an implementations of Base Context from the Azure Function context passed in.
-     * @description Override this function to create the instance of BaseContext required for your function.
      * @param {_AzureFunctionContext} context
-     * @param {string} name
-     * @param {PropertyHandler} properties
-     * @returns {Promise<MessageContext & BaseContext>} The base context for this function.
+     * @param {Configuration} config
+     * @returns {Promise<MessageContext & BaseContext>}
      */
-    async createContext(context, name, properties) {
-        return new Promise(
-            (resolve, reject) => {
-                try {
-                    resolve(new MessageContext(context, name, properties));
-                }
-                catch(exception) {
-                    reject(exception);
-                }
-            });
+    async createContext(context, config) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(new MessageContext(context, config.name, config.properties));
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+    /**
+     * @param {MessageContext} context
+     * @returns {Promise<void>}
+     * @abstract
+     */
+    async received(context) {return new Promise((resolve, reject) => {resolve();});}
+    /**
+     * @param {MessageContext} context
+     * @returns {Promise<boolean>}
+     * @abstract
+     */
+    async expired(context) {return new Promise((resolve, reject) => {resolve(true);});}
+    /**
+     * @param {BaseContext | MessageContext} context
+     * @returns {Promise<void>}
+     */
+    async process(/**@type{MessageContext}*/context) {
+        return new Promise((resolve, reject) => {
+            if(context.message.header.isExpired()) {
+                this.expired(context)
+                    .then((drop) => {
+                        if(drop) {
+                            context.log("Message expired at '" + context.message.header.expires.format() + ". Dropping message.", LOG_LEVEL.LEVEL_WARN, "MessageFunction.process(context)");
+                            reject(CelastrinaError.newError("Message Expired.", 400, true));
+                        }
+                        else
+                            resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            else {
+                // TODO: Checking to see if this is a monitor message.
+                // TODO: Checking to see if there is a message filter, then applying it.
+                resolve();
+            }
+        });
     }
 }

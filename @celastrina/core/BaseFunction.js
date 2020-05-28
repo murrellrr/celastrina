@@ -890,57 +890,57 @@ class NumericProperty extends Property {
         });
     }
 }
+/**@abstract*/
 class CacheHandlerProperty {
-    /**@type{string}*/static CONFIG_PROPERTY = "celastrinajs.core.property";
+    /**@type{string}*/static CONFIG_PROPERTY = "celastrinajs.core.property.config";
     /**@param{null|string}[name=null]*/
     constructor(name = null){this._name = name;}
     /**@returns{string}*/get name(){return this._name}
-    /**
-     * @returns {PropertyHandler}
-     * @abstract
-     */
+    /**@returns {PropertyHandler}*/
     _createPropertyHandler(source) {return null;}
     /**@returns{PropertyHandler}*/
     configure() {
-        try {
-            let lname = this._name;
-            if(typeof name === "undefined" || name == null)
-                lname = CacheHandlerProperty.CONFIG_PROPERTY;
-            /**@type{{cached:boolean}}*/let source  = JSON.parse(process.env[lname]);
+        let lname = this._name;
+        if(typeof lname === "undefined" || lname == null)
+            lname = CacheHandlerProperty.CONFIG_PROPERTY;
+        /**@type{string}*/let config = process.env[lname];
+        if(typeof config === "string" && config.trim().length > 0) {
+            /**@type{{cached:boolean}}*/let source = JSON.parse(config);
             let handler = this._createPropertyHandler(source);
-            if(source.hasOwnProperty("chached") && typeof source.chached === "boolean" && source.chached === true) return new CachePropertyHandler(handler);
-            else return handler;
+            if (source.hasOwnProperty("chached") && typeof source.chached === "boolean" && source.chached === true)
+                return new CachePropertyHandler(handler);
+            else
+                return handler;
         }
-        catch(exception) {
-            throw CelastrinaError.wrapError(exception);
-        }
+        else
+            throw CelastrinaError.newError("Invalid Configuration for property '" + lname + "'.");
     }
 }
 /**@type{CacheHandlerProperty}*/
 class VaultAppSettingHandlerProperty extends CacheHandlerProperty {
-    /**@param{null|string}[name=null]*/
-    constructor(name = null){super(name);}
+    constructor(name = "celastrinajs.core.property.vault.config"){super(name);}
     /**
      * @param {object} source
      * @returns {PropertyHandler}
      */
-    async _createPropertyHandler(source){return new VaultAppSettingPropertyHandler();}
+    _createPropertyHandler(source){return new VaultAppSettingPropertyHandler();}
 }
 /**@type{CacheHandlerProperty}*/
 class AppConfigHandlerProperty extends CacheHandlerProperty {
-    /**@param{null|string}[name=null]*/
-    constructor(name = null){super(name);}
+    constructor(name = "celastrinajs.core.property.appconfig.config"){super(name);}
     /**
-     * @param {{resourceId:string, label?:string}} source
+     * @param {object} source
      * @returns {PropertyHandler}
      */
-    async _createPropertyHandler(source) {
+    _createPropertyHandler(source) {
         if(source.hasOwnProperty("resourceId") && typeof source.resourceId === "string" && source.resourceId.trim().length > 0) {
             let label = "development";
-            if(source.hasOwnProperty("label") && typeof source.label === "string" && source.label.trim().length > 0) label = source.label;
+            if(source.hasOwnProperty("label") && typeof source.label === "string" && source.label.trim().length > 0)
+                label = source.label;
             return new AppConfigPropertyHandler(source.resourceId, label);
         }
-        else throw CelastrinaError.newError("Invalid AppConfigHandlerProperty, missing 'resourceId'");
+        else
+            throw CelastrinaError.newError("Invalid AppConfigHandlerProperty, missing 'resourceId'.");
     }
 }
 /**@type{JsonProperty}*/
@@ -1250,7 +1250,7 @@ class Configuration {
     /**@returns{boolean}*/get loadBase(){return this._loadBase;}
     /**@param{boolean}load*/set loadBase(load){this._loadBase = load;}
     /**
-     * @param {null|CachePropertyHandler|PropertyHandler} handler
+     * @param {null|undefined|CacheHandlerProperty|PropertyHandler} handler
      * @returns {Configuration}
      */
     setPropertyHandler(handler){this._config[Configuration.CONFIG_HANDLER] = handler; return this;}
@@ -1313,24 +1313,28 @@ class Configuration {
     _getPropertyHandler(context) {
         /**@type{undefined|null|CacheHandlerProperty|PropertyHandler}*/let _handler = this._config[Configuration.CONFIG_HANDLER];
         if(typeof _handler === "undefined" || _handler == null) {
-            context.log.verbose("[Configuration._getPropertyHandler(context)]: No property handler specified, defaulting to AppSettingsPropertyHandler.");
+            context.log.info("[Configuration._getPropertyHandler(context)]: No property handler specified, defaulting to AppSettingsPropertyHandler.");
             _handler = new AppSettingsPropertyHandler();
             this._config[Configuration.CONFIG_HANDLER] = _handler;
         }
         else if(_handler instanceof CacheHandlerProperty) {
-            context.log.verbose("[Configuration._getPropertyHandler(context)]: Loading handler from application settings configuration.");
-            _handler = _handler.configure();
+            context.log.info("[Configuration._getPropertyHandler(context)]: Loading handler from CacheHandlerProperty.");
+            /**@type{PropertyHandler}*/_handler = _handler.configure();
             this._config[Configuration.CONFIG_HANDLER] = _handler;
         }
+        else if(!(_handler instanceof PropertyHandler))
+            throw CelastrinaError.newError("PropertyHandler not supported.");
+
         if(!_handler.loaded) {
-            let deployment = process.env[Configuration.CONFIG_LOCAL_DEV];
-            if(typeof deployment === "string")
+            let deployment = /**@type{null|undefined|string}*/process.env[Configuration.CONFIG_LOCAL_DEV];
+            if(typeof deployment === "string") {
                 // There is a local development mode config.
                 if(deployment.trim().toLowerCase() === "true") {
-                    context.log.verbose("[Configuration._getPropertyHandler(context)]: Local development override, using AppSettingsPropertyHandler.");
-                    _handler = new AppSettingsPropertyHandler();
+                    context.log.info("[Configuration._getPropertyHandler(context)]: Local development override, using AppSettingsPropertyHandler.");
+                    /**@type{PropertyHandler}*/_handler = new AppSettingsPropertyHandler();
                     this._config[Configuration.CONFIG_HANDLER] = _handler;
                 }
+            }
         }
         return _handler;
     }
@@ -1342,8 +1346,9 @@ class Configuration {
         return new Promise(async (resolve, reject) => {
             try {
                 this._config[Configuration.CONFIG_CONTEXT] = context;
-                if(await this._getPropertyHandler(context).initialize(context)) {
-                    context.log.verbose("[Configuration.load(context)]: Initial configuration.");
+                /**@type{PropertyHandler}*/let handler = this._getPropertyHandler(context);
+                if(await handler.initialize(context)) {
+                    context.log.info("[Configuration.load(context)]: Initial configuration.");
                     /** @type {Array.<Promise<void>>} */
                     let promises = [];
                     this._load(this, promises);

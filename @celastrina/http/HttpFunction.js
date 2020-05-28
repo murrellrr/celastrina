@@ -688,7 +688,7 @@ class JwtSentry extends BaseSentry {
                         subject = jwtsub;
                         if(subject.isExpired()) {
                             context.log("JWT Token expired.", LOG_LEVEL.LEVEL_VERBOSE, "JwtSentry.authenticate(context)");
-                            reject(CelastrinaError.newError("No Authorized.", 401));
+                            reject(CelastrinaError.newError("Not Authorized.", 401));
                         }
                         else {
                             // No we check the issuers to see if we match any.

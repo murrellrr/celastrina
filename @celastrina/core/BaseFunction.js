@@ -1353,7 +1353,7 @@ class Configuration {
                     let promises = [];
                     this._load(this, promises);
                     await Promise.all(promises);
-                    let _name = this._config[Configuration.CONFIG_NAME]
+                    let _name = this._config[Configuration.CONFIG_NAME];
                     if(typeof _name !== "string" || _name.trim().length === 0) {
                         context.log.error("[Configuration.load(context)]: Invalid Configuration. Name cannot be " +
                                           "undefined, null, or 0 length.");
@@ -1560,7 +1560,15 @@ class BaseSentry {
             if(id == null) id = BaseSentry.CONFIG_SENTRY_IDENTITY;
             let _appauth = this._configuration.getValue(BaseSentry.CONFIG_SENTRY_APPAUTH);
             /** @type{ApplicationAuthorization}*/let appobj = _appauth[id];
-            if(appobj instanceof ApplicationAuthorization) resolve(appobj.getToken(resource));
+            if(appobj instanceof ApplicationAuthorization) {
+                appobj.getToken(resource)
+                    .then((token) => {
+                        resolve(token);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
             else reject(CelastrinaError.newError("Application ID '" + id + "' not found for resource '" + resource + "'."));
         });
     }

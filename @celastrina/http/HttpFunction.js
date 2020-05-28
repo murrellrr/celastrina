@@ -112,9 +112,9 @@ class JwtSubject extends BaseSubject {
                 reject(CelastrinaError.newError("Not Authorized.", 401));
             else {
                 try {
-                    /** @type {_jwtpayload} */
-                    let payload = jwt.decode(token);
-                    resolve(new JwtSubject(payload.sub, payload.aud, payload.iss, payload.iat, payload.exp, payload.nonce, token));
+                    /** @type {null|_jwtpayload} */let payload = jwt.decode(token);
+                    if(typeof payload === "undefined" || payload == null) reject(CelastrinaError.newError("Not Authorized.", 401));
+                    else resolve(new JwtSubject(payload.sub, payload.aud, payload.iss, payload.iat, payload.exp, payload.nonce, token));
                 }
                 catch (exception) {
                     reject(exception);
@@ -494,12 +494,20 @@ class HTTPContext extends BaseContext {
      */
     async initialize(configuration) {
         return new Promise((resolve, reject) => {
-            Promise.all([super.initialize(configuration), this._setRequestId(), this._setMonitorMode(),
-                               this._parseCookies()])
-                .then((results) => {
+            this._setMonitorMode()
+                .then(() => {
+                    return this._setRequestId();
+                })
+                .then(() => {
+                    return super.initialize(configuration);
+                })
+                .then((_base) => {
+                    return this._parseCookies();
+                })
+                .then(() => {
                     let sessioResolver = configuration.getValue(CookieSessionResolver.CONFIG_HTTP_SESSION_RESOLVER, null);
                     if(sessioResolver instanceof CookieSessionResolver) {
-                        sessioResolver.resolve(/**@type{HTTPContext}*/ results[0])
+                        sessioResolver.resolve(/**@type{HTTPContext}*/this)
                             .then((_context) => {
                                 resolve(_context);
                             })
@@ -507,7 +515,7 @@ class HTTPContext extends BaseContext {
                                 reject(exception);
                             });
                     }
-                    else resolve(results[0]);
+                    else resolve(this);
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -695,7 +703,7 @@ class JwtSentry extends BaseSentry {
                             /** @type {Array.<Promise<boolean>>} */
                             let promises = [];
                             let issuers = this._jwtconfig.issuers;
-                            for (const issuer of issuers) {
+                            for(const issuer of issuers) {
                                 promises.unshift(issuer.authenticate(subject)); // Performs the role escalations too.
                             }
                             Promise.all(promises)

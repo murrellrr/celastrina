@@ -1545,8 +1545,6 @@ class BaseSentry {
     /**@param{Configuration} config*/
     constructor(config) {
         this._configuration = config;
-        this._configuration.setValue(BaseSentry.CONFIG_SENTRY_APPAUTH, {});
-        this._configuration.setValue(BaseSentry.CONFIG_SENTRY_ROLES, {});
     }
     /**@returns{Object}*/get roles(){return this._configuration.getValue(BaseSentry.CONFIG_SENTRY_ROLES);}
     /**@returns{Object}*/get authorizations(){return this._configuration.getValue(BaseSentry.CONFIG_SENTRY_APPAUTH);}
@@ -1721,6 +1719,8 @@ class BaseSentry {
             // Set up the local application id.
             if(this._configuration.loadBase) {
                 this._configuration.context.log.verbose("[BaseSentry.initialize()]: Loading Sentry objects.");
+                this._configuration.setValue(BaseSentry.CONFIG_SENTRY_APPAUTH, {});
+                this._configuration.setValue(BaseSentry.CONFIG_SENTRY_ROLES, {});
                 let _roleresolver = this._configuration.getValue(RoleResolver.CONFIG_SENTRY_ROLE_RESOLVER, null);
                 if (_roleresolver == null)
                     _roleresolver = new SessionRoleResolver();

@@ -1731,13 +1731,13 @@ class BaseSentry {
                         return this._loadFunctionRoles();
                     })
                     .then(() => {
-                        resolve(this);
+                        resolve();
                     })
                     .catch((exception) => {
                         reject(exception);
                     });
             }
-            else resolve(this);
+            else resolve();
         });
     }
 }
@@ -1762,7 +1762,7 @@ class BaseContext {
     }
     /**
      * @param {Configuration} configration
-     * @returns {Promise<BaseContext>}
+     * @returns {Promise<void>}
      */
     async initialize(configration) {
         return new Promise((resolve, reject) => {
@@ -1770,7 +1770,7 @@ class BaseContext {
             /** @type {{traceparent: string}} */
             let _traceContext = this._context.traceContext;
             if(typeof _traceContext !== "undefined") this._traceId = _traceContext.traceparent;
-            resolve(this);
+            resolve();
         });
     }
     /**@returns{boolean}*/get isMonitorInvocation(){return this._monitor;}
@@ -1901,17 +1901,28 @@ class BaseFunction {
      */
     async bootstrap(context) {
         return new Promise((resolve, reject) => {
+            /**@type{BaseSentry}*/let _sentry = null;
+            /**@type{BaseContext}*/let _context = null;
             this._configuration.load(context)
                 .then(() => {
                     // Create the sentry
-                    return Promise.all([this.createSentry(context, this._configuration), this.createContext(context, this._configuration)]);
+                    return this.createSentry(context, this._configuration);
                 })
-                .then((results) => {
-                    return Promise.all([results[0].initialize(), results[1].initialize(this._configuration)]);
+                .then((_basesentry) => {
+                    // Create the sentry
+                    _sentry = _basesentry;
+                    return this.createContext(context, this._configuration);
                 })
-                .then((results) => {
-                    this._context = results[1];
-                    this._context.sentry = results[0];
+                .then((_basecontext) => {
+                    _context = _basecontext;
+                    return _sentry.initialize();
+                })
+                .then(() => {
+                    return _context.initialize(this._configuration);
+                })
+                .then(() => {
+                    this._context = _context;
+                    this._context.sentry = _sentry;
                     this._configuration.loadBase = false;
                     resolve();
                 })

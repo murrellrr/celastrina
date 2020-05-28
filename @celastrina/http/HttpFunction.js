@@ -490,7 +490,7 @@ class HTTPContext extends BaseContext {
     }
     /**
      * @param {Configuration} configuration
-     * @returns {Promise<BaseContext & HTTPContext>}
+     * @returns {Promise<void>}
      */
     async initialize(configuration) {
         return new Promise((resolve, reject) => {
@@ -501,7 +501,7 @@ class HTTPContext extends BaseContext {
                 .then(() => {
                     return super.initialize(configuration);
                 })
-                .then((_base) => {
+                .then(() => {
                     return this._parseCookies();
                 })
                 .then(() => {
@@ -509,13 +509,13 @@ class HTTPContext extends BaseContext {
                     if(sessioResolver instanceof CookieSessionResolver) {
                         sessioResolver.resolve(/**@type{HTTPContext}*/this)
                             .then((_context) => {
-                                resolve(_context);
+                                resolve();
                             })
                             .catch((exception) => {
                                 reject(exception);
                             });
                     }
-                    else resolve(this);
+                    else resolve();
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -622,12 +622,12 @@ class JwtSentry extends BaseSentry {
         /**@type{JwtConfiguration}*/this._jwtconfig = null;
     }
     /**
-     * @returns {Promise<(JwtSentry & BaseSentry)>}
+     * @returns {Promise<void>}
      */
     async initialize() {
         return new Promise((resolve, reject) => {
             super.initialize()
-                .then((sentry) => {
+                .then(() => {
                     try {
                         // Going to initialize the acceptable issuers.
                         this._jwtconfig = this._configuration.getValue(JwtConfiguration.CONFIG_JWT);
@@ -635,7 +635,7 @@ class JwtSentry extends BaseSentry {
                             this._configuration.context.log.error("JwtConfiguration missing or invalid.");
                             reject(CelastrinaError.newError("Invalid configration."));
                         }
-                        else resolve(sentry);
+                        else resolve();
                     }
                     catch(exception) {
                         reject(exception);

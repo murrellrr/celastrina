@@ -112,7 +112,7 @@ class JwtSubject extends BaseSubject {
                 reject(CelastrinaError.newError("Not Authorized.", 401));
             else {
                 try {
-                    /** @type {null|_jwtpayload} */let payload = jwt.decode(token);
+                    /** @type {null|_jwtpayload} */let payload = /** @type {null|_jwtpayload} */jwt.decode(token);
                     if(typeof payload === "undefined" || payload == null) reject(CelastrinaError.newError("Not Authorized.", 401));
                     else resolve(new JwtSubject(payload.sub, payload.aud, payload.iss, payload.iat, payload.exp, payload.nonce, token));
                 }
@@ -407,13 +407,12 @@ class JwtConfiguration {
 class HTTPContext extends BaseContext {
     /**
      * @param {_AzureFunctionContext} context
-     * @param {string} name
-     * @param {PropertyHandler} properties
+     * @param {Configuration} config
      */
-    constructor(context, name, properties) {
-        super(context, name, properties);
+    constructor(context, config) {
+        super(context, config);
         // Setting up the default response.
-        this._context.res = {status: 200,headers:{"Content-Type": "text/html; charset=ISO-8859-1"},body:"<html lang=\"en\"><head><title>" + this._name + "</title></head><body>200, Success</body></html>"};
+        this._context.res = {status: 200,headers:{"Content-Type": "text/html; charset=ISO-8859-1"},body:"<html lang=\"en\"><head><title>" + config.name + "</title></head><body>200, Success</body></html>"};
         this._action = this._context.req.method.toLowerCase();
         this._cookies = {};
     }
@@ -488,24 +487,20 @@ class HTTPContext extends BaseContext {
             }
         });
     }
-    /**
-     * @param {Configuration} configuration
-     * @returns {Promise<void>}
-     */
-    async initialize(configuration) {
+    /**@returns{Promise<void>}*/async initialize() {
         return new Promise((resolve, reject) => {
             this._setMonitorMode()
                 .then(() => {
                     return this._setRequestId();
                 })
                 .then(() => {
-                    return super.initialize(configuration);
+                    return super.initialize();
                 })
                 .then(() => {
                     return this._parseCookies();
                 })
                 .then(() => {
-                    let sessioResolver = configuration.getValue(CookieSessionResolver.CONFIG_HTTP_SESSION_RESOLVER, null);
+                    let sessioResolver = this._config.getValue(CookieSessionResolver.CONFIG_HTTP_SESSION_RESOLVER, null);
                     if(sessioResolver instanceof CookieSessionResolver) {
                         sessioResolver.resolve(/**@type{HTTPContext}*/this)
                             .then((_context) => {
@@ -891,7 +886,7 @@ class HTTPFunction extends BaseFunction {
     async createContext(context, config) {
         return new Promise((resolve, reject) => {
                 try {
-                    resolve(new HTTPContext(context, config.name, config.properties));
+                    resolve(new HTTPContext(context, config));
                 }
                 catch(exception) {
                     reject(exception);
@@ -1080,12 +1075,11 @@ class JwtHTTPFunction extends HTTPFunction {
 class JSONHTTPContext extends HTTPContext {
     /**
      * @param {_AzureFunctionContext} context
-     * @param {string} name
-     * @param {PropertyHandler} properties
+     * @param {Configuration} config
      */
-    constructor(context, name, properties) {
-        super(context, name, properties);
-        this._context.res = {status: 200, headers: {"Content-Type":"application/json; charset=utf-8","X-celastrina-requestId":this._requestId}, body: {name: this._name,code: 200,message:"success"}};
+    constructor(context, config) {
+        super(context, config);
+        this._context.res = {status: 200, headers: {"Content-Type":"application/json; charset=utf-8","X-celastrina-requestId":this._requestId}, body: {name: this._config.name,code: 200,message:"success"}};
     }
     /**
      * @brief Sets the body of the response and invoked done on the context.
@@ -1113,7 +1107,7 @@ class JSONHTTPFunction extends HTTPFunction {
     async createContext(context, config) {
         return new Promise((resolve, reject) => {
             try {
-                resolve(new JSONHTTPContext(context, config.name, config.properties));
+                resolve(new JSONHTTPContext(context, config));
             }
             catch(exception) {
                 reject(exception);

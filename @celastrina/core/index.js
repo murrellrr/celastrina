@@ -31,7 +31,6 @@ const {ApplicationAuthorization, PropertyHandler, AppSettingsPropertyHandler, Va
        MatchAny, MatchAll, MatchNone, FunctionRole, Configuration, Algorithm, AES256Algorithm, Cryptography, LOG_LEVEL,
        BaseSubject, MonitorResponse, RoleResolver, BaseSentry, BaseContext, BaseFunction,
        ApplicationAuthorizationProperty, FunctionRoleProperty} = require("./BaseFunction");
-const {Point} = require("./Point");
 module.exports = {
     CelastrinaError: CelastrinaError, CelastrinaValidationError: CelastrinaValidationError, Vault: Vault,
     AppConfiguration: AppConfiguration, PropertyHandler: PropertyHandler, AppSettingsPropertyHandler: AppSettingsPropertyHandler,

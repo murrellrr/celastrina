@@ -4,6 +4,27 @@ const {CelastrinaError, CelastrinaValidationError} = require("@celastrina/core")
 const {QueryIterator, CosmosClient, Container}  = require("@azure/cosmos");
 
 
+class CosmosConnection {
+    /**
+     * @param {string} subscription
+     * @param {string} rg
+     * @param {string} account
+     * @param {string} database
+     */
+    constructor(subscription, rg, account, database) {
+        this._subscription = subscription;
+        this._rg = rg;
+        this._account = account;
+        this._database = database;
+        this._containers = {};
+    }
+
+    addContainer(container) {
+        //
+    }
+}
+
+
 class CosmosStatement {
     /**
      * @param {Object} container
@@ -31,7 +52,7 @@ class CosmosStatement {
      * @param {string} parameter
      * @param {*} value
      */
-    add(parameter, value) {
+    setParameter(parameter, value) {
         this._query.parameters.push({name: parameter, value: value});
     }
 
@@ -79,7 +100,7 @@ class CosmosStatement {
                             })
                             .catch((rejected) => {
                                 reject(rejected);
-                            })
+                            });
                     }
                     else
                         reject(CelastrinaError.newError("Item not found.", 404));
@@ -92,15 +113,26 @@ class CosmosStatement {
 }
 
 
-class Connection {
-    constructor(subscription, rg, account, database) {
-        this._subscription = subscription;
-        this._rg = rg;
-        this._account = account;
-        this._database = database;
+/**
+ *
+ */
+class Page {
+    constructor() {
+        //
+    }
+
+    async next() {
+        return new Promise((resolve, reject) => {
+            resolve();
+        });
+    }
+
+    async previous() {
+        return new Promise((resolve, reject) => {
+            resolve();
+        });
     }
 }
-
 
 
 
@@ -109,9 +141,8 @@ class Connection {
  */
 class Entity {
     constructor(connection, type, version = "1.0") {
-        this._source = {};
         this._connection = connection;
-        this._source._object = {_type: type, _version: version};
+        this._object = {_type: type, _version: version};
     }
 
     async find() {

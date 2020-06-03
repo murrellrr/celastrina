@@ -42,24 +42,36 @@ const {AppConfiguration} = require("./AppConfiguration");
  * @property {string} resource
  * @property {string} token_type
  * @property {string} client_id
+ */
+/**
  * @typedef _CelastrinaToken
  * @property {string} resource
  * @property {string} token
  * @property {moment.Moment} expires
+ */
+/**
  * @typedef _AzureFunctionRequest
  * @property {Object} headers
  * @property {Object} params
  * @property {Object} body
+ */
+/**
  * @typedef _AzureFunctionResponse
  * @property {number} status
  * @property {Object} headers
  * @property {Object} body
+ */
+/**
  * @typedef {Object} _Body
+ */
+/**
  * @typedef _AzureLog
  * @function error
  * @function info
  * @function warn
  * @function verbose
+ */
+/**
  * @typedef _AzureFunctionContext
  * @property {Object & {req: Object, res: Object}} bindings
  * @property {Object & {invocationId: string}} bindingData
@@ -68,6 +80,8 @@ const {AppConfiguration} = require("./AppConfiguration");
  * @property {function(string)} log
  * @property {string} invocationId
  * @property {Object} traceContext
+ */
+/**
  * @typedef {_AzureFunctionContext} _AzureHTTPFunctionContext
  * @property {_AzureFunctionResponse} res
  * @property {_AzureFunctionRequest} req
@@ -76,6 +90,8 @@ const {AppConfiguration} = require("./AppConfiguration");
  * @property {string} method
  * @property {string} originalUrl
  * @property {string} rawBody
+ */
+/**
  * @typedef _Credential
  * @property {string} access_token
  * @property {moment.Moment} expires_on
@@ -1744,27 +1760,24 @@ class BaseSentry {
 class BaseContext {
     /**
      * @param {_AzureFunctionContext} context
-     * @param {string} name
-     * @param {PropertyHandler} properties
+     * @param {Configuration} config
      */
-    constructor(context, name, properties) {
+    constructor(context, config) {
         this._requestId = uuid4v();
         this._context = context;
-        this._traceId = null;
+        /**@type{null|string}*/this._traceId = null;
         this._monitor = false;
         /**@type{null|MonitorResponse}*/this._monitorResponse = null;
-        this._properties = properties;
-        this._name = name;
+        this._config = config;
         /**@type{null|BaseSubject}*/this._subject = null;
         this._action = "process";
         /**@type{null|BaseSentry}*/this._sentry = null;
         /**@type{object}*/this._session = {};
     }
     /**
-     * @param {Configuration} configration
      * @returns {Promise<void>}
      */
-    async initialize(configration) {
+    async initialize() {
         return new Promise((resolve, reject) => {
             if(this._monitor) this._monitorResponse = new MonitorResponse();
             /** @type {{traceparent: string}} */
@@ -1773,10 +1786,11 @@ class BaseContext {
             resolve();
         });
     }
+    /**@returns{Configuration}*/get config(){return this._config;}
     /**@returns{boolean}*/get isMonitorInvocation(){return this._monitor;}
     /**@returns{null|MonitorResponse}*/get monitorResponse(){return this._monitorResponse;}
     /**@returns{_AzureFunctionContext}*/get context(){return this._context;}
-    /**@returns{string}*/get name() {return this._name;}
+    /**@returns{string}*/get name() {return this._config.name;}
     /**@returns{string}*/get invocationId(){return this._context.bindingData.invocationId;}
     /**@returns{string}*/get requestId(){return this._requestId;}
     /**@returns{BaseSentry}*/get sentry(){return this._sentry;}
@@ -1785,7 +1799,7 @@ class BaseContext {
     /**@param{BaseSubject} subject*/set subject(subject){this._subject = subject;}
     /**@returns{string}*/get action(){return this._action;}
     /**@returns{object}*/get session(){return this._session;}
-    /**@returns{PropertyHandler}*/get propertHandler(){return this._properties;}
+    /**@returns{PropertyHandler}*/get properties(){return this._config.properties;}
     /**@param{string}name*/
     getBinding(name){return this._context.bindings[name];}
     /**
@@ -1823,14 +1837,14 @@ class BaseContext {
      * @param {null|string} [defaultValue=null]
      * @return {Promise<string>}
      */
-    async getProperty(key, defaultValue = null){return this._properties.getProperty(key, defaultValue);}
+    async getProperty(key, defaultValue = null){return this._config.properties.getProperty(key, defaultValue);}
     /**
      * @param {Object} message
      * @param {LOG_LEVEL} [level] default is trace.
      * @param {null|string} [subject] default is null.
      */
     log(message = "[NO MESSAGE]", level = LOG_LEVEL.LEVEL_VERBOSE, subject = null) {
-        let out = "[" + this._name + "][LEVEL " + level + "]";
+        let out = "[" + this._config.name + "][LEVEL " + level + "]";
         if(typeof subject === "string") out += "[" + subject + "]";
         out += "[" + this._context.invocationId + "]:" + "[" + this._requestId + "]:" + message.toString();
         switch(level) {
@@ -1887,7 +1901,7 @@ class BaseFunction {
     async createContext(context, config) {
         return new Promise((resolve, reject) => {
             try {
-                resolve(new BaseContext(context, config.name, config.properties));
+                resolve(new BaseContext(context, config));
             }
             catch(exception) {
                 reject(exception);
@@ -1918,7 +1932,7 @@ class BaseFunction {
                     return _sentry.initialize();
                 })
                 .then(() => {
-                    return _context.initialize(this._configuration);
+                    return _context.initialize();
                 })
                 .then(() => {
                     this._context = _context;

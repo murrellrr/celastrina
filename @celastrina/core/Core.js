@@ -27,6 +27,8 @@
  * @license MIT
  */
 "use strict";
+import {DurationInputArg2} from "moment";
+
 const axios  = require("axios").default;
 const moment = require("moment");
 const uuid4v = require("uuid/v4");
@@ -169,6 +171,10 @@ class CelastrinaValidationError extends CelastrinaError {
     }
 }
 /**@abstract*/
+class ConfigurationItem {
+    /**@type{string}*/get key() {return ""}
+}
+/**@abstract*/
 class ResourceAuthorization {
     /**
      * @param {string} id
@@ -249,12 +255,13 @@ class ResourceAuthorization {
 }
 /**@type{ResourceAuthorization}*/
 class ManagedIdentityAuthorization extends ResourceAuthorization {
+    /**@type{string}*/static SENTRY_MANAGED_IDENTITY = "celastrinajs.core.sentry.managed.identity";
     /**
      * @param {Array.<null|string>} [resources=null]
      * @param {string}[apiVersion="2017-09-01"]
      */
     constructor(apiVersion = "2017-09-01", resources = null) {
-        super(ResourceAuthorizationConfiguration.CONFIG_SENTRY_IDENTITY, resources);
+        super(ManagedIdentityAuthorization.SENTRY_MANAGED_IDENTITY, resources);
         this._apiVersion = apiVersion;
         let params = new URLSearchParams();
         params.append("resource", null);
@@ -322,15 +329,17 @@ class AppRegistrationAuthorization extends ResourceAuthorization {
     }
 }
 /** @author Robert R Murrell */
-class ResourceAuthorizationConfiguration {
-    /**@type{string}*/static CONFIG_SENTRY_APPAUTH = "celastrinajs.core.sentry.appauth";
-    /**@type{string}*/static CONFIG_SENTRY_IDENTITY = "celastrinajs.core.sentry.identity";
+class ResourceAuthorizationConfiguration extends ConfigurationItem {
+    /**@type{string}*/static CONFIG_SENTRY_APPAUTH = "celastrinajs.core.confgiuration.sentry.appauth";
     /** */
     constructor() {
+        super();
         this._authorizations = {};
+        this._authorizations[ManagedIdentityAuthorization.SENTRY_MANAGED_IDENTITY] = new ManagedIdentityAuthorization();
     }
+    /**@type{string}*/get key() {return ResourceAuthorizationConfiguration.CONFIG_SENTRY_APPAUTH};
     /**
-     * @param {ResourceAuthorization} authorization
+     * @param {JsonProperty|ResourceAuthorization} authorization
      * @returns {ResourceAuthorizationConfiguration}
      */
     addAuthorization(authorization) {
@@ -348,10 +357,10 @@ class ResourceAuthorizationConfiguration {
         return this;
     }
     /**
-     * @param {null|string} [id=ResourceAuthorization.MANAGED_IDENTITY_ID]
+     * @param {null|string} [id=ManagedIdentityAuthorization.MANAGED_IDENTITY_ID]
      * @returns {Promise<ResourceAuthorization>}
      */
-    async getAuthorization(id = ResourceAuthorizationConfiguration.CONFIG_SENTRY_IDENTITY) {
+    async getAuthorization(id = ManagedIdentityAuthorization.SENTRY_MANAGED_IDENTITY) {
         return new Promise((resolve, reject) => {
             let authorization = this._authorizations[id];
             if(typeof authorization === "undefined" || authorization == null)
@@ -360,12 +369,13 @@ class ResourceAuthorizationConfiguration {
                 resolve(authorization);
         });
     }
+    /**@type{Object}*/get authorizations() {return this._authorizations;}
     /**
      * @param {string} resource
      * @param {null|string} [id = ResourceAuthorizationManager.MANAGED_IDENTITY_ID]
      * @returns {Promise<string>}
      */
-    async getResourceToken(resource, id = ResourceAuthorizationConfiguration.CONFIG_SENTRY_IDENTITY) {
+    async getResourceToken(resource, id = ManagedIdentityAuthorization.SENTRY_MANAGED_IDENTITY) {
         return new Promise((resolve, reject) => {
             this.getAuthorization(id)
                 .then((authorization) => {
@@ -582,7 +592,7 @@ class CachedProperty {
     constructor(time = 300, unit = "s") {
         /** @type {*} */this._value = null;
         this._time = time;
-        this._unit = unit;
+        /**@type{DurationInputArg2} */this._unit = unit;
         /**@type{null|moment.Moment}*/this._expires = null;
         /**@type{null|moment.Moment}*/this._lastUpdate = null;
     }
@@ -611,9 +621,9 @@ class CachedProperty {
 }
 /**@type{AppSettingsPropertyHandler}*/
 class CachePropertyHandler extends PropertyHandler {
-    /**@type{string}*/static CONFIG_CACHE_DEFAULT_EXPIRE_TIME = "celastrinajs.core.property.cache.expire.time";
-    /**@type{string}*/static CONFIG_CACHE_DEFAULT_EXPIRE_UNIT = "celastrinajs.core.property.cache.expire.unit";
-    /**@type{string}*/static CONFIG_CACHE_DEFAULT_EXPIRE_OVERRIDE = "celastrinajs.core.property.cache.expire.override";
+    /**@type{string}*/static PROP_CACHE_DEFAULT_EXPIRE_TIME = "celastrinajs.core.property.cache.expire.time";
+    /**@type{string}*/static PROP_CACHE_DEFAULT_EXPIRE_UNIT = "celastrinajs.core.property.cache.expire.unit";
+    /**@type{string}*/static PROP_CACHE_DEFAULT_EXPIRE_OVERRIDE = "celastrinajs.core.property.cache.expire.override";
     /**
      * @param {PropertyHandler} [handler=new AppSettingsPropertyHandler()]
      * @param {number} [defaultTime=300]
@@ -622,7 +632,7 @@ class CachePropertyHandler extends PropertyHandler {
     constructor(handler = new AppSettingsPropertyHandler(), defaultTime = 300,
                 defaultUnit = "s") {
         super();
-        this._handler = handler;
+        /**@type{PropertyHandler}*/this._handler = handler;
         this._cache = {};
         this._defaultTime = defaultTime;
         this._defaultUnit = defaultUnit;
@@ -651,19 +661,19 @@ class CachePropertyHandler extends PropertyHandler {
     async _configure() {
         return new Promise(async (resolve, reject) => {
             try {
-                let time = await this._handler.getProperty(CachePropertyHandler.CONFIG_CACHE_DEFAULT_EXPIRE_TIME, 300);
-                let unit = await this._handler.getProperty(CachePropertyHandler.CONFIG_CACHE_DEFAULT_EXPIRE_UNIT, "s");
+                let time = await this._handler.getProperty(CachePropertyHandler.PROP_CACHE_DEFAULT_EXPIRE_TIME, 300);
+                let unit = await this._handler.getProperty(CachePropertyHandler.PROP_CACHE_DEFAULT_EXPIRE_UNIT, "s");
                 this._defaultTime = time;
                 this._defaultUnit = /**@type{DurationInputArg2}*/unit;
-                let override = await this._handler.getProperty(CachePropertyHandler.CONFIG_CACHE_DEFAULT_EXPIRE_OVERRIDE, null);
+                let override = await this._handler.getProperty(CachePropertyHandler.PROP_CACHE_DEFAULT_EXPIRE_OVERRIDE, null);
                 if(typeof override === "string") {
                     let tempovr = JSON.parse(override);
                     if((typeof tempovr === "object") && tempovr.hasOwnProperty("_type") &&
                         (typeof tempovr._type === "string") &&
-                        (tempovr._type === CachePropertyHandler.CONFIG_CACHE_DEFAULT_EXPIRE_OVERRIDE)) {
+                        (tempovr._type === CachePropertyHandler.PROP_CACHE_DEFAULT_EXPIRE_OVERRIDE)) {
                         /**@type{{_overrides:Array.<object>}}*/
                         let overrides = tempovr._overrides;
-                        for(/**@type{{_property:string,_time:number,_unit:DurationInputArg2}}*/const ovr of overrides) {
+                        for(const /**@type{{_property:string,_time:number,_unit:moment.DurationInputArg2}}*/ovr of overrides) {
                             this._cache[ovr._property] = new CachedProperty(ovr._time, ovr._unit);
                         }
                     }
@@ -677,11 +687,12 @@ class CachePropertyHandler extends PropertyHandler {
     }
     /**
      * @param {_AzureFunctionContext} context
+     * @param {Object} config
      * @returns {Promise<void>}
      */
-    async initialize(context) {
+    async initialize(context, config) {
         return new Promise((resolve, reject) => {
-            this._handler.initialize(context)
+            this._handler.initialize(context, config)
                 .then(() => {
                     this._configure()
                         .then(() => {
@@ -888,7 +899,7 @@ class NumericProperty extends Property {
 }
 /**@abstract*/
 class HandlerProperty {
-    /**@type{string}*/static CONFIG_PROPERTY = "celastrinajs.core.property.config";
+    /**@type{string}*/static PROP_PROPERTY = "celastrinajs.core.property.handler";
     /**@param{null|string}[name=null]*/
     constructor(name = null){this._name = name;}
     /**@returns{string}*/get name(){return this._name}
@@ -898,7 +909,7 @@ class HandlerProperty {
     initialize() {
         let lname = this._name;
         if(typeof lname === "undefined" || lname == null)
-            lname = HandlerProperty.CONFIG_PROPERTY;
+            lname = HandlerProperty.PROP_PROPERTY;
         /**@type{string}*/let config = process.env[lname];
         if(typeof config === "string" && config.trim().length > 0) {
             /**@type{{cached:boolean}}*/let source = JSON.parse(config);
@@ -1038,6 +1049,21 @@ class Module {
             reject(CelastrinaError.newError("Not Implemented."));
         });
     }
+}
+/**@type{ConfigurationItem}*/
+class ModuleConfiguration extends ConfigurationItem {
+    /**@type{string}*/static CONFIG_MODULES = "celastrinajs.core.configuration.modules";
+    constructor() {
+        super();
+        this._modules = [];
+    }
+    /**@type{string}*/get key() {return ModuleConfiguration.CONFIG_MODULES}
+    /**
+     * @param {JsonProperty|Module} module
+     * @returns {Configuration}
+     */
+    addModule(module){this._modules.unshift(module); return this;}
+    // TODO: Add init methods here and then update sentry for roles and authorizations.
 }
 /** BaseSubject */
 class BaseSubject {
@@ -1254,16 +1280,27 @@ class FunctionRoleProperty extends JsonProperty {
         });
     }
 }
+class FunctionRoleConfiguration extends ConfigurationItem {
+    /**@type{string}*/static CONFIG_ROLES = "celastrinajs.core.configuration.roles";
+    constructor() {
+        super();
+        /**@type{Array.<JsonProperty|FunctionRole>}*/this._roles = [];
+    }
+    /**@type{string}*/get key() {return FunctionRoleConfiguration.CONFIG_ROLES};
+    /**@returns{Array<FunctionRole>}*/get roles(){return this._roles;}
+    /**
+     * @param {JsonProperty|FunctionRole} role
+     * @returns {Configuration}
+     */
+    addFunctionRole(role){this._roles.unshift(role); return this;}
+    /**@type{Array.<FunctionRole>}*/get roles() {return this._roles};
+}
 /** Configuration */
 class Configuration extends EventEmitter {
-    /**@type{string}*/static CONFIG_NAME = "celastrinajs.core.name";
-    /**@type{string}*/static CONFIG_HANDLER = "celastrinajs.core.properties.handler";
-    /**@type{string}*/static CONFIG_CONTEXT = "celastrinajs.core.properties.context";
-    /**@type{string}*/static CONFIG_APPLICATION_AUTHORIZATION = "celastrinajs.core.authorization.application";
-    /**@type{string}*/static CONFIG_RESOURCE_AUTHORIZATION = "celastrinajs.core.authorization.resource";
-    /**@type{string}*/static CONFIG_ROLES = "celastrinajs.core.roles";
-    /**@type{string}*/static CONFIG_MODULES = "celastrinajs.core.modules";
-    /**@type{string}*/static CONFIG_LOCAL_DEV = "celastringjs.core.deployment.local.development";
+    /**@type{string}*/static CONFIG_NAME    = "celastrinajs.core.configuration.name";
+    /**@type{string}*/static CONFIG_HANDLER = "celastrinajs.core.configuration.handler";
+    /**@type{string}*/static CONFIG_CONTEXT = "celastrinajs.core.configuration.context";
+    /**@type{string}*/static PROP_LOCAL_DEV = "celastringjs.core.property.deployment.local.development";
     /**@param{StringProperty|string} name*/
     constructor(name) {
         super();
@@ -1276,19 +1313,10 @@ class Configuration extends EventEmitter {
         /**@type{null|_AzureFunctionContext}*/this._config[Configuration.CONFIG_CONTEXT] = null;
         /**@type{null|JsonProperty|PropertyHandler}*/this._config[Configuration.CONFIG_HANDLER] = null;
         /**@type{string|StringProperty}*/this._config[Configuration.CONFIG_NAME] = name;
-        /**@type{Array.<JsonProperty|AppRegistrationAuthorization>}*/this._config[Configuration.CONFIG_APPLICATION_AUTHORIZATION] = [];
-        /**@type{Array.<StringProperty|string>}*/this._config[Configuration.CONFIG_RESOURCE_AUTHORIZATION] = [];
-        /**@type{Array.<JsonProperty|FunctionRole>}*/this._config[Configuration.CONFIG_ROLES] = [];
-        /**@type{Array.<JsonProperty|Module>}*/this._config[Configuration.CONFIG_MODULES] = {_modules: []};
     }
     /**@returns{string}*/get name(){return this._config[Configuration.CONFIG_NAME];}
     /**@returns{PropertyHandler}*/get properties() {return this._config[Configuration.CONFIG_HANDLER];}
     /**@returns{object}*/get values(){return this._config;}
-    /**@returns{Array<AppRegistrationAuthorization>}*/get applicationAuthorizations(){return this._config[Configuration.CONFIG_APPLICATION_AUTHORIZATION];}
-    /**@returns{Array<string>}*/get resourceAuthorizations(){return this._config[Configuration.CONFIG_RESOURCE_AUTHORIZATION];}
-    /**@returns{Array<FunctionRole>}*/get roles(){return this._config[Configuration.CONFIG_ROLES];}
-    /**@returns{Array<Module>}*/get modules(){return this._config[Configuration.CONFIG_MODULES]._modules;}
-    /**@returns{{_modules:Array.<Module>}}*/get moduleConfig(){return this._config[Configuration.CONFIG_MODULES];}
     /**@returns{_AzureFunctionContext}*/get context(){return this._config[Configuration.CONFIG_CONTEXT];}
     /**@returns{boolean}*/get loaded(){return this._loaded;}
     /**@returns{Promise<void>}*/
@@ -1334,6 +1362,11 @@ class Configuration extends EventEmitter {
         this._config[key] = value; return this;
     }
     /**
+     * @param {ConfigurationItem} config
+     * @returns {Configuration}
+     */
+    setConfigurationItem(config) {this.set(config.key, config); return this;};
+    /**
      * @param {string} key
      * @param {*} [defaultValue=null]
      * @returns {*}
@@ -1343,26 +1376,6 @@ class Configuration extends EventEmitter {
         if(typeof value === "undefined" || value == null) value = defaultValue;
         return value;
     }
-    /**
-     * @param {JsonProperty|AppRegistrationAuthorization} application
-     * @returns {Configuration}
-     */
-    addApplicationAuthorization(application){this._config[Configuration.CONFIG_APPLICATION_AUTHORIZATION].unshift(application); return this;}
-    /**
-     * @param {StringProperty|string} resource
-     * @returns {Configuration}
-     */
-    addResourceAuthorization(resource){this._config[Configuration.CONFIG_RESOURCE_AUTHORIZATION].unshift(resource); return this;}
-    /**
-     * @param {JsonProperty|FunctionRole} role
-     * @returns {Configuration}
-     */
-    addFunctionRole(role){this._config[Configuration.CONFIG_ROLES].unshift(role); return this;}
-    /**
-     * @param {JsonProperty|Module} module
-     * @returns {Configuration}
-     */
-    addModule(module){this._config[Configuration.CONFIG_MODULES]._modules.unshift(module); return this;}
     /**
      * @param {Object} obj
      * @param {Array.<Promise>} promises
@@ -1402,7 +1415,7 @@ class Configuration extends EventEmitter {
      */
     _isPropertyHandlerOverridden() {
         let overridden = false;
-        let deployment = /**@type{null|undefined|string}*/process.env[Configuration.CONFIG_LOCAL_DEV];
+        let deployment = /**@type{null|undefined|string}*/process.env[Configuration.PROP_LOCAL_DEV];
         if(typeof deployment === "string")
             overridden = (deployment.trim().toLowerCase() === "true");
         return overridden;
@@ -1625,75 +1638,6 @@ class SessionRoleResolver extends RoleResolver {
         });
     }
 }
-
-
-
-
-
-
-class BaseAuthorization {
-    /**@type{string}*/static CONFIG_SENTRY_IDENTITY = "celastrinajs.core.identity";
-    /**
-     * @param {object} [appauth={}]
-     */
-    constructor(appauth = {}) {
-        this._appauth = appauth;
-        this._appauth[BaseAuthorization.CONFIG_SENTRY_IDENTITY] = new AppRegistrationAuthorization(process.env["IDENTITY_ENDPOINT"], "", BaseSentry.CONFIG_SENTRY_IDENTITY, process.env["IDENTITY_HEADER"], [], true);
-    }
-    /**@returns{Object}*/get authorizations(){return this._appauth;}
-    /**
-     * @param {string} resource
-     * @param {string} [id=BaseAuthorization.CONFIG_SENTRY_IDENTITY]
-     * @returns {Promise<string>}
-     */
-    async getAuthorizationToken(resource, id = BaseAuthorization.CONFIG_SENTRY_IDENTITY) {
-        return new Promise((resolve, reject) => {
-            /** @type{AppRegistrationAuthorization}*/let appobj = this._appauth[id];
-            if(appobj instanceof AppRegistrationAuthorization) {
-                appobj.getToken(resource)
-                    .then((token) => {
-                        resolve(token);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            else reject(CelastrinaError.newError("Application ID '" + id + "' not found for resource '" + resource + "'."));
-        });
-    }
-
-    async addResourceAuthorization(resource) {
-        return new Promise((resolve, reject) => {
-            //
-        });
-    }
-
-    async addResourceAuthorizations(resources) {
-        return new Promise((resolve, reject) => {
-            let promises = [];
-            for(const resource of resources) {
-                promises.push(this.addResourceAuthorization(resource));
-            }
-            Promise.all(promises)
-                .then(() => {
-                    resolve();
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
-        });
-    }
-
-    async initialize() {
-        return new Promise((resolve, reject) => {
-            //
-        })
-    }
-}
-
-
-
-
 /** BaseSentry */
 class BaseSentry {
     /**@type{string}*/static CONFIG_SENTRY_ROLES = "celastrinajs.core.sentry.roles";
@@ -1702,13 +1646,13 @@ class BaseSentry {
         this._configuration = config;
     }
     /**@returns{Object}*/get roles(){return this._configuration.getValue(BaseSentry.CONFIG_SENTRY_ROLES);}
-    /**@returns{Object}*/get authorizations(){return this._configuration.getValue(BaseSentry.CONFIG_SENTRY_APPAUTH);}
+    /**@returns{Object}*/get authorizations(){return this._configuration.getValue(ResourceAuthorizationConfiguration.CONFIG_SENTRY_APPAUTH);}
     /**
      * @param {string} resource
      * @param {undefined|null|string} [id]
      * @returns {Promise<string>}
      */
-    async getAuthorizationToken(resource, id = ResourceAuthorizationConfiguration.CONFIG_SENTRY_IDENTITY) {
+    async getAuthorizationToken(resource, id = ResourceAuthorizationConfiguration.SENTRY_MANAGED_IDENTITY) {
         return new Promise((resolve, reject) => {
             /**@type{ResourceAuthorizationConfiguration}*/let _authmanager = this._configuration.getValue(ResourceAuthorizationConfiguration.CONFIG_SENTRY_APPAUTH);
             if(typeof _authmanager === "undefined" || _authmanager == null)
@@ -1729,7 +1673,7 @@ class BaseSentry {
      * @returns {Promise<BaseSubject>}
      */
     async authenticate(context) {
-        return new Promise((resolve, reject) => {resolve(new BaseSubject(ResourceAuthorizationConfiguration.CONFIG_SENTRY_IDENTITY));});
+        return new Promise((resolve, reject) => {resolve(new BaseSubject(ResourceAuthorizationConfiguration.SENTRY_MANAGED_IDENTITY));});
     }
     /**
      * @param {BaseContext} context

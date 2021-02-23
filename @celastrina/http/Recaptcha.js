@@ -30,8 +30,8 @@
 const axios       = require("axios").default;
 const querystring = require("querystring");
 const {CelastrinaValidationError, CelastrinaError} = require("../core/CelastrinaError");
-const {BaseContext, FunctionRole, MatchAny} = require("../core/BaseFunction");
-const {HTTPParameterFetch, HeaderParameterFetch, HTTPContext} = require("./HttpFunction");
+const {BaseContext, FunctionRole, MatchAny} = require("../core/Core");
+const {HTTPParameterFetch, HeaderParameterFetch, HTTPContext} = require("./HTTP");
 /**
  * @typedef {_Body} _RecaptchaBody
  * @property {string} celastrinaRecaptchaToken

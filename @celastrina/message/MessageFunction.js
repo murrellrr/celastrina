@@ -25,7 +25,7 @@
 "use strict";
 
 const {CelastrinaError, CelastrinaValidationError} = require("../core/CelastrinaError");
-const {BaseContext, BaseFunction} = require("../core/BaseFunction");
+const {BaseContext, BaseFunction} = require("../core/Core");
 const {Header, Message} = require("./Message");
 
 /**

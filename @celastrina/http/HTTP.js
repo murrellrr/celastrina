@@ -78,14 +78,37 @@ class JwtSubject extends BaseSubject {
     /**@returns{moment.Moment}*/get issued(){return this._issued;}
     /**@returns{moment.Moment}*/get expires(){return this._expires;}
     /**@returns{string}*/get token(){return this._token;}
-    /**@returns{boolean}*/
-    isExpired() {
-        let now = moment();
-        return now.isSameOrAfter(this._expires);
-    }
+    /**@returns{boolean}*/isExpired(){return moment().isSameOrAfter(this._expires);}
     /**@param{string[]}headers*/
     setAuthorizationHeader(headers) {
         if(typeof headers !== "undefined" && headers != null) headers["Authorization"] = "Bearer " + this.token;
+    }
+    /**
+     * @param {undefined|null|object}headers
+     * @param {string}[name="Authorization]
+     * @param {string}[tokenType="Bearer "]
+     * @returns {Promise<object>}
+     */
+    async setAuthorizationHeader(headers, name = "Authorization", tokenType = "Bearer ") {
+        return new Promise((resolve, reject) => {
+            if(typeof headers === "undefined" || headers == null)
+                headers = {};
+            headers[name] = tokenType + this.token;
+            resolve(headers);
+        });
+    }
+    /**
+     * @param {string}name
+     * @param {null|string}defaultValue
+     * @returns {Promise<number,string|Array.<string>>}
+     */
+    async getClaim(name, defaultValue = null) {
+        return new Promise((resolve, reject) => {
+            let claim = this._token[name];
+            if(typeof claim === "undefined" || claim == null)
+                claim = defaultValue;
+            resolve(claim);
+        });
     }
     toJSON() {
         let json = super.toJSON();
@@ -96,7 +119,10 @@ class JwtSubject extends BaseSubject {
         json.expires = this._expires.format();
         return json;
     }
-    /**@param{JwtSubject}source*/
+    /**
+     * @param {JwtSubject} source
+     * @return JwtSubject
+     */
     copy(source) {
         //sub, aud, iss, iat, exp, nonce, token
         if(source instanceof JwtSubject) return new JwtSubject(source.id, source._audience, source._issuer, source._issued.unix(), source._expires.unix(), source._nonce, source._token);
@@ -899,7 +925,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _get(context) {
         return new Promise((resolve) => {
-            context.log("GET Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._get(context)");
+            context.log("GET Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTP._get(context)");
             context.send(null, 204);
             resolve();
         });
@@ -910,7 +936,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _patch(context) {
         return new Promise((resolve, reject) => {
-            context.log("PATCH Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._patch(context)");
+            context.log("PATCH Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTP._patch(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -920,7 +946,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _put(context) {
         return new Promise((resolve, reject) => {
-            context.log("PUT Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._put(context)");
+            context.log("PUT Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTP._put(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -930,7 +956,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _post(context) {
         return new Promise((resolve, reject) => {
-            context.log("POST Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._post(context)");
+            context.log("POST Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTP._post(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -940,7 +966,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _delete(context) {
         return new Promise((resolve, reject) => {
-            context.log("DELETE Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._delete(context)");
+            context.log("DELETE Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTP._delete(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -950,7 +976,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _options(context) {
         return new Promise((resolve, reject) => {
-            context.log("OPTOINS Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._options(context)");
+            context.log("OPTOINS Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTP._options(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -960,7 +986,7 @@ class HTTPFunction extends BaseFunction {
      */
     async _head(context) {
         return new Promise((resolve, reject) => {
-            context.log("HEAD Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._head(context)");
+            context.log("HEAD Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTP._head(context)");
             context.send(null, 204);
             resolve();
         });
@@ -971,8 +997,8 @@ class HTTPFunction extends BaseFunction {
      */
     async _trace(context) {
         return new Promise((resolve, reject) => {
-            context.log("TRACE Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTPFunction._trace(context)");
-            context.monitorResponse.addPassedDiagnostic("Default HTTPFunction", "HTTPFunction._trace(context): Not implemented.");
+            context.log("TRACE Method not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "HTTP._trace(context)");
+            context.monitorResponse.addPassedDiagnostic("Default HTTP", "HTTP._trace(context): Not implemented.");
             resolve();
         });
     }
@@ -1018,7 +1044,7 @@ class HTTPFunction extends BaseFunction {
                 context.sendServerError(ex);
             }
 
-            context.log("Request failed to process. (NAME:" + ex.cause.name + ") (MESSAGE:" + ex.cause.message + ") (STACK:" + ex.cause.stack + ")", LOG_LEVEL.LEVEL_ERROR, "HTTPFunction.exception(context, exception)");
+            context.log("Request failed to process. (NAME:" + ex.cause.name + ") (MESSAGE:" + ex.cause.message + ") (STACK:" + ex.cause.stack + ")", LOG_LEVEL.LEVEL_ERROR, "HTTP.exception(context, exception)");
             resolve();
         });
     }

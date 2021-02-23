@@ -22,23 +22,24 @@
  * SOFTWARE.
  */
 "use strict";
-const {CelastrinaError, CelastrinaValidationError} = require("./CelastrinaError");
-const {Vault} = require("./Vault");
-const {AppConfiguration} = require("./AppConfiguration");
-const {ApplicationAuthorization, PropertyHandler, AppSettingsPropertyHandler, VaultAppSettingPropertyHandler,
-       AppConfigPropertyHandler, CachedProperty, CachePropertyHandler, CacheHandlerProperty, VaultAppSettingHandlerProperty,
-       AppConfigHandlerProperty, Property, JsonProperty, StringProperty, BooleanProperty, NumericProperty, ValueMatch,
-       MatchAny, MatchAll, MatchNone, FunctionRole, Configuration, Algorithm, AES256Algorithm, Cryptography, LOG_LEVEL,
-       BaseSubject, MonitorResponse, RoleResolver, BaseSentry, BaseContext, BaseFunction,
-       ApplicationAuthorizationProperty, FunctionRoleProperty} = require("./BaseFunction");
+const {CelastrinaError, CelastrinaValidationError, ResourceAuthorization, ManagedIdentityAuthorization, AppRegistrationAuthorization,
+       ResourceAuthorizationConfiguration, Vault, PropertyHandler, AppSettingsPropertyHandler, VaultAppSettingPropertyHandler,
+       AppConfigPropertyHandler, CachedProperty, CachePropertyHandler,
+       CacheHandlerProperty, VaultAppSettingHandlerProperty, AppConfigHandlerProperty, Property, JsonProperty,
+       StringProperty, BooleanProperty, NumericProperty, ValueMatch, MatchAny, MatchAll, MatchNone, ModuleContext,
+       Module, FunctionRole, Configuration, Algorithm, AES256Algorithm, Cryptography, LOG_LEVEL, BaseSubject,
+       MonitorResponse, RoleResolver, BaseSentry, BaseContext, BaseFunction, ApplicationAuthorizationProperty,
+       FunctionRoleProperty} = require("./Core");
 module.exports = {
-    CelastrinaError: CelastrinaError, CelastrinaValidationError: CelastrinaValidationError, Vault: Vault,
-    AppConfiguration: AppConfiguration, PropertyHandler: PropertyHandler, AppSettingsPropertyHandler: AppSettingsPropertyHandler,
+    CelastrinaError: CelastrinaError, CelastrinaValidationError: CelastrinaValidationError, ResourceAuthorization: ResourceAuthorization,
+    ManagedIdentityAuthorization: ManagedIdentityAuthorization, AppRegistrationAuthorization: AppRegistrationAuthorization,
+    ResourceAuthorizationConfiguration: ResourceAuthorizationConfiguration, Vault: Vault, PropertyHandler: PropertyHandler,
+    AppSettingsPropertyHandler: AppSettingsPropertyHandler,
     VaultAppSettingPropertyHandler: VaultAppSettingPropertyHandler, AppConfigPropertyHandler: AppConfigPropertyHandler,
     CachedProperty: CachedProperty, CachePropertyHandler: CachePropertyHandler, CacheHandlerProperty: CacheHandlerProperty,
     VaultAppSettingHandlerProperty: VaultAppSettingHandlerProperty, AppConfigHandlerProperty: AppConfigHandlerProperty,
     Property: Property, StringProperty: StringProperty, BooleanProperty: BooleanProperty, NumericProperty: NumericProperty,
-    JsonProperty: JsonProperty, ApplicationAuthorization: ApplicationAuthorization,
+    JsonProperty: JsonProperty, ModuleContext: ModuleContext, Module: Module,
     ApplicationAuthorizationProperty: ApplicationAuthorizationProperty, ValueMatch: ValueMatch, MatchAny: MatchAny, MatchAll: MatchAll,
     MatchNone: MatchNone, FunctionRole: FunctionRole, FunctionRoleProperty: FunctionRoleProperty, Configuration: Configuration,
     Algorithm: Algorithm, AES256Algorithm: AES256Algorithm, Cryptography: Cryptography, LOG_LEVEL: LOG_LEVEL,

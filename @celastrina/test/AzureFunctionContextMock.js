@@ -55,21 +55,27 @@ class MockAzureFunctionContext {
 
         this.log = function(message) {
             this.message = message;
+            console.log(this.message);
         }
         this.log.error = function(message) {
             this.message = message;
+            console.log(this.message);
         }
         this.log.warn = function(message) {
             this.message = message;
+            console.log(this.message);
         }
         this.log.info = function(message) {
             this.message = message;
+            console.log(this.message);
         }
         this.log.trace = function(message) {
             this.message = message;
+            console.log(this.message);
         }
         this.log.verbose = function(message) {
             this.message = message;
+            console.log(this.message);
         }
     }
 

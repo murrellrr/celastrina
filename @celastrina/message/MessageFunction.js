@@ -56,7 +56,7 @@ class MessageContext extends BaseContext {
     async unMarshall() {
         return new Promise((resolve, reject) => {
             try {
-                this._reqmsg = Message.unMarshall(this._context.requestMessage);
+                this._reqmsg = Message.unMarshall(this._funccontext.requestMessage);
                 resolve(this._reqmsg);
             }
             catch(exception) {

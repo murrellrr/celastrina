@@ -27,11 +27,10 @@
  * @license MIT
  */
 "use strict";
-import {DurationInputArg2} from "moment";
 
 const axios  = require("axios").default;
 const moment = require("moment");
-const uuid4v = require("uuid/v4");
+const uuid4v = require("uuid");
 const crypto = require('crypto');
 const {EventEmitter} = require('events');
 const {TokenResponse, AuthenticationContext} = require("adal-node");
@@ -100,7 +99,6 @@ const {TokenResponse, AuthenticationContext} = require("adal-node");
  * @property {string} token_type
  * @property {string} client_id
  */
-
 /** @author Robert R Murrell */
 class CelastrinaError {
     /**
@@ -225,21 +223,10 @@ class ResourceAuthorization {
      */
     async getToken(resource) {
         return new Promise((resolve, reject) => {
-            /** @type {_CelastrinaToken} */
-            let token = this._tokens[resource];
-            if(typeof token !== "object") {
-                this._refresh(resource)
-                    .then((rtoken) => {
-                        resolve(rtoken);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            else {
-                let exp = token.expires;
-                let now = moment();
-                if(exp.isSameOrAfter(now))
+            try {
+                /** @type {_CelastrinaToken} */
+                let token = this._tokens[resource];
+                if (typeof token !== "object") {
                     this._refresh(resource)
                         .then((rtoken) => {
                             resolve(rtoken);
@@ -247,21 +234,37 @@ class ResourceAuthorization {
                         .catch((exception) => {
                             reject(exception);
                         });
-                else
-                    resolve(token.token);
+                }
+                else {
+                    let exp = token.expires;
+                    let now = moment();
+                    if (exp.isSameOrAfter(now))
+                        this._refresh(resource)
+                            .then((rtoken) => {
+                                resolve(rtoken);
+                            })
+                            .catch((exception) => {
+                                reject(exception);
+                            });
+                    else
+                        resolve(token.token);
+                }
+            }
+            catch(exception) {
+                reject(exception);
             }
         });
     }
 }
 /**@type{ResourceAuthorization}*/
 class ManagedIdentityAuthorization extends ResourceAuthorization {
-    /**@type{string}*/static SENTRY_MANAGED_IDENTITY = "celastrinajs.core.sentry.managed.identity";
+    /**@type{string}*/static SYSTEM_MANAGED_IDENTITY = "celastrinajs.core.system.managed.identity";
     /**
      * @param {Array.<null|string>} [resources=null]
      * @param {string}[apiVersion="2017-09-01"]
      */
     constructor(apiVersion = "2017-09-01", resources = null) {
-        super(ManagedIdentityAuthorization.SENTRY_MANAGED_IDENTITY, resources);
+        super(ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY, resources);
         this._apiVersion = apiVersion;
         let params = new URLSearchParams();
         params.append("resource", null);
@@ -276,16 +279,25 @@ class ManagedIdentityAuthorization extends ResourceAuthorization {
      */
     async _resolve(resource) {
         return new Promise((resolve, reject) => {
-            this._config.params.set("resource", resource);
-            axios.get(this._endpoint, this._config)
-                .then((response) => {
-                    let token = {resource:resource,token:response.data.access_token,expires:moment(response.data.expires_on)};
-                    this._tokens[token.resource] = token;
-                    resolve(token);
-                })
-                .catch((exception) =>{
-                    reject(exception);
-                });
+            try {
+                this._config.params.set("resource", resource);
+                axios.get(this._endpoint, this._config)
+                    .then((response) => {
+                        let token = {
+                            resource: resource,
+                            token: response.data.access_token,
+                            expires: moment(response.data.expires_on)
+                        };
+                        this._tokens[token.resource] = token;
+                        resolve(token);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
@@ -315,78 +327,110 @@ class AppRegistrationAuthorization extends ResourceAuthorization {
      */
     async _resolve(resource) {
         return new Promise((resolve, reject) => {
-            let adContext = new AuthenticationContext(this._authority + "/" + this._tenant);
-            adContext.acquireTokenWithClientCredentials(resource, this._id, this._secret,
-                (err, response) => {
-                    if(err) reject(CelastrinaError.newError("Not authorized.", 401));
-                    else {
-                        let token = {resource: resource, token: response.accessToken, expires: moment(response.expiresOn)};
-                        this._tokens[token.resource] = token;
-                        resolve(token.token);
-                    }
-            });
+            try {
+                let adContext = new AuthenticationContext(this._authority + "/" + this._tenant);
+                adContext.acquireTokenWithClientCredentials(resource, this._id, this._secret,
+                    (err, response) => {
+                        if (err) reject(CelastrinaError.newError("Not authorized.", 401));
+                        else {
+                            let token = {
+                                resource: resource,
+                                token: response.accessToken,
+                                expires: moment(response.expiresOn)
+                            };
+                            this._tokens[token.resource] = token;
+                            resolve(token.token);
+                        }
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
-/** @author Robert R Murrell */
-class ResourceAuthorizationConfiguration extends ConfigurationItem {
-    /**@type{string}*/static CONFIG_SENTRY_APPAUTH = "celastrinajs.core.confgiuration.sentry.appauth";
-    /** */
-    constructor() {
-        super();
-        this._authorizations = {};
-        this._authorizations[ManagedIdentityAuthorization.SENTRY_MANAGED_IDENTITY] = new ManagedIdentityAuthorization();
-    }
-    /**@type{string}*/get key() {return ResourceAuthorizationConfiguration.CONFIG_SENTRY_APPAUTH};
-    /**
-     * @param {JsonProperty|ResourceAuthorization} authorization
-     * @returns {ResourceAuthorizationConfiguration}
-     */
+/** ResourceAuthorizationContext @author Robert R Murrell */
+class ResourceAuthorizationContext {
+    /**@type{string}*/static CONFIG_RESOURCE_AUTH_CONTEXT = "celastrinajs.core.configuration.authorizations.context";
+    constructor() {this._authorizations = {};}
+    /**@type{Object}*/get authorizations() {return this._authorizations;}
+    /**@param {ResourceAuthorization} authorization*/
     addAuthorization(authorization) {
-        /**@type{ResourceAuthorization}*/let resauth = this._authorizations[authorization.id];
-        if(typeof resauth === "undefined" || resauth == null) {
-            resauth = authorization;
-            this._authorizations[resauth.id] = resauth;
-        }
-        else {
-            // Copy the resources into the existing ID.
-            for(let resource of authorization.resources) {
-                resauth.addResource(resource);
-            }
-        }
-        return this;
+        this._authorizations[authorization.id] = authorization;
     }
-    /**
-     * @param {null|string} [id=ManagedIdentityAuthorization.MANAGED_IDENTITY_ID]
-     * @returns {Promise<ResourceAuthorization>}
-     */
-    async getAuthorization(id = ManagedIdentityAuthorization.SENTRY_MANAGED_IDENTITY) {
+    /**@param {null|string} [id=ManagedIdentityAuthorization.MANAGED_IDENTITY_ID]*/
+    async getAuthorization(id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY) {
         return new Promise((resolve, reject) => {
-            let authorization = this._authorizations[id];
-            if(typeof authorization === "undefined" || authorization == null)
-                reject(CelastrinaError.newError("Not authorized.", 401));
-            else
-                resolve(authorization);
+            try {
+                let authorization = this._authorizations[id];
+                if (typeof authorization === "undefined" || authorization == null)
+                    reject(CelastrinaError.newError("Not authorized.", 401));
+                else
+                    resolve(authorization);
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
-    /**@type{Object}*/get authorizations() {return this._authorizations;}
     /**
      * @param {string} resource
      * @param {null|string} [id = ResourceAuthorizationManager.MANAGED_IDENTITY_ID]
      * @returns {Promise<string>}
      */
-    async getResourceToken(resource, id = ManagedIdentityAuthorization.SENTRY_MANAGED_IDENTITY) {
+    async getResourceToken(resource, id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY) {
         return new Promise((resolve, reject) => {
-            this.getAuthorization(id)
-                .then((authorization) => {
-                    return authorization.getToken(resource);
-                })
-                .then((token) => {
-                    resolve(token);
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            try {
+                this.getAuthorization(id)
+                    .then((authorization) => {
+                        return authorization.getToken(resource);
+                    })
+                    .then((token) => {
+                        resolve(token);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+}
+/** @author Robert R Murrell */
+class ResourceAuthorizationConfiguration extends ConfigurationItem {
+    /**@type{string}*/static CONFIG_RESOURCE_AUTH = "celastrinajs.core.confgiuration.authorizations";
+    /** */
+    constructor() {
+        super();
+        this._authorizations = [];
+    }
+    /**@type{string}*/get key() {return ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH};
+    /**
+     * @param {JsonProperty|ResourceAuthorization} authorization
+     * @return {ResourceAuthorizationConfiguration}
+     */
+    addAuthorization(authorization) {
+        this._authorizations.unshift(authorization);
+        return this;
+    }
+    /**
+     * @param {Configuration} config
+     * @returns {Promise<void>}
+     */
+    async install(config) {
+        return new Promise((resolve, reject) => {
+            try {
+                /**@type{ResourceAuthorizationContext}*/let authcontext = config.getValue(ResourceAuthorizationContext.CONFIG_RESOURCE_AUTH_CONTEXT);
+                for (/**@type{ResourceAuthorization}*/const auth of this._authorizations) {
+                    authcontext.addAuthorization(auth);
+                }
+                resolve();
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
@@ -405,14 +449,19 @@ class Vault {
      */
     async getSecret(token, identifier) {
         return new Promise((resolve, reject) => {
-            this._config.headers["Authorization"] = "Bearer " + token;
-            axios.get(identifier, this._config)
-                .then((response) => {
-                    resolve(response.data.value);
-                })
-                .catch((exception) => {
-                    reject(CelastrinaError.newError("Error getting secret for '" + identifier + "'."));
-                });
+            try {
+                this._config.headers["Authorization"] = "Bearer " + token;
+                axios.get(identifier, this._config)
+                    .then((response) => {
+                        resolve(response.data.value);
+                    })
+                    .catch((exception) => {
+                        reject(CelastrinaError.newError("Error getting secret for '" + identifier + "'."));
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
@@ -420,11 +469,12 @@ class Vault {
 class PropertyHandler {
     constructor(){}
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
      * @returns {Promise<void>}
      */
-    async initialize(context, config) {
+    async initialize(azcontext, config) {
+        azcontext.log.error("[PropertyHandler.initialize(context)]: Not Implemented.");
         return new Promise((resolve, reject) => {reject(CelastrinaError.newError("Not Implemented."));});
     }
     /**
@@ -441,14 +491,19 @@ class PropertyHandler {
 class AppSettingsPropertyHandler extends PropertyHandler {
     constructor(){super();}
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
      * @returns {Promise<void>}
      */
-    async initialize(context, config) {
+    async initialize(azcontext, config) {
         return new Promise((resolve, reject) => {
-            context.log.verbose("[AppSettingsPropertyHandler.initialize(context, config)]: AppSettingsPropertyHandler initialized.");
-            resolve();
+            try {
+                azcontext.log.verbose("[AppSettingsPropertyHandler.initialize(context, config)]: AppSettingsPropertyHandler initialized.");
+                resolve();
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**
@@ -458,9 +513,14 @@ class AppSettingsPropertyHandler extends PropertyHandler {
      */
     async getProperty(key, defaultValue = null) {
         return new Promise((resolve, reject) => {
-            let value = process.env[key];
-            if(typeof value === "undefined") value = defaultValue;
-            resolve(value);
+            try {
+                let value = process.env[key];
+                if (typeof value === "undefined") value = defaultValue;
+                resolve(value);
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
@@ -490,15 +550,20 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
             /** @type{Vault} */this._vault = new Vault();
     }
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
      * @returns {Promise<void>}
      */
-    async initialize(context, config) {
+    async initialize(azcontext, config) {
         return new Promise((resolve, reject) => {
-            this._authConfig = config[ResourceAuthorizationConfiguration.CONFIG_SENTRY_APPAUTH];
-            context.log.verbose("[AppConfigPropertyHandler.initialize(context, config)]: AppConfigPropertyHandler initialized.");
-            resolve();
+            try {
+                this._authConfig = config[ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH];
+                azcontext.log.verbose("[AppConfigPropertyHandler.initialize(context, config)]: AppConfigPropertyHandler initialized.");
+                resolve();
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**
@@ -508,22 +573,27 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
      */
     async _resolveVaultReference(kvp) {
         return new Promise((resolve, reject) => {
-            if(kvp.contentType === "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8" &&
+            try {
+                if (kvp.contentType === "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8" &&
                     this._useVaultSecrets) {
-                this._authConfig.getResourceToken("https://vault.azure.net")
-                    .then((token) => {
-                        let vaultRef = JSON.parse(kvp.value);
-                        return this._vault.getSecret(token, vaultRef.uri);
-                    })
-                    .then((value) => {
-                        resolve(value);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
+                    this._authConfig.getResourceToken("https://vault.azure.net")
+                        .then((token) => {
+                            let vaultRef = JSON.parse(kvp.value);
+                            return this._vault.getSecret(token, vaultRef.uri);
+                        })
+                        .then((value) => {
+                            resolve(value);
+                        })
+                        .catch((exception) => {
+                            reject(exception);
+                        });
+                }
+                else
+                    resolve(kvp.value);
             }
-            else
-                resolve(kvp.value);
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**
@@ -533,22 +603,27 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
      */
     async _getAppConfigProperty(key) {
         return new Promise((resolve, reject) => {
-            this._requestBody.key = key;
-            this._authConfig.getResourceToken("https://management.azure.com/")
-                .then((token) => {
-                    this._config.headers["Authorization"] = "Bearer " + token;
-                    return axios.post(this._url, this._requestBody, this._config);
-                })
-                .then((response) => {
-                    return this._resolveVaultReference(response.data);
-                })
-                .then((value) => {
-                    resolve(value);
-                })
-                .catch((exception) => {
-                    reject(CelastrinaError.newError("Error getting value for '" + key + "'.",
-                                                    exception.response.status, false));
-                });
+            try {
+                this._requestBody.key = key;
+                this._authConfig.getResourceToken("https://management.azure.com/")
+                    .then((token) => {
+                        this._config.headers["Authorization"] = "Bearer " + token;
+                        return axios.post(this._url, this._requestBody, this._config);
+                    })
+                    .then((response) => {
+                        return this._resolveVaultReference(response.data);
+                    })
+                    .then((value) => {
+                        resolve(value);
+                    })
+                    .catch((exception) => {
+                        reject(CelastrinaError.newError("Error getting value for '" + key + "'.",
+                            exception.response.status, false));
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**
@@ -587,12 +662,12 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
 class CachedProperty {
     /**
      * @param {number} [time=300]
-     * @param {DurationInputArg2} [unit="s"]
+     * @param {moment.DurationInputArg2} [unit="s"]
      */
     constructor(time = 300, unit = "s") {
         /** @type {*} */this._value = null;
         this._time = time;
-        /**@type{DurationInputArg2} */this._unit = unit;
+        /**@type{moment.DurationInputArg2} */this._unit = unit;
         /**@type{null|moment.Moment}*/this._expires = null;
         /**@type{null|moment.Moment}*/this._lastUpdate = null;
     }
@@ -614,8 +689,13 @@ class CachedProperty {
     /**@returns{Promise<void>}*/
     async clear() {
         return new Promise((resolve, reject) => {
-            this.value = null;
-            resolve();
+            try {
+                this.value = null;
+                resolve();
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
@@ -627,7 +707,7 @@ class CachePropertyHandler extends PropertyHandler {
     /**
      * @param {PropertyHandler} [handler=new AppSettingsPropertyHandler()]
      * @param {number} [defaultTime=300]
-     * @param {DurationInputArg2} [defaultUnit="s"]
+     * @param {moment.DurationInputArg2} [defaultUnit="s"]
      */
     constructor(handler = new AppSettingsPropertyHandler(), defaultTime = 300,
                 defaultUnit = "s") {
@@ -635,7 +715,7 @@ class CachePropertyHandler extends PropertyHandler {
         /**@type{PropertyHandler}*/this._handler = handler;
         this._cache = {};
         this._defaultTime = defaultTime;
-        this._defaultUnit = defaultUnit;
+        /**@type{moment.DurationInputArg2}*/this._defaultUnit = defaultUnit;
     }
     /**@returns{boolean}*/get loaded(){return this._handler.loaded;}
     /**@returns{PropertyHandler}*/get handler(){return this._handler;}
@@ -643,18 +723,23 @@ class CachePropertyHandler extends PropertyHandler {
     /**@returns{Promise<void>}*/
     async clear() {
         return new Promise((resolve, reject) => {
-            /**@type{Array.<Promise<void>>}*/let promises = [];
-            for(let prop in this._cache) {
-                let cached = this._cache[prop];
-                if(cached instanceof CachedProperty) promises.unshift(cached.clear());
+            try {
+                /**@type{Array.<Promise<void>>}*/let promises = [];
+                for (let prop in this._cache) {
+                    let cached = this._cache[prop];
+                    if (cached instanceof CachedProperty) promises.unshift(cached.clear());
+                }
+                Promise.all(promises)
+                    .then(() => {
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
             }
-            Promise.all(promises)
-                .then(() => {
-                    resolve();
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**@returns{Promise<void>}*/
@@ -664,7 +749,7 @@ class CachePropertyHandler extends PropertyHandler {
                 let time = await this._handler.getProperty(CachePropertyHandler.PROP_CACHE_DEFAULT_EXPIRE_TIME, 300);
                 let unit = await this._handler.getProperty(CachePropertyHandler.PROP_CACHE_DEFAULT_EXPIRE_UNIT, "s");
                 this._defaultTime = time;
-                this._defaultUnit = /**@type{DurationInputArg2}*/unit;
+                this._defaultUnit = /**@type{moment.DurationInputArg2}*/unit;
                 let override = await this._handler.getProperty(CachePropertyHandler.PROP_CACHE_DEFAULT_EXPIRE_OVERRIDE, null);
                 if(typeof override === "string") {
                     let tempovr = JSON.parse(override);
@@ -686,26 +771,31 @@ class CachePropertyHandler extends PropertyHandler {
         });
     }
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
      * @returns {Promise<void>}
      */
-    async initialize(context, config) {
+    async initialize(azcontext, config) {
         return new Promise((resolve, reject) => {
-            this._handler.initialize(context, config)
-                .then(() => {
-                    this._configure()
-                        .then(() => {
-                            context.log.verbose("[CachePropertyHandler.initialize(context, config, force)]: Caching configured.");
-                            resolve();
-                        })
-                        .catch((exception) => {
-                            reject(exception);
-                        });
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            try {
+                this._handler.initialize(azcontext, config)
+                    .then(() => {
+                        this._configure()
+                            .then(() => {
+                                azcontext.log.verbose("[CachePropertyHandler.initialize(context, config, force)]: Caching configured.");
+                                resolve();
+                            })
+                            .catch((exception) => {
+                                reject(exception);
+                            });
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**
@@ -714,9 +804,14 @@ class CachePropertyHandler extends PropertyHandler {
      */
     async getCacheInfo(key) {
         return new Promise((resolve, reject) => {
-            let cached = this._cache[key];
-            if(!(cached instanceof CachedProperty)) resolve(null);
-            else resolve(cached);
+            try {
+                let cached = this._cache[key];
+                if (!(cached instanceof CachedProperty)) resolve(null);
+                else resolve(cached);
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**
@@ -771,13 +866,18 @@ class Property {
      */
     async lookup(handler) {
         return new Promise((resolve, reject) => {
-            handler.getProperty(this._name, this._defaultValue)
-                .then((value) => {
-                    resolve(value);
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            try {
+                handler.getProperty(this._name, this._defaultValue)
+                    .then((value) => {
+                        resolve(value);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**
@@ -793,16 +893,21 @@ class Property {
      */
     load(handler) {
         return new Promise((resolve, reject) => {
-            this.lookup(handler)
-                .then((local) => {
-                    return this.resolve(local);
-                })
-                .then((value) => {
-                    resolve(value);
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            try {
+                this.lookup(handler)
+                    .then((local) => {
+                        return this.resolve(local);
+                    })
+                    .then((value) => {
+                        resolve(value);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
@@ -1001,24 +1106,21 @@ class PropertyLoader {
      */
     static async load(object, attribute, property, handler) {
         return new Promise((resolve, reject) => {
-            property.load(handler)
-                .then((value) => {
-                    object[attribute] = value;
-                    resolve();
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            try {
+                property.load(handler)
+                    .then((value) => {
+                        object[attribute] = value;
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
-}
-/** ModuleContext */
-class ModuleContext {
-    /**@param{BaseContext}context*/
-    constructor(context) {
-        this._context = context;
-    }
-    /**@returns{BaseContext}*/get context(){return this._context;}
 }
 /**@abstract*/
 class Module {
@@ -1028,23 +1130,11 @@ class Module {
     }
     /**@returns{string}*/get name(){return this._name;}
     /**
-     * @param {object} configuration
-     * @param {_AzureFunctionContext} context
-     * @param {PropertyHandler} properties
-     * @returns{Promise<Module>}
+     * @param {Configuration} config
+     * @returns{Promise<void>}
      * @abstract
      */
-    async initialize(configuration, context, properties) {
-        return new Promise((resolve, reject) => {
-            reject(CelastrinaError.newError("Not Implemented."));
-        });
-    }
-    /**
-     * @param {BaseContext} context
-     * @returns {Promise<ModuleContext>}
-     * @abstract
-     */
-    async newModuleContext(context) {
+    async install(config) {
         return new Promise((resolve, reject) => {
             reject(CelastrinaError.newError("Not Implemented."));
         });
@@ -1055,15 +1145,72 @@ class ModuleConfiguration extends ConfigurationItem {
     /**@type{string}*/static CONFIG_MODULES = "celastrinajs.core.configuration.modules";
     constructor() {
         super();
-        this._modules = [];
+        /**@type{empty|Array.<JsonProperty|Module>}*/this._modules = [];
     }
     /**@type{string}*/get key() {return ModuleConfiguration.CONFIG_MODULES}
     /**
      * @param {JsonProperty|Module} module
-     * @returns {Configuration}
+     * @returns {ModuleConfiguration}
      */
-    addModule(module){this._modules.unshift(module); return this;}
-    // TODO: Add init methods here and then update sentry for roles and authorizations.
+    addModule(module){
+        if(!(module instanceof Module) || !(module instanceof JsonProperty))
+            throw CelastrinaValidationError.newValidationError("Argument 'module' is required.", "module");
+        this._modules.unshift(module);
+        return this;
+    }
+    /**
+     * @param {Configuration} config
+     * @returns {Promise<void>}
+     */
+    async install(config) {
+        return new Promise((resolve, reject) => {
+            try {
+                /**@type{Array.<Promise<void>>}*/let promises = [];
+                for (/**@type{Module}*/const module of this._modules) {
+                    promises.unshift(module.install(config));
+                }
+                Promise.all(promises)
+                    .then(() => {
+                        /**@type{ModuleContext}*/let modcontext = config.getValue(ModuleContext.CONFIG_MODULE_CONTEXT);
+                        for (/**@type{Module}*/const module of this._modules) {
+                            modcontext.addModule(module);
+                        }
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+}
+/** ModuleContext */
+class ModuleContext {
+    /**@type{string}*/static CONFIG_MODULE_CONTEXT = "celastrinajs.core.configuration.modules.context";
+    constructor() {
+        this._modules = {};
+    }
+    /**
+     * @param {string} name
+     * @returns {Module}
+     */
+    getModule(name) {
+        let module = this._modules[name];
+        if(typeof module === "undefined" || module == null)
+            throw CelastrinaError.newError("Module '" + name + "' not found.", 404);
+        return module;
+    }
+    /**
+     * @param {Module} module
+     */
+    addModule(module) {
+        if(!(module instanceof Module))
+            throw CelastrinaValidationError.newValidationError("Argument 'module' is required.", "module");
+        this._modules[module.name] = module;
+    }
 }
 /** BaseSubject */
 class BaseSubject {
@@ -1087,7 +1234,12 @@ class BaseSubject {
      */
     async isInRole(role) {
         return new Promise((resolve, reject) => {
-            resolve(this._roles.includes(role));
+            try {
+                resolve(this._roles.includes(role));
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**@returns{{subject:string,roles:Array.<string>}}*/
@@ -1209,16 +1361,20 @@ class FunctionRole {
      */
     async authorize(action, context) {
         return new Promise((resolve, reject) => {
-            if(action === this._action) {
-                this._match.isMatch(context.subject.roles, this._roles)
-                    .then((inrole) => {
-                        resolve(inrole);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
+            try {
+                if (action === this._action) {
+                    this._match.isMatch(context.subject.roles, this._roles)
+                        .then((inrole) => {
+                            resolve(inrole);
+                        })
+                        .catch((exception) => {
+                            reject(exception);
+                        });
+                } else resolve(false);
             }
-            else resolve(false);
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
@@ -1236,11 +1392,16 @@ class FunctionRoleProperty extends JsonProperty {
      */
     static async _getMatchType(type) {
         return new Promise((resolve, reject) => {
-            switch (type) {
-                case "MatchAny": resolve(new MatchAny()); break;
-                case "MatchAll": resolve(new MatchAll()); break;
-                case "MatchNone": resolve(new MatchNone()); break;
-                default: reject(CelastrinaError.newError("Invalid Match Type."));
+            try {
+                switch (type) {
+                    case "MatchAny": resolve(new MatchAny()); break;
+                    case "MatchAll": resolve(new MatchAll()); break;
+                    case "MatchNone": resolve(new MatchNone()); break;
+                    default: reject(CelastrinaError.newError("Invalid Match Type."));
+                }
+            }
+            catch(exception) {
+                reject(exception);
             }
         });
     }
@@ -1280,22 +1441,86 @@ class FunctionRoleProperty extends JsonProperty {
         });
     }
 }
+/**
+ * FunctionRoleContext
+ * @author Robert R Murrell
+ */
+class FunctionRoleContext {
+    /**@type{string}*/static CONFIG_ROLE_CONTEXT = "celastrinajs.core.configuration.roles.context";
+    constructor() {
+        this._roles = {};
+        /**@type{null|RoleResolver}*/this._resolver = null;
+    }
+    /**
+     * @param {FunctionRole} role
+     */
+    addFunctionRole(role) {
+        this._roles[role.action] = role;
+    }
+    /**@param{RoleResolver}resolver*/set resolver(resolver) {this._resolver = resolver;}
+    /**@returns{RoleResolver}*/get resolver() {return this._resolver;}
+    /**
+     * @param {string} action
+     * @returns {Promise<null|FunctionRole>}
+     */
+    async getFunctionRole(action) {
+        return new Promise((resolve, reject) => {
+            try {
+                let role = this._roles[action];
+                if (typeof role === "undefined" || role == null)
+                    role = null;
+                resolve(role);
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+}
+/**@type{ConfigurationItem}*/
 class FunctionRoleConfiguration extends ConfigurationItem {
     /**@type{string}*/static CONFIG_ROLES = "celastrinajs.core.configuration.roles";
     constructor() {
         super();
         /**@type{Array.<JsonProperty|FunctionRole>}*/this._roles = [];
+        /**@type{null|JsonProperty|RoleResolver}*/this._resolver = null;
     }
     /**@type{string}*/get key() {return FunctionRoleConfiguration.CONFIG_ROLES};
-    /**@returns{Array<FunctionRole>}*/get roles(){return this._roles;}
     /**
      * @param {JsonProperty|FunctionRole} role
-     * @returns {Configuration}
+     * @returns {FunctionRoleConfiguration}
      */
     addFunctionRole(role){this._roles.unshift(role); return this;}
-    /**@type{Array.<FunctionRole>}*/get roles() {return this._roles};
+    /**
+     * @param {JsonProperty|RoleResolver} resolver
+     * @returns {FunctionRoleConfiguration}
+     */
+    setResolver(resolver) {this._resolver = resolver; return this;}
+    /**
+     * @param {Configuration} config
+     * @returns {Promise<void>}
+     */
+    async install(config) {
+        return new Promise((resolve, reject) => {
+            try {
+                /**@type{FunctionRoleContext}*/let rolecontext = config.getValue(FunctionRoleContext.CONFIG_ROLE_CONTEXT);
+                for(/**@type{FunctionRole}*/const role of this._roles) {
+                    rolecontext.addFunctionRole(role);
+                }
+                if(this._resolver == null)
+                    this._resolver = new SessionRoleResolver();
+                rolecontext.resolver = this._resolver;
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
 }
-/** Configuration */
+/**
+ * Configuration
+ * @author Robert R Murrell
+ */
 class Configuration extends EventEmitter {
     /**@type{string}*/static CONFIG_NAME    = "celastrinajs.core.configuration.name";
     /**@type{string}*/static CONFIG_HANDLER = "celastrinajs.core.configuration.handler";
@@ -1310,9 +1535,12 @@ class Configuration extends EventEmitter {
         else if(!(name instanceof StringProperty)) throw CelastrinaError.newError("Invalid configuration. Name must be string or StringProperty.");
         this._config = {};
         /**@type{boolean}*/this._loaded = false;
-        /**@type{null|_AzureFunctionContext}*/this._config[Configuration.CONFIG_CONTEXT] = null;
-        /**@type{null|JsonProperty|PropertyHandler}*/this._config[Configuration.CONFIG_HANDLER] = null;
-        /**@type{string|StringProperty}*/this._config[Configuration.CONFIG_NAME] = name;
+        this._config[Configuration.CONFIG_CONTEXT] = null;
+        this._config[Configuration.CONFIG_HANDLER] = null;
+        this._config[Configuration.CONFIG_NAME] = name;
+        this._config[ModuleContext.CONFIG_MODULE_CONTEXT] = new ModuleContext();
+        this._config[ResourceAuthorizationContext.CONFIG_RESOURCE_AUTH_CONTEXT] = new ResourceAuthorizationContext();
+        this._config[FunctionRoleContext.CONFIG_ROLE_CONTEXT] = new FunctionRoleContext();
     }
     /**@returns{string}*/get name(){return this._config[Configuration.CONFIG_NAME];}
     /**@returns{PropertyHandler}*/get properties() {return this._config[Configuration.CONFIG_HANDLER];}
@@ -1322,29 +1550,42 @@ class Configuration extends EventEmitter {
     /**@returns{Promise<void>}*/
     async bootstrapped() {
         return new Promise((resolve, reject) => {
-            if(!this._loaded) {
-                /**@type{Array.<Promise<Module>>}*/let promises = [];
-                /**@type{{_modules:Array.<Module>}}*/let modConfig = this.moduleConfig;
-                /**@type{Array.<Module>}*/let modules = modConfig._modules;
-                let context = this.context;
-                for(/**@type{Module}*/const module of modules) {
-                    context.log.verbose("[Configuration.bootstrapped()]: Loading module '" + module.name + "'");
-                    promises.unshift(module.initialize(modConfig, context, this.properties));
+            try {
+                if(!this._loaded) {
+                    /**@type{null|ResourceAuthorizationConfiguration}*/let authconfig = this.getValue(ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH);
+                    /**@type{null|FunctionRoleConfiguration}*/let roleconfig = this.getValue(FunctionRoleConfiguration.CONFIG_ROLES);
+                    /**@type{null|ModuleConfiguration}*/let modconfig = this.getValue(ModuleConfiguration.CONFIG_MODULES);
+                    /**@type{Array.<Promise<void>>}*/let promises = [];
+                    if (authconfig != null)
+                        promises.unshift(authconfig.install(this));
+                    if (roleconfig != null)
+                        promises.unshift(roleconfig.install(this));
+                    Promise.all(promises)
+                        .then(() => {
+                            if(modconfig != null) {
+                                modconfig.install(this)
+                                    .then(() => {
+                                        this._loaded = true;
+                                        resolve();
+                                    })
+                                    .catch((exception) => {
+                                        reject(exception);
+                                    });
+                            }
+                            else {
+                                this._loaded = true;
+                                resolve();
+                            }
+                        })
+                        .catch((exception) => {
+                            reject(exception);
+                        });
                 }
-                Promise.all(promises)
-                    .then((_modules) => {
-                        context.log.info("[Configuration.bootstrapped()]: " + promises.length + " module(s) loaded successfuly.");
-                        for(/**@type{Module}*/const _module of _modules){
-                            modConfig[_module.name] = _module;
-                        }
-                        this._loaded = true;
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
+                else resolve();
             }
-            else resolve();
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**
@@ -1358,8 +1599,10 @@ class Configuration extends EventEmitter {
      * @returns {Configuration}
      */
     setValue(key , value) {
-        if(typeof key !== "string" || key.trim().length === 0) throw CelastrinaError.newError("Invalid configuration. Key cannot be undefined, null or 0 length.");
-        this._config[key] = value; return this;
+        if(typeof key !== "string" || key.trim().length === 0)
+            throw CelastrinaError.newError("Invalid configuration. Key cannot be undefined, null or 0 length.");
+        this._config[key] = value;
+        return this;
     }
     /**
      * @param {ConfigurationItem} config
@@ -1383,30 +1626,30 @@ class Configuration extends EventEmitter {
      */
     _load(obj, promises) {
         if(typeof obj === "object") {
-            let _handler = this._config[Configuration.CONFIG_HANDLER];
             for(let prop in obj) {
                 let local = obj[prop];
                 if(typeof local !== "undefined" && local != null) {
-                    if(local instanceof Property) promises.unshift(PropertyLoader.load(obj, prop, local, _handler));
+                    if(local instanceof Property) promises.unshift(PropertyLoader.load(obj, prop, local,
+                                                                   this._config[Configuration.CONFIG_HANDLER]));
                     else this._load(local, promises);
                 }
             }
         }
     }
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {_AzureFunctionContext} azcontext
      * @returns {PropertyHandler}
      * @private
      */
-    _getPropertyHandler(context) {
+    _getPropertyHandler(azcontext) {
         /**@type{undefined|null|PropertyHandler}*/let _handler = this._config[Configuration.CONFIG_HANDLER];
         if(typeof _handler === "undefined" || _handler == null) {
-            context.log.info("[Configuration._getPropertyHandler(context)]: No property handler specified, defaulting to AppSettingsPropertyHandler.");
+            azcontext.log.info("[Configuration._getPropertyHandler(context)]: No property handler specified, defaulting to AppSettingsPropertyHandler.");
             _handler = new AppSettingsPropertyHandler();
             this._config[Configuration.CONFIG_HANDLER] = _handler;
         }
         else
-            context.log.info("[Configuration._getPropertyHandler(context)]: Loading PropertyHandler '" + _handler.constructor.name + "'.");
+            azcontext.log.info("[Configuration._getPropertyHandler(context)]: Loading PropertyHandler '" + _handler.constructor.name + "'.");
         return _handler;
     }
     /**
@@ -1421,18 +1664,18 @@ class Configuration extends EventEmitter {
         return overridden;
     }
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {_AzureFunctionContext} azcontext
      * @returns {Promise<void>}
      */
-    async initialize(context) {
+    async initialize(azcontext) {
         return new Promise((resolve, reject) => {
             try {
-                this._config[Configuration.CONFIG_CONTEXT] = context;
-                /**@type{PropertyHandler}*/let handler = this._getPropertyHandler(context);
+                this._config[Configuration.CONFIG_CONTEXT] = azcontext;
                 if(!this._loaded) {
-                    context.log.info("[Configuration.load(context)]: Initial configuration.");
+                    /**@type{PropertyHandler}*/let handler = this._getPropertyHandler(azcontext);
+                    azcontext.log.info("[Configuration.load(context)]: Initial configuration.");
                     if(this._isPropertyHandlerOverridden()) {
-                        context.log.info("[Configurationload(context)]: Local development override, using AppSettingsPropertyHandler.");
+                        azcontext.log.info("[Configurationload(context)]: Local development override, using AppSettingsPropertyHandler.");
                         handler = new AppSettingsPropertyHandler();
                         this._config[Configuration.CONFIG_HANDLER] = handler;
                     }
@@ -1440,7 +1683,7 @@ class Configuration extends EventEmitter {
                         handler = handler.initialize();
                         this._config[Configuration.CONFIG_HANDLER] = handler;
                     }
-                    handler.initialize(context, this._config)
+                    handler.initialize(azcontext, this._config)
                         .then(() => {
                             /**@type{Array.<Promise<void>>}*/let promises = [];
                             this._load(this, promises);
@@ -1449,12 +1692,12 @@ class Configuration extends EventEmitter {
                         .then(() => {
                             let _name = this._config[Configuration.CONFIG_NAME];
                             if(typeof _name !== "string" || _name.trim().length === 0) {
-                                context.log.error("[Configuration.load(context)]: Invalid Configuration. Name cannot be " +
+                                azcontext.log.error("[Configuration.load(context)]: Invalid Configuration. Name cannot be " +
                                     "undefined, null, or 0 length.");
                                 reject(CelastrinaError.newError("Invalid Configuration."));
                             }
                             else {
-                                context.log.info("[Configuration.load(context)]: Initial configuration successful.");
+                                azcontext.log.info("[Configuration.load(context)]: Initial configuration successful.");
                                 resolve();
                             }
                         })
@@ -1463,7 +1706,7 @@ class Configuration extends EventEmitter {
                         });
                 }
                 else {
-                    context.log.info("[Configuration.load(context)]: Configuration successful, aready loaded.");
+                    azcontext.log.info("[Configuration.load(context)]: Configuration successful, aready loaded.");
                     resolve();
                 }
             }
@@ -1525,13 +1768,18 @@ class Cryptography {
     /**@returns{Promise<void>}*/
     async initialize() {
         return new Promise((resolve, reject) => {
-            this._algorithm.initialize()
-                .then(() => {
-                    resolve();
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            try {
+                this._algorithm.initialize()
+                    .then(() => {
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**
@@ -1632,48 +1880,29 @@ class SessionRoleResolver extends RoleResolver {
      */
     async resolve(context) {
         return new Promise((resolve, reject) => {
-            let roles = context.getSessionProperty("roles", []);
-            context.subject.addRoles(roles);
-            resolve(context.subject);
+            try {
+                let roles = context.getSessionProperty("roles", []);
+                context.subject.addRoles(roles);
+                resolve(context.subject);
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
 }
 /** BaseSentry */
 class BaseSentry {
-    /**@type{string}*/static CONFIG_SENTRY_ROLES = "celastrinajs.core.sentry.roles";
-    /**@param{Configuration} config*/
-    constructor(config) {
-        this._configuration = config;
-    }
-    /**@returns{Object}*/get roles(){return this._configuration.getValue(BaseSentry.CONFIG_SENTRY_ROLES);}
-    /**@returns{Object}*/get authorizations(){return this._configuration.getValue(ResourceAuthorizationConfiguration.CONFIG_SENTRY_APPAUTH);}
-    /**
-     * @param {string} resource
-     * @param {undefined|null|string} [id]
-     * @returns {Promise<string>}
-     */
-    async getAuthorizationToken(resource, id = ResourceAuthorizationConfiguration.SENTRY_MANAGED_IDENTITY) {
-        return new Promise((resolve, reject) => {
-            /**@type{ResourceAuthorizationConfiguration}*/let _authmanager = this._configuration.getValue(ResourceAuthorizationConfiguration.CONFIG_SENTRY_APPAUTH);
-            if(typeof _authmanager === "undefined" || _authmanager == null)
-                reject(CelastrinaError.newError(""));
-            else {
-                _authmanager.getResourceToken(resource, id)
-                    .then((token) => {
-                        resolve(token);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-        });
+    constructor() {
+        /**@type{null|FunctionRoleContext}*/this._roleContext = null;
     }
     /**
      * @param {BaseContext} context
      * @returns {Promise<BaseSubject>}
      */
     async authenticate(context) {
-        return new Promise((resolve, reject) => {resolve(new BaseSubject(ResourceAuthorizationConfiguration.SENTRY_MANAGED_IDENTITY));});
+        return new Promise((resolve, reject) => {resolve(new BaseSubject(
+            ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY));});
     }
     /**
      * @param {BaseContext} context
@@ -1682,22 +1911,27 @@ class BaseSentry {
     async authorize(context) {
         return new Promise((resolve, reject) => {
             try {
-                const _roles = this._configuration.getValue(BaseSentry.CONFIG_SENTRY_ROLES);
-                let   _role  = _roles[context.action];
-                if(typeof _role === "undefined" || _role == null)
-                    resolve();
-                else {
-                    _role.authorize(context.action, context)
-                        .then((auth) => {
-                            if(auth)
-                                resolve();
-                            else
-                                reject(CelastrinaError.newError("Forbidden.", 403));
-                        })
-                        .catch((exception) => {
-                            reject(exception);
-                        });
-                }
+                this._roleContext.getFunctionRole(context.action)
+                    .then((role) => {
+                        if(role == null)
+                            resolve();
+                        else {
+                            role.authorize(context.action, context)
+                                .then((auth) => {
+                                    if(auth)
+                                        resolve();
+                                    else
+                                        reject(CelastrinaError.newError("Forbidden.", 403));
+                                })
+                                .catch((exception) => {
+                                    context.log("Save Lifecycle.", LOG_LEVEL.LEVEL_ERROR,"BaseSentry.authorize(context)");
+                                    reject(CelastrinaError.newError("Forbidden.", 403));
+                                });
+                        }
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
             }
             catch(exception) {
                 reject(exception);
@@ -1710,8 +1944,7 @@ class BaseSentry {
      */
     async setRoles(context) {
         return new Promise((resolve, reject) => {
-            const _roleresolver = this._configuration.getValue(RoleResolver.CONFIG_SENTRY_ROLE_RESOLVER);
-            _roleresolver.resolve(context)
+            this._roleContext.resolver.resolve(context)
                 .then((subject) => {
                     resolve(subject);
                 })
@@ -1721,93 +1954,34 @@ class BaseSentry {
         });
     }
     /**
-     * @param {FunctionRole} role
+     * @param {Configuration} config
      * @returns {Promise<void>}
-     * @private
      */
-    async _loadFunctionRole(role) {
+    async initialize(config) {
         return new Promise((resolve, reject) => {
             try {
-                const _roles = this._configuration.getValue(BaseSentry.CONFIG_SENTRY_ROLES);
-                _roles[role.action] = role;
-                resolve();
+                this._roleContext = config.getValue(FunctionRoleContext.CONFIG_ROLE_CONTEXT);
             }
             catch(exception) {
                 reject(exception);
             }
         });
     }
-    /**
-     * @returns {Promise<void>}
-     * @private
-     */
-    async _loadFunctionRoles() {
-        return new Promise((resolve, reject) => {
-            let _roles = this._configuration.roles;
-            if(_roles.length > 0) {
-                /**@type{Array.<Promise<void>>}*/let promises = [];
-                for(let roleobj of _roles) {
-                    promises.unshift(this._loadFunctionRole(roleobj));
-                }
-                Promise.all(promises)
-                    .then(() => {
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            else resolve();
-        });
-    }
-    /**@returns {Promise<void>}*/
-    async initialize() {
-        return new Promise((resolve, reject) => {
-            // Set up the local application id.
-            if(!this._configuration.loaded) {
-                this._configuration.context.log.verbose("[BaseSentry.initialize()]: Loading Sentry objects.");
-
-                // Check to see if the resource manager was specified.
-                let _authManager = this._configuration.getValue(ResourceAuthorizationManager.CONFIG_SENTRY_ROLE_RESOLVER, null);
-                if(_authManager == null)
-                    this._configuration.setValue(ResourceAuthorizationManager.CONFIG_SENTRY_ROLE_RESOLVER, new ResourceAuthorizationManager());
-                // Checking to see if the role resolver was specified.
-                let _roleresolver = this._configuration.getValue(RoleResolver.CONFIG_SENTRY_ROLE_RESOLVER, null);
-                if(_roleresolver == null)
-                    this._configuration.setValue(RoleResolver.CONFIG_SENTRY_ROLE_RESOLVER, new SessionRoleResolver());
-                // Checking to see if roles is specified.
-                let _roles = this._configuration.getValue(BaseSentry.CONFIG_SENTRY_ROLES, null);
-                if(_roles == null)
-                    this._configuration.setValue(BaseSentry.CONFIG_SENTRY_ROLES, {});
-
-                // Loading the function roles.
-                this._loadFunctionRoles()
-                    .then(() => {
-                        this._configuration.context.log.verbose("[BaseSentry.initialize()]: Sentry objects loaded successfully.");
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            else resolve();
-        });
-    }
 }
 class BaseContext {
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {_AzureFunctionContext} funccontext
      * @param {Configuration} config
      */
-    constructor(context, config) {
-        this._requestId = uuid4v();
-        this._context = context;
+    constructor(funccontext, config) {
+        /**@type{string}*/this._requestId = uuid4v();
+        /**@type{_AzureFunctionContext}*/this._funccontext = funccontext;
         /**@type{null|string}*/this._traceId = null;
-        this._monitor = false;
+        /**@type{boolean}*/this._monitor = false;
         /**@type{null|MonitorResponse}*/this._monitorResponse = null;
-        this._config = config;
+        /**@type{Configuration}*/this._config = config;
         /**@type{null|BaseSubject}*/this._subject = null;
-        this._action = "process";
+        /**@type{string}*/this._action = "process";
         /**@type{null|BaseSentry}*/this._sentry = null;
         /**@type{object}*/this._session = {};
     }
@@ -1816,19 +1990,23 @@ class BaseContext {
      */
     async initialize() {
         return new Promise((resolve, reject) => {
-            if(this._monitor) this._monitorResponse = new MonitorResponse();
-            /** @type {{traceparent: string}} */
-            let _traceContext = this._context.traceContext;
-            if(typeof _traceContext !== "undefined") this._traceId = _traceContext.traceparent;
-            resolve();
+            try {
+                if (this._monitor) this._monitorResponse = new MonitorResponse();
+                /** @type {{traceparent: string}} */
+                let _traceContext = this._funccontext.traceContext;
+                if (typeof _traceContext !== "undefined") this._traceId = _traceContext.traceparent;
+                resolve();
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
+    /**@returns{string}*/get name() {return this._config.name;}
     /**@returns{Configuration}*/get config(){return this._config;}
     /**@returns{boolean}*/get isMonitorInvocation(){return this._monitor;}
     /**@returns{null|MonitorResponse}*/get monitorResponse(){return this._monitorResponse;}
-    /**@returns{_AzureFunctionContext}*/get context(){return this._context;}
-    /**@returns{string}*/get name() {return this._config.name;}
-    /**@returns{string}*/get invocationId(){return this._context.bindingData.invocationId;}
+    /**@returns{string}*/get invocationId(){return this._funccontext.bindingData.invocationId;}
     /**@returns{string}*/get requestId(){return this._requestId;}
     /**@returns{BaseSentry}*/get sentry(){return this._sentry;}
     /**@param{BaseSentry} sentry*/set sentry(sentry){this._sentry = sentry;}
@@ -1837,13 +2015,16 @@ class BaseContext {
     /**@returns{string}*/get action(){return this._action;}
     /**@returns{object}*/get session(){return this._session;}
     /**@returns{PropertyHandler}*/get properties(){return this._config.properties;}
-    /**@param{string}name*/
-    getBinding(name){return this._context.bindings[name];}
+    /**@returns{_AzureFunctionContext}*/get functionContext(){return this._funccontext;}
+    /**@returns{ModuleContext}*/get moduleContext() {return this._config.getValue(ModuleContext.CONFIG_MODULE_CONTEXT);}
+    /**@return{ResourceAuthorizationContext}*/get authorizationContext() {return this._config.getValue(ResourceAuthorizationContext.CONFIG_RESOURCE_AUTH_CONTEXT);}
+    /**@return{FunctionRoleContext}*/get roleContext() {return this._config.getValue(FunctionRoleContext.CONFIG_ROLE_CONTEXT);}
+    /**@param{string}name*/getBinding(name){return this._funccontext.bindings[name];}
     /**
      * @param {string} name
      * @param {Object} value
      */
-    setBinding(name, value){this._context.bindings[name] = value;}
+    setBinding(name, value){this._funccontext.bindings[name] = value;}
     /**
      * @param {string} name
      * @param {*} [defaultValue=null]
@@ -1876,48 +2057,34 @@ class BaseContext {
      */
     async getProperty(key, defaultValue = null){return this._config.properties.getProperty(key, defaultValue);}
     /**
-     * @param {string} name
-     * @returns {Promise<ModuleContext>}
-     */
-    async getModule(name) {
-        return new Promise((resolve, reject) => {
-            let moduleConfig = this.config.moduleConfig;
-            let module = moduleConfig[name];
-            if(typeof module === "undefined" || module == null)
-                return null;
-            else
-                return module.newModuleContext(this);
-        });
-    }
-    /**
      * @param {Object} message
-     * @param {LOG_LEVEL} [level] default is verbose.
-     * @param {null|string} [subject] default is null.
+     * @param {number} [level=LOG_LEVEL.LEVEL_VERBOSE]
+     * @param {null|string} [subject=null]
      */
     log(message = "[NO MESSAGE]", level = LOG_LEVEL.LEVEL_VERBOSE, subject = null) {
         let out = "[" + this._config.name + "][LEVEL " + level + "]";
         if(typeof subject === "string") out += "[" + subject + "]";
-        out += "[" + this._context.invocationId + "]:" + "[" + this._requestId + "]:" + message.toString();
+        out += "[" + this._funccontext.invocationId + "]:" + "[" + this._requestId + "]:" + message.toString();
         switch(level) {
-            case LOG_LEVEL.LEVEL_INFO:this._context.log.info(out); break;
-            case LOG_LEVEL.LEVEL_ERROR:this._context.log.error(out); break;
-            case LOG_LEVEL.LEVEL_WARN:this._context.log.warn(out); break;
-            case LOG_LEVEL.LEVEL_VERBOSE:this._context.log.verbose(out); break;
-            default:this._context.log(out);
+            case LOG_LEVEL.LEVEL_INFO:this._funccontext.log.info(out); break;
+            case LOG_LEVEL.LEVEL_ERROR:this._funccontext.log.error(out); break;
+            case LOG_LEVEL.LEVEL_WARN:this._funccontext.log.warn(out); break;
+            case LOG_LEVEL.LEVEL_VERBOSE:this._funccontext.log.verbose(out); break;
+            default:this._funccontext.log(out);
         }
     }
     /**
      * @param {Object} object
-     * @param {LOG_LEVEL} [level] default is trace.
-     * @param {null|string} [subject] default is null.
+     * @param {number} [level=LOG_LEVEL.LEVEL_VERBOSE]
+     * @param {null|string} [subject=null]
      */
     logObjectAsJSON(object, level = LOG_LEVEL.LEVEL_VERBOSE, subject = null) {
         this.log(JSON.stringify(object), level, subject);
     }
     /**@param{null|Object}[value=null]*/
     done(value = null) {
-        if(value === null) this._context.done();
-        else this._context.done(value);
+        if(value === null) this._funccontext.done();
+        else this._funccontext.done(value);
     }
 }
 /**@abstract*/
@@ -1928,16 +2095,16 @@ class BaseFunction {
         /**@type{null|BaseContext}*/this._context = null;
     }
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {_AzureFunctionContext} azcontext
      * @param {Configuration} config
      * @returns {Promise<BaseSentry>}
      * @throws {CelastrinaError}
      */
-    async createSentry(context, config) {
+    async createSentry(azcontext, config) {
         return new Promise(
             (resolve, reject) => {
                 try {
-                    resolve(new BaseSentry(config));
+                    resolve(new BaseSentry());
                 }
                 catch(exception) {
                     reject(exception);
@@ -1945,14 +2112,14 @@ class BaseFunction {
             });
     }
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {_AzureFunctionContext} azcontext
      * @param {Configuration} config
      * @returns {Promise<BaseContext>}
      */
-    async createContext(context, config) {
+    async createContext(azcontext, config) {
         return new Promise((resolve, reject) => {
             try {
-                resolve(new BaseContext(context, config));
+                resolve(new BaseContext(azcontext, config));
             }
             catch(exception) {
                 reject(exception);
@@ -1960,42 +2127,47 @@ class BaseFunction {
         });
     }
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {_AzureFunctionContext} azcontext
      * @returns {Promise<void>}
      * @throws {CelastrinaError}
      */
-    async bootstrap(context) {
+    async bootstrap(azcontext) {
         return new Promise((resolve, reject) => {
-            /**@type{BaseSentry}*/let _sentry = null;
-            /**@type{BaseContext}*/let _context = null;
-            this._configuration.initialize(context)
-                .then(() => {
-                    // Create the sentry
-                    return this.createSentry(context, this._configuration);
-                })
-                .then((_basesentry) => {
-                    // Create the sentry
-                    _sentry = _basesentry;
-                    return this.createContext(context, this._configuration);
-                })
-                .then((_basecontext) => {
-                    _context = _basecontext;
-                    return _sentry.initialize();
-                })
-                .then(() => {
-                    return _context.initialize();
-                })
-                .then(() => {
-                    this._context = _context;
-                    this._context.sentry = _sentry;
-                    return this._configuration.bootstrapped();
-                })
-                .then(() => {
-                    resolve();
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            try {
+                /**@type{BaseSentry}*/let _sentry = null;
+                /**@type{BaseContext}*/let _context = null;
+                this._configuration.initialize(azcontext)
+                    .then(() => {
+                        // Create the sentry
+                        return this.createSentry(azcontext, this._configuration);
+                    })
+                    .then((_basesentry) => {
+                        // Create the context
+                        _sentry = _basesentry;
+                        return this.createContext(azcontext, this._configuration);
+                    })
+                    .then((_basecontext) => {
+                        _context = _basecontext;
+                        return _context.initialize();
+                    })
+                    .then(() => {
+                        return _sentry.initialize(this._configuration);
+                    })
+                    .then(() => {
+                        this._context = _context;
+                        this._context.sentry = _sentry;
+                        return this._configuration.bootstrapped();
+                    })
+                    .then(() => {
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**
@@ -2009,17 +2181,22 @@ class BaseFunction {
      */
     async authenticate(context) {
         return new Promise((resolve, reject) => {
-            context.sentry.authenticate(context)
-                .then((subject) => {
-                    context.subject = subject;
-                    return context.sentry.setRoles(context);
-                })
-                .then((subject) => {
-                    resolve(subject);
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            try {
+                context.sentry.authenticate(context)
+                    .then((subject) => {
+                        context.subject = subject;
+                        return context.sentry.setRoles(context);
+                    })
+                    .then((subject) => {
+                        resolve(subject);
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**
@@ -2028,13 +2205,18 @@ class BaseFunction {
      */
     async authorize(context) {
         return new Promise((resolve, reject) => {
-            context.sentry.authorize(context)
-                .then(() => {
-                    resolve();
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            try {
+                context.sentry.authorize(context)
+                    .then(() => {
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**
@@ -2048,9 +2230,14 @@ class BaseFunction {
      */
     async monitor(context) {
         return new Promise((resolve, reject) => {
-            context.log("No monitoring checks performed, monitor not overridden.", LOG_LEVEL.LEVEL_VERBOSE, "BaseFunction.monitor(context)");
-            context.monitorResponse.addPassedDiagnostic("default", "Monitor not overridden.");
-            resolve();
+            try {
+                context.log("No monitoring checks performed, monitor not overridden.", LOG_LEVEL.LEVEL_VERBOSE, "BaseFunction.monitor(context)");
+                context.monitorResponse.addPassedDiagnostic("default", "Monitor not overridden.");
+                resolve();
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**
@@ -2167,16 +2354,16 @@ class BaseFunction {
 }
 module.exports = {
     CelastrinaError: CelastrinaError, CelastrinaValidationError: CelastrinaValidationError, ResourceAuthorization: ResourceAuthorization,
+    ResourceAuthorizationContext: ResourceAuthorizationContext, ResourceAuthorizationConfiguration: ResourceAuthorizationConfiguration,
     ManagedIdentityAuthorization: ManagedIdentityAuthorization, AppRegistrationAuthorization: AppRegistrationAuthorization,
-    ResourceAuthorizationConfiguration: ResourceAuthorizationConfiguration, Vault: Vault, PropertyHandler: PropertyHandler,
+    Vault: Vault, PropertyHandler: PropertyHandler,
     AppSettingsPropertyHandler: AppSettingsPropertyHandler,
     AppConfigPropertyHandler: AppConfigPropertyHandler, CachedProperty: CachedProperty, CachePropertyHandler: CachePropertyHandler,
-    CacheHandlerProperty: HandlerProperty, VaultAppSettingHandlerProperty: VaultAppSettingHandlerProperty,
     AppConfigHandlerProperty: AppConfigHandlerProperty, Property: Property, StringProperty: StringProperty,
-    BooleanProperty: BooleanProperty, NumericProperty: NumericProperty, JsonProperty: JsonProperty, ModuleContext: ModuleContext,
+    BooleanProperty: BooleanProperty, NumericProperty: NumericProperty, JsonProperty: JsonProperty, ModuleConfiguration: ModuleConfiguration, ModuleContext: ModuleContext,
     Module: Module, ApplicationAuthorization: AppRegistrationAuthorization, ApplicationAuthorizationProperty: ApplicationAuthorizationProperty,
     ValueMatch: ValueMatch, MatchAny: MatchAny, MatchAll: MatchAll, MatchNone: MatchNone, FunctionRole: FunctionRole,
-    FunctionRoleProperty: FunctionRoleProperty, Configuration: Configuration, Algorithm: Algorithm, AES256Algorithm: AES256Algorithm,
+    FunctionRoleProperty: FunctionRoleProperty, FunctionRoleConfiguration: FunctionRoleConfiguration, FunctionRoleContext: FunctionRoleContext, Configuration: Configuration, Algorithm: Algorithm, AES256Algorithm: AES256Algorithm,
     Cryptography: Cryptography, LOG_LEVEL: LOG_LEVEL, BaseSubject: BaseSubject, MonitorResponse: MonitorResponse, RoleResolver: RoleResolver,
     BaseSentry: BaseSentry, BaseContext: BaseContext, BaseFunction: BaseFunction
 };

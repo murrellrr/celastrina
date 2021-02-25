@@ -23,26 +23,25 @@
  */
 "use strict";
 const {CelastrinaError, CelastrinaValidationError, ResourceAuthorization, ManagedIdentityAuthorization, AppRegistrationAuthorization,
-       ResourceAuthorizationConfiguration, Vault, PropertyHandler, AppSettingsPropertyHandler, VaultAppSettingPropertyHandler,
+       ResourceAuthorizationContext, ResourceAuthorizationConfiguration, Vault, PropertyHandler, AppSettingsPropertyHandler, VaultAppSettingPropertyHandler,
        AppConfigPropertyHandler, CachedProperty, CachePropertyHandler,
        CacheHandlerProperty, VaultAppSettingHandlerProperty, AppConfigHandlerProperty, Property, JsonProperty,
        StringProperty, BooleanProperty, NumericProperty, ValueMatch, MatchAny, MatchAll, MatchNone, ModuleContext,
-       Module, FunctionRole, Configuration, Algorithm, AES256Algorithm, Cryptography, LOG_LEVEL, BaseSubject,
+       Module, FunctionRole, FunctionRoleConfiguration, ModuleConfiguration, FunctionRoleContext, Configuration, Algorithm, AES256Algorithm, Cryptography, LOG_LEVEL, BaseSubject,
        MonitorResponse, RoleResolver, BaseSentry, BaseContext, BaseFunction, ApplicationAuthorizationProperty,
        FunctionRoleProperty} = require("./Core");
 module.exports = {
     CelastrinaError: CelastrinaError, CelastrinaValidationError: CelastrinaValidationError, ResourceAuthorization: ResourceAuthorization,
+    ResourceAuthorizationContext: ResourceAuthorizationContext, ResourceAuthorizationConfiguration: ResourceAuthorizationConfiguration,
     ManagedIdentityAuthorization: ManagedIdentityAuthorization, AppRegistrationAuthorization: AppRegistrationAuthorization,
-    ResourceAuthorizationConfiguration: ResourceAuthorizationConfiguration, Vault: Vault, PropertyHandler: PropertyHandler,
+    Vault: Vault, PropertyHandler: PropertyHandler,
     AppSettingsPropertyHandler: AppSettingsPropertyHandler,
-    VaultAppSettingPropertyHandler: VaultAppSettingPropertyHandler, AppConfigPropertyHandler: AppConfigPropertyHandler,
-    CachedProperty: CachedProperty, CachePropertyHandler: CachePropertyHandler, CacheHandlerProperty: CacheHandlerProperty,
-    VaultAppSettingHandlerProperty: VaultAppSettingHandlerProperty, AppConfigHandlerProperty: AppConfigHandlerProperty,
-    Property: Property, StringProperty: StringProperty, BooleanProperty: BooleanProperty, NumericProperty: NumericProperty,
-    JsonProperty: JsonProperty, ModuleContext: ModuleContext, Module: Module,
-    ApplicationAuthorizationProperty: ApplicationAuthorizationProperty, ValueMatch: ValueMatch, MatchAny: MatchAny, MatchAll: MatchAll,
-    MatchNone: MatchNone, FunctionRole: FunctionRole, FunctionRoleProperty: FunctionRoleProperty, Configuration: Configuration,
-    Algorithm: Algorithm, AES256Algorithm: AES256Algorithm, Cryptography: Cryptography, LOG_LEVEL: LOG_LEVEL,
-    BaseSubject: BaseSubject, MonitorResponse: MonitorResponse, RoleResolver: RoleResolver, BaseSentry: BaseSentry,
-    BaseContext: BaseContext, BaseFunction: BaseFunction
+    AppConfigPropertyHandler: AppConfigPropertyHandler, CachedProperty: CachedProperty, CachePropertyHandler: CachePropertyHandler,
+    AppConfigHandlerProperty: AppConfigHandlerProperty, Property: Property, StringProperty: StringProperty,
+    BooleanProperty: BooleanProperty, NumericProperty: NumericProperty, JsonProperty: JsonProperty, ModuleConfiguration: ModuleConfiguration, ModuleContext: ModuleContext,
+    Module: Module, ApplicationAuthorization: AppRegistrationAuthorization, ApplicationAuthorizationProperty: ApplicationAuthorizationProperty,
+    ValueMatch: ValueMatch, MatchAny: MatchAny, MatchAll: MatchAll, MatchNone: MatchNone, FunctionRole: FunctionRole,
+    FunctionRoleProperty: FunctionRoleProperty, FunctionRoleConfiguration: FunctionRoleConfiguration, FunctionRoleContext: FunctionRoleContext, Configuration: Configuration, Algorithm: Algorithm, AES256Algorithm: AES256Algorithm,
+    Cryptography: Cryptography, LOG_LEVEL: LOG_LEVEL, BaseSubject: BaseSubject, MonitorResponse: MonitorResponse, RoleResolver: RoleResolver,
+    BaseSentry: BaseSentry, BaseContext: BaseContext, BaseFunction: BaseFunction
 };

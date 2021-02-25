@@ -437,20 +437,19 @@ class HTTPContext extends BaseContext {
      */
     constructor(context, config) {
         super(context, config);
-        // Setting up the default response.
-        this._context.res = {status: 200,headers:{"Content-Type": "text/html; charset=ISO-8859-1"},body:"<html lang=\"en\"><head><title>" + config.name + "</title></head><body>200, Success</body></html>"};
-        this._action = this._context.req.method.toLowerCase();
+        this._funccontext.res = {status: 200,headers:{"Content-Type": "text/html; charset=ISO-8859-1"},body:"<html lang=\"en\"><head><title>" + config.name + "</title></head><body>200, Success</body></html>"};
+        this._action = this._funccontext.req.method.toLowerCase();
         this._cookies = {};
     }
     /**@returns{string}*/get method(){return this._action;}
-    /**@returns{string}*/get url(){return this._context.req.originalUrl;}
-    /**@returns{_AzureFunctionRequest}*/get request(){return this._context.req;}
-    /**@returns{_AzureFunctionResponse}*/get response(){return this._context.res;}
-    /**@returns{Object}*/get params(){return this._context.req.params;}
-    /**@returns{Object}*/get query(){return this._context.req.query;}
-    /**@returns{string}*/get raw(){return this._context.req.rawBody;}
-    /**@returns{_Body}*/get requestBody(){return this._context.req.body;}
-    /**@returns{_Body}*/get responseBody(){return this._context.res.body;}
+    /**@returns{string}*/get url(){return this._funccontext.req.originalUrl;}
+    /**@returns{_AzureFunctionRequest}*/get request(){return this._funccontext.req;}
+    /**@returns{_AzureFunctionResponse}*/get response(){return this._funccontext.res;}
+    /**@returns{Object}*/get params(){return this._funccontext.req.params;}
+    /**@returns{Object}*/get query(){return this._funccontext.req.query;}
+    /**@returns{string}*/get raw(){return this._funccontext.req.rawBody;}
+    /**@returns{_Body}*/get requestBody(){return this._funccontext.req.body;}
+    /**@returns{_Body}*/get responseBody(){return this._funccontext.res.body;}
     /**
      * @returns {Promise<void>}
      * @private
@@ -458,8 +457,8 @@ class HTTPContext extends BaseContext {
     async _setRequestId() {
         return new Promise((resolve, reject) => {
             try {
-                let id = this._context.req.query["requestId"];
-                if(typeof id === "undefined" || id == null) id = this._context.req.headers["x-celastrina-requestId"];
+                let id = this._funccontext.req.query["requestId"];
+                if(typeof id === "undefined" || id == null) id = this._funccontext.req.headers["x-celastrina-requestId"];
                 if(typeof id === "string") this._requestId = id;
                 resolve();
             }
@@ -479,8 +478,8 @@ class HTTPContext extends BaseContext {
                 if(this.method === "trace")
                     monitor = true;
                 else {
-                    monitor = this._context.req.query["monitor"];
-                    if (typeof monitor === "undefined" || monitor == null) monitor = this._context.req.headers["x-celastrina-monitor"];
+                    monitor = this._funccontext.req.query["monitor"];
+                    if (typeof monitor === "undefined" || monitor == null) monitor = this._funccontext.req.headers["x-celastrina-monitor"];
                     monitor = (typeof monitor === "string") ? (monitor === "true") : false;
                 }
                 this._monitor = monitor;
@@ -559,7 +558,7 @@ class HTTPContext extends BaseContext {
      * @return {null|string}
      */
     getQuery(name, defaultValue = null) {
-        let qry = this._context.req.query[name];
+        let qry = this._funccontext.req.query[name];
         if(typeof qry !== "string") return defaultValue;
         else return qry;
     }
@@ -569,7 +568,7 @@ class HTTPContext extends BaseContext {
      * @return {null|string}
      */
     getRequestHeader(name, defaultValue = null) {
-        let header = this._context.req.headers[name];
+        let header = this._funccontext.req.headers[name];
         if(typeof header !== "string") return defaultValue;
         else return header;
     }
@@ -579,7 +578,7 @@ class HTTPContext extends BaseContext {
      * @return {string}
      */
     getResponseHeader(name, defaultValue = null) {
-        let header = this._context.res.headers[name];
+        let header = this._funccontext.res.headers[name];
         if(typeof header !== "string") return defaultValue;
         else return header;
     }
@@ -587,22 +586,22 @@ class HTTPContext extends BaseContext {
      * @param {string} name
      * @param {string} value
      */
-    setResponseHeader(name, value){this._context.res.headers[name] = value;}
+    setResponseHeader(name, value){this._funccontext.res.headers[name] = value;}
     /**
      * @param {*} [body]
      * @param {number} [status] The HTTP status code, default is 200.
      */
     send(body = null, status = 200) {
-        this._context.res.status = status;
-        this._context.res.headers["X-celastrina-request-uuid"] = this._requestId;
+        this._funccontext.res.status = status;
+        this._funccontext.res.headers["X-celastrina-request-uuid"] = this._requestId;
         if(status !== 204) {
             if (body === null) {
                 let content = this._name + ", " + status + ".";
-                this._context.res.body = "<html lang=\"en\"><head><title>" + content + "</title></head><body>" + content + "</body></html>";
+                this._funccontext.res.body = "<html lang=\"en\"><head><title>" + content + "</title></head><body>" + content + "</body></html>";
             }
             else body = body.toString();
         }
-        this._context.res.body = body;
+        this._funccontext.res.body = body;
     }
     /**@param{null|Error|CelastrinaError|*}[error=null]*/
     sendValidationError(error = null) {
@@ -614,11 +613,11 @@ class HTTPContext extends BaseContext {
      * @param {null|Object} [body]
      */
     sendRedirect(url, body = null) {
-        this._context.res.headers["Location"] = url;
+        this._funccontext.res.headers["Location"] = url;
         this.send(body, 302);
     }
     /**@param{string}url*/
-    sendRedirectForwardBody(url) {this.sendRedirect(url, this._context.req.body);}
+    sendRedirectForwardBody(url) {this.sendRedirect(url, this._funccontext.req.body);}
     /**@param{null|Error|CelastrinaError|*}[error=null]*/
     sendServerError(error = null) {
         if(!(error instanceof CelastrinaError)) error = CelastrinaError.newError("Server Error.");
@@ -1105,7 +1104,7 @@ class JSONHTTPContext extends HTTPContext {
      */
     constructor(context, config) {
         super(context, config);
-        this._context.res = {status: 200, headers: {"Content-Type":"application/json; charset=utf-8","X-celastrina-requestId":this._requestId}, body: {name: this._config.name,code: 200,message:"success"}};
+        this._funccontext.res = {status: 200, headers: {"Content-Type":"application/json; charset=utf-8","X-celastrina-requestId":this._requestId}, body: {name: this._config.name,code: 200,message:"success"}};
     }
     /**
      * @brief Sets the body of the response and invoked done on the context.
@@ -1113,9 +1112,9 @@ class JSONHTTPContext extends HTTPContext {
      * @param {number} [status] The HTTP status code, default is 200.
      */
     send(body = null, status = 200) {
-        this._context.res.status = status;
-        this._context.res.headers["X-celastrina-requestId"] = this._requestId;
-        this._context.res.body = body;
+        this._funccontext.res.status = status;
+        this._funccontext.res.headers["X-celastrina-requestId"] = this._requestId;
+        this._funccontext.res.body = body;
     }
 }
 /**

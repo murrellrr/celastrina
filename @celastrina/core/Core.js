@@ -30,7 +30,7 @@
 
 const axios  = require("axios").default;
 const moment = require("moment");
-const uuid4v = require("uuid");
+const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const {EventEmitter} = require('events');
 const {TokenResponse, AuthenticationContext} = require("adal-node");
@@ -1449,7 +1449,7 @@ class FunctionRoleContext {
     /**@type{string}*/static CONFIG_ROLE_CONTEXT = "celastrinajs.core.configuration.roles.context";
     constructor() {
         this._roles = {};
-        /**@type{null|RoleResolver}*/this._resolver = null;
+        /**@type{null|RoleResolver}*/this._resolver = new DefaultRoleResolver();
     }
     /**
      * @param {FunctionRole} role
@@ -1508,8 +1508,9 @@ class FunctionRoleConfiguration extends ConfigurationItem {
                     rolecontext.addFunctionRole(role);
                 }
                 if(this._resolver == null)
-                    this._resolver = new SessionRoleResolver();
+                    this._resolver = new DefaultRoleResolver();
                 rolecontext.resolver = this._resolver;
+                resolve();
             }
             catch(exception) {
                 reject(exception);
@@ -1608,7 +1609,7 @@ class Configuration extends EventEmitter {
      * @param {ConfigurationItem} config
      * @returns {Configuration}
      */
-    setConfigurationItem(config) {this.set(config.key, config); return this;};
+    setConfigurationItem(config) {this.setValue(config.key, config); return this;};
     /**
      * @param {string} key
      * @param {*} [defaultValue=null]
@@ -1891,6 +1892,24 @@ class SessionRoleResolver extends RoleResolver {
         });
     }
 }
+/**@type{RoleResolver}*/
+class DefaultRoleResolver extends RoleResolver {
+    constructor(){super();}
+    /**
+     * @param {BaseContext} context
+     * @returns {Promise<BaseSubject>}
+     */
+    async resolve(context) {
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(context.subject);
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+}
 /** BaseSentry */
 class BaseSentry {
     constructor() {
@@ -1961,6 +1980,7 @@ class BaseSentry {
         return new Promise((resolve, reject) => {
             try {
                 this._roleContext = config.getValue(FunctionRoleContext.CONFIG_ROLE_CONTEXT);
+                resolve();
             }
             catch(exception) {
                 reject(exception);
@@ -1970,12 +1990,12 @@ class BaseSentry {
 }
 class BaseContext {
     /**
-     * @param {_AzureFunctionContext} funccontext
+     * @param {_AzureFunctionContext} azcontext
      * @param {Configuration} config
      */
-    constructor(funccontext, config) {
-        /**@type{string}*/this._requestId = uuid4v();
-        /**@type{_AzureFunctionContext}*/this._funccontext = funccontext;
+    constructor(azcontext, config) {
+        /**@type{string}*/this._requestId = uuidv4();
+        /**@type{_AzureFunctionContext}*/this._funccontext = azcontext;
         /**@type{null|string}*/this._traceId = null;
         /**@type{boolean}*/this._monitor = false;
         /**@type{null|MonitorResponse}*/this._monitorResponse = null;
@@ -1991,10 +2011,12 @@ class BaseContext {
     async initialize() {
         return new Promise((resolve, reject) => {
             try {
-                if (this._monitor) this._monitorResponse = new MonitorResponse();
+                if(this._monitor)
+                    this._monitorResponse = new MonitorResponse();
                 /** @type {{traceparent: string}} */
                 let _traceContext = this._funccontext.traceContext;
-                if (typeof _traceContext !== "undefined") this._traceId = _traceContext.traceparent;
+                if(typeof _traceContext !== "undefined")
+                    this._traceId = _traceContext.traceparent;
                 resolve();
             }
             catch(exception) {
@@ -2101,15 +2123,14 @@ class BaseFunction {
      * @throws {CelastrinaError}
      */
     async createSentry(azcontext, config) {
-        return new Promise(
-            (resolve, reject) => {
-                try {
-                    resolve(new BaseSentry());
-                }
-                catch(exception) {
-                    reject(exception);
-                }
-            });
+        return new Promise((resolve, reject) => {
+            try {
+                resolve(new BaseSentry());
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
     }
     /**
      * @param {_AzureFunctionContext} azcontext
@@ -2134,15 +2155,13 @@ class BaseFunction {
     async bootstrap(azcontext) {
         return new Promise((resolve, reject) => {
             try {
-                /**@type{BaseSentry}*/let _sentry = null;
-                /**@type{BaseContext}*/let _context = null;
+                /**@type{null|BaseSentry}*/let _sentry = null;
+                /**@type{null|BaseContext}*/let _context = null;
                 this._configuration.initialize(azcontext)
                     .then(() => {
-                        // Create the sentry
                         return this.createSentry(azcontext, this._configuration);
                     })
                     .then((_basesentry) => {
-                        // Create the context
                         _sentry = _basesentry;
                         return this.createContext(azcontext, this._configuration);
                     })

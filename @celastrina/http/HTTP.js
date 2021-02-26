@@ -65,12 +65,12 @@ class JwtSubject extends BaseSubject {
      */
     constructor(sub, aud, iss, iat, exp, nonce, token, roles = []) {
         super(sub, roles);
-        this._nonce = nonce;
-        this._audience = aud;
-        this._issuer = iss;
-        this._issued = moment.unix(iat);
-        this._expires = moment.unix(exp);
-        this._token = token;
+        /**@type{string}*/this._nonce = nonce;
+        /**@type{string}*/this._audience = aud;
+        /**@type{string}*/this._issuer = iss;
+        /**@type{moment.Moment}*/this._issued = moment.unix(iat);
+        /**@type{moment.Moment}*/this._expires = moment.unix(exp);
+        /**@type{string}*/this._token = token;
     }
     /**@returns{string}*/get nonce(){return this._nonce;}
     /**@returns{string}*/get audience() {return this._audience;}
@@ -80,20 +80,17 @@ class JwtSubject extends BaseSubject {
     /**@returns{string}*/get token(){return this._token;}
     /**@returns{boolean}*/isExpired(){return moment().isSameOrAfter(this._expires);}
     /**@param{string[]}headers*/
-    setAuthorizationHeader(headers) {
-        if(typeof headers !== "undefined" && headers != null) headers["Authorization"] = "Bearer " + this.token;
-    }
     /**
      * @param {undefined|null|object}headers
      * @param {string}[name="Authorization]
-     * @param {string}[tokenType="Bearer "]
+     * @param {string}[authType="Bearer "]
      * @returns {Promise<object>}
      */
-    async setAuthorizationHeader(headers, name = "Authorization", tokenType = "Bearer ") {
+    async setAuthorizationHeader(headers, name = "Authorization", authType = "Bearer ") {
         return new Promise((resolve, reject) => {
             if(typeof headers === "undefined" || headers == null)
                 headers = {};
-            headers[name] = tokenType + this.token;
+            headers[name] = authType + this.token;
             resolve(headers);
         });
     }
@@ -118,15 +115,6 @@ class JwtSubject extends BaseSubject {
         json.issued = this._issued.format();
         json.expires = this._expires.format();
         return json;
-    }
-    /**
-     * @param {JwtSubject} source
-     * @return JwtSubject
-     */
-    copy(source) {
-        //sub, aud, iss, iat, exp, nonce, token
-        if(source instanceof JwtSubject) return new JwtSubject(source.id, source._audience, source._issuer, source._issued.unix(), source._expires.unix(), source._nonce, source._token);
-        else throw CelastrinaError.newError("Source must be an instance of JwtUser.")
     }
     /**
      * @param {string} token
@@ -642,11 +630,12 @@ class JwtSentry extends BaseSentry {
         /**@type{JwtConfiguration}*/this._jwtconfig = null;
     }
     /**
+     * @param {Configuration} config
      * @returns {Promise<void>}
      */
-    async initialize() {
+    async initialize(config) {
         return new Promise((resolve, reject) => {
-            super.initialize()
+            super.initialize(config)
                 .then(() => {
                     try {
                         // Going to initialize the acceptable issuers.

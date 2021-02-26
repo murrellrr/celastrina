@@ -32,7 +32,7 @@
 
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock")
 const {CelastrinaError, CelastrinaValidationError, StringProperty, Configuration, ModuleContext, FunctionRoleContext,
-       ResourceAuthorizationContext} = require("../Core");
+       ResourceAuthorizationConfiguration, ResourceAuthorizationContext} = require("../Core");
 const assert = require("assert");
 
 describe("Configuration", () => {

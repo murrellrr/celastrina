@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Robert R Murrell.
+ * Copyright (c) 2021, KRI, LLC.
  *
  * MIT License
  *
@@ -27,3 +27,9 @@
  * @license MIT
  */
 "use strict";
+
+const {TimerContext, TimerFunction} = require("./Timer");
+
+module.exports = {
+    TimerContext: TimerContext, TimerFunction: TimerFunction
+};

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Robert R Murrell.
+ * Copyright (c) 2021, KRI, LLC.
  *
  * MIT License
  *
@@ -21,241 +21,189 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+/**
+ * @author Robert R Murrell
+ * @copyright Robert R Murrell
+ * @license MIT
+ */
 "use strict";
-const moment    = require("moment");
-const validator = require("validator").default;
-const uuidv4    = require("uuid/v4");
-const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, BaseContext, BaseFunction} = require("@celastrina/core");
 
+const moment = require("moment");
+const { v4: uuidv4 } = require('uuid');
+const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Configuration,
+      BaseContext, BaseFunction} = require("@celastrina/core");
+
+/**
+ * @typedef {_AzureFunctionContext} _AzureMessageContext
+ * @property {string} message
+ */
+
+const MESSAGE_ENVIRONMENT = {
+    PRODUCTION: 0,
+    MONITOR: 1,
+    TEST: 2,
+    DEVELOPMENT: 3
+};
+/**
+ * Header
+ * @author Robert R Murrell
+ */
 class Header {
     /**
-     * @brief
-     * @param {string} topic
+     * @param {string} resource
      * @param {string} action
-     * @param {null|string} [domain=null]
-     * @param {string} [uid=uuidv4()]
-     * @param {moment.Moment} [timestamp=moment()]
+     * @param {string} source
+     * @param {moment.Moment} [published=moment()]
      * @param {null|moment.Moment} [expires=null]
-     * @param {string} [environment="development"]
+     * @param {string} [messageId=uuidv4()]
+     * @param {string} [traceId=uuidv4()]
+     * @param {number} [environment=MESSAGE_ENVIRONMENT.PRODUCTION]
      */
-    constructor(topic, action, domain = null, uid = uuidv4(),
-                timestamp = moment(), expires = null,
-                environment = "development") {
-        if(typeof topic !== "string" || topic.trim().length === 0)
-            throw CelastrinaValidationError.newValidationError("Invalid Header. Topic is required.",
-                                                               "Header._topic");
-        if(typeof action !== "string" || action.trim().length === 0)
-            throw CelastrinaValidationError.newValidationError("Invalid Header. Action is required.",
-                                                               "Header._action");
-        this._uid = uid;
-        this._timestamp = timestamp;
-        this._expires = expires;
-        this._environment = environment;
-        this._domain = domain;
-        this._topic = topic;
-        this._action = action;
+    constructor(resource, action, source, published = moment(), expires = null,
+                messageId = uuidv4(), traceId = uuidv4(), environment = MESSAGE_ENVIRONMENT.PRODUCTION) {
+        /**@type{string}*/this._resource = resource;
+        /**@type{string}*/this._action = action;
+        /**@type{string}*/this._source = source;
+        /**@type{moment.Moment}*/this._published = published;
+        /**@type{string}*/this._messageId = messageId;
+        /**@type{string}*/this._traceId = traceId;
+        /**@type{number}*/this._environment = environment;
+        if(expires == null)
+            /**@type{moment.Moment}*/this._expires = moment(published).add(1, "year");
+        else
+            /**@type{moment.Moment}*/this._expires = expires;
     }
-    /**@returns{boolean}*/get development(){return this._environment === "development";}
-    /**@returns{string}*/get uid(){return this._uid;}
-    /**@returns{moment.Moment}*/get timestam(){return this._timestamp;}
-    /**@returns{null|moment.Moment}*/get expires(){return this._expires;}
-    /**@param{null|moment.Moment}expires*/set expires(expires){this._expires = expires;}
-    /**@returns{string}*/get environment(){return this._environment;}
-    /**@returns{null|string}*/get domain(){return this._domain;}
-    /**@returns{string}*/get topic(){return this._topic;}
-    /**@returns{string}*/get action(){return this._action;}
-    /**
-     * @param {number} [amount=24]
-     * @param {string} [increment="h"]
-     */
-    setExpiresIn(amount = 24, increment = "h") {
-        if(this._expires == null)
-            this._expires = moment();
-        this._expires.add(amount, increment);
+    /**@returns{string}*/get resource() {return this._resource;}
+    /**@returns{string}*/get action() {return this._action;}
+    /**@returns{string}*/get source() {return this._source;}
+    /**@type{moment.Moment}*/get published() {return this._published;}
+    /**@type{moment.Moment}*/get expires() {return this._expires;}
+    /**@returns{string}*/get messageId() {return this._messageId}
+    /**@returns{string}*/get traceId() {return this._traceId}
+    /**@type{number}*/get environment() {return this._environment;}
+    /**@type{boolean}*/get isExpired() {
+        let now = moment();
+        return now.isBefore(this._expires);
     }
-    /**
-     * @returns {Promise<boolean>}
-     */
-    async isExpired() {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(moment().isSameOrAfter(this._expires));
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
-    /**
-     * @param {null|string} domain
-     * @returns {Promise<boolean>}
-     */
-    async isInDomain(domain) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(domain === this._domain);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
-    /**
-     * @param {null|string} topic
-     * @returns {Promise<boolean>}
-     */
-    async isTopic(topic) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(topic === this._topic);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
-    /**
-     * @param {null|string} action
-     * @returns {Promise<boolean>}
-     */
-    async isAction(action) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(action === this._action);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
-    /**
-     * @param {string} topic
-     * @param {string} action
-     * @param {null|string} [domain=null]
-     * @returns {Promise<boolean>}
-     */
-    async isMessage(topic, action, domain = null) {
-        return new Promise((resolve, reject) => {
-            Promise.all([this.isTopic(topic), this.isAction(action), this.isInDomain(domain)])
-                .then((results) => {
-                    resolve((results[0] && results[1] && results[2]));
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
-        });
-    }
-    /**
-     * @param {object} source
-     */
-    static create(source) {
-        if(typeof source === "undefined" || source == null)
-            throw CelastrinaValidationError.newValidationError("Invalid Header. Source is required.", "Header");
-        if(source instanceof Header) return source;
-        if(source.hasOwnProperty("_action") && (typeof source._action !== "string"))
-            throw CelastrinaValidationError.newValidationError("Invalid Header. _action is required.", "Header._action");
-        if(source.hasOwnProperty("_topic") && (typeof source._topic !== "string"))
-            throw CelastrinaValidationError.newValidationError("Invalid Header. _topic is required.", "Header._topic");
-        return new Header(source._topic, source._action, source._action, source._uid, source._timestamp, source._expires, source._environment);
-    }
-}
-class Message {
-    constructor(body = null, header = null) {
-        /**@type{*}*/this._body   = body;
-        /**@type{null|Header}*/this._header = header;
-    }
-    /**@type{Header}*/get header(){return this._header;};
-    /**@param{Header}header*/set header(header){this._header = header;};
-    /**@type{*}*/get body(){return this._body;};
-    /**@param{*}body*/set body(body){this._body = body;};
 }
 /**
- * @type {BaseContext}
+ * Message
+ * @author Robert R Murrell
+ */
+class Message {
+    /**
+     * @param {Header} header
+     * @param {*} payload
+     */
+    constructor(header, payload) {
+        /**@type{Header}*/this._header = header;
+        this._payload = payload;
+    }
+    /**@returns{Header}*/get header() {return this._header;}
+    /**@returns{*}*/get payload() {return this._payload;}
+    /**
+     * @param {Message} message
+     * @returns {Promise<Message>}
+     */
+    static async marshall(message) {
+        return new Promise((resolve, reject) => {
+            //
+        });
+    }
+    /**
+     * @param {string} object
+     * @returns {Promise<Message>}
+     */
+    static async unmarshall(object) {
+        return new Promise((resolve, reject) => {
+            //
+        });
+    }
+}
+/**
+ * MessageContext
+ * @extends {BaseContext}
+ * @author Robert R Murrell
  */
 class MessageContext extends BaseContext {
     /**
-     * @param {_AzureFunctionContext} context
-     * @param {string} name
-     * @param {PropertyHandler} properties
+     * @param {Object} azcontext
+     * @param {Configuration} config
+     * @param {null|Message} message
      */
-    constructor(context, name, properties) {
-        super(context, name, properties);
-        /**@type{Message}*/this._message = null;
+    constructor(azcontext, config, message) {
+        super(azcontext, config);
+        /**@type{null|Message}*/this._message = message;
     }
-    /**@type{Message}*/get message(){return this._message;};
+    /**@type{string}*/get raw() {return this._funccontext.message;}
+    /**@type{null|Message}*/get message() {return this._message;}
     /**
-     * @brief {Configuration} configration
-     * @returns {Promise<BaseContext>}
+     * @param {Message} message
+     * @returns {Promise<void>}
      */
-    async initialize(configuration) {
+    async send(message) {
         return new Promise((resolve, reject) => {
-            super.initialize(configuration)
-                .then((context) => {
-                    // Gonna pull the message out of the binding and do all the checks.
-
-                    resolve(context);
+            //
+        });
+    }
+}
+/**
+ * MessageFunction
+ * @extends {BaseFunction}
+ * @abstract
+ * @author Robert R Murrell
+ */
+class MessageFunction extends BaseFunction {
+    /**@param {Configuration} configuration*/
+    constructor(configuration) {super(configuration);}
+    /**
+     * @param {_AzureMessageContext} azcontext
+     * @param {Configuration} config
+     * @returns {Promise<MessageContext>}
+     */
+    async createContext(azcontext, config) {
+        return new Promise((resolve, reject) => {
+            Message.unmarshall(azcontext.message)
+                .then((message) => {
+                    resolve(new MessageContext(azcontext, config, message));
                 })
                 .catch((exception) => {
                     reject(exception);
                 });
         });
     }
-}
-/**@type{BaseFunction}*/
-class MessageFunction extends BaseFunction {
-    constructor(config){super(config);}
     /**
-     * @param {_AzureFunctionContext} context
-     * @param {Configuration} config
-     * @returns {Promise<MessageContext & BaseContext>}
+     * @param {BaseContext | MessageContext} context
+     * @returns {Promise<void>}
+     * @private
      */
-    async createContext(context, config) {
+    async _onMessage(context) {
         return new Promise((resolve, reject) => {
-            try {
-                resolve(new MessageContext(context, config.name, config.properties));
-            }
-            catch(exception) {
-                reject(exception);
-            }
+            context.log("Not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "Timer._tick(context)");
+            reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
-    /**
-     * @param {MessageContext} context
-     * @returns {Promise<void>}
-     * @abstract
-     */
-    async received(context) {return new Promise((resolve, reject) => {resolve();});}
-    /**
-     * @param {MessageContext} context
-     * @returns {Promise<boolean>}
-     * @abstract
-     */
-    async expired(context) {return new Promise((resolve, reject) => {resolve(true);});}
     /**
      * @param {BaseContext | MessageContext} context
      * @returns {Promise<void>}
      */
-    async process(/**@type{MessageContext}*/context) {
+    async process(context) {
         return new Promise((resolve, reject) => {
-            if(context.message.header.isExpired()) {
-                this.expired(context)
-                    .then((drop) => {
-                        if(drop) {
-                            context.log("Message expired at '" + context.message.header.expires.format() + ". Dropping message.", LOG_LEVEL.LEVEL_WARN, "MessageFunction.process(context)");
-                            reject(CelastrinaError.newError("Message Expired.", 400, true));
-                        }
-                        else
-                            resolve();
+            context.log("Processing message " + context.message.header.messageId + ".", LOG_LEVEL.LEVEL_INFO, "MessageFunction.process(context)");
+            if(context.message.header.isExpired) {
+                context.log("Message " + context.message.header.messageId + " is expired, dropping.", LOG_LEVEL.LEVEL_WARN, "MessageFunction.process(context)");
+                resolve();
+            }
+            else {
+                this._onMessage(context)
+                    .then(() => {
+                        resolve();
                     })
                     .catch((exception) => {
                         reject(exception);
                     });
             }
-            else {
-                // TODO: Checking to see if this is a monitor message.
-                // TODO: Checking to see if there is a message filter, then applying it.
-                resolve();
-            }
         });
     }
 }
+

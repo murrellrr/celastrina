@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Robert R Murrell.
+ * Copyright (c) 2021, KRI, LLC.
  *
  * MIT License
  *
@@ -339,7 +339,7 @@ class AppRegistrationAuthorization extends ResourceAuthorization {
                                 expires: moment(response.expiresOn)
                             };
                             this._tokens[token.resource] = token;
-                            resolve(token.token);
+                            resolve(token);
                         }
                     });
             }
@@ -2088,8 +2088,8 @@ class BaseContext {
         if(typeof subject === "string") out += "[" + subject + "]";
         out += "[" + this._funccontext.invocationId + "]:" + "[" + this._requestId + "]:" + message.toString();
         switch(level) {
-            case LOG_LEVEL.LEVEL_INFO:this._funccontext.log.info(out); break;
             case LOG_LEVEL.LEVEL_ERROR:this._funccontext.log.error(out); break;
+            case LOG_LEVEL.LEVEL_INFO:this._funccontext.log.info(out); break;
             case LOG_LEVEL.LEVEL_WARN:this._funccontext.log.warn(out); break;
             case LOG_LEVEL.LEVEL_VERBOSE:this._funccontext.log.verbose(out); break;
             default:this._funccontext.log(out);

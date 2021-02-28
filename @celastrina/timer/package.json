@@ -25,6 +25,7 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/core": "^1.2.1"
+    "@celastrina/core": "^1.4.99",
+    "moment": "^2.29.1"
   }
 }

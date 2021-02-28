@@ -1,25 +1,21 @@
 {
-  "name": "@celastrina/http",
+  "name": "@celastrina/semaphore",
   "version": "1.4.991",
-  "description": "HTTP Function Package for Celastrina",
+  "description": "Semaphore Locking across cloud zones and regions.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/murrellrr/celastrina.git",
-    "directory": "@celastrina/http"
+    "directory": "@celastrina/semaphore"
   },
   "keywords": [
-    "Microsoft",
     "Azure",
     "Function",
-    "Javascript",
-    "Node.js",
-    "HTTP",
-    "JWT",
-    "Recaptcha"
+    "Celatrina",
+    "Semaphore"
   ],
   "author": "Robert R Murrell",
   "license": "MIT",
@@ -28,10 +24,7 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/core": "^1.4.99",
-    "adal-node": "^0.2.2",
     "axios": "^0.21.1",
-    "jsonwebtoken": "^8.5.1",
-    "moment": "^2.29.1"
+    "uuid": "^8.3.2"
   }
 }

@@ -27,5 +27,3 @@
  * @license MIT
  */
 "use strict";
-
-

@@ -28,4 +28,9 @@
  */
 "use strict";
 
+const {MESSAGE_ENVIRONMENT, Header, Message, MessageContext, MessageFunction} = require("./Message");
 
+module.exports = {
+    MESSAGE_ENVIRONMENT: MESSAGE_ENVIRONMENT, Header: Header, Message: Message, MessageContext: MessageContext,
+    MessageFunction: MessageFunction
+};

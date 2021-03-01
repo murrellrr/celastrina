@@ -207,3 +207,7 @@ class MessageFunction extends BaseFunction {
     }
 }
 
+module.exports = {
+    MESSAGE_ENVIRONMENT: MESSAGE_ENVIRONMENT, Header: Header, Message: Message, MessageContext: MessageContext,
+    MessageFunction: MessageFunction
+};

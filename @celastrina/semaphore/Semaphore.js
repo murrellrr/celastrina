@@ -29,7 +29,7 @@
 "use strict";
 
 const axios  = require("axios").default;
-const { v4: uuidv4 } = require('uuid');
+const moment = require("moment");
 const {CelastrinaError, ResourceAuthorization} = require("@celastrina/core");
 
 /**
@@ -71,35 +71,37 @@ class BlobSemaphore extends Semaphore {
      * @param {ResourceAuthorization} auth
      * @param {string} [id=uuidv4()]
      */
-    constructor(name, container, blob, auth, id = uuidv4()) {
+    constructor(name, container, blob, auth) {
         super();
         /**@type{string}*/this._name = name;
         /**@type{string}*/this._container = container;
         /**@type{ResourceAuthorization}*/this._auth = auth;
-        /**@type{string}*/this._id = id;
+        /**@type{null|string}*/this._id = null;
         /**@type{boolean}*/this._isLocked = false;
-        let params = new URLSearchParams();
-        params.append("comp", "lease");
-        this._endpoint = "https://" + name + ".blob.core.windows.net/" + container + "/" + blob;
-        this._config = {
-            /**@type{URLSearchParams}*/params: params,
-            headers: {"Authorization": "", "x-ms-date": "", "x-ms-lease-action": "",
-                      "x-ms-client-request-id":id}
-        }
+        /**@type{URLSearchParams}*/this._params = new URLSearchParams();
+        this._params.append("comp", "lease");
+        /**@type{string}*/this._endpoint = "https://" + name + ".blob.core.windows.net/" + container + "/" + blob;
     }
-    /**@returns{boolean}*/get isLocked() {return this._isLocked;}
+    /**@returns{boolean}*/get isLocked() {return this._id != null;}
     /**
      * @param {number} [timeout=0]
      * @returns {Promise<void>}
      */
-    async lock(timeout = 0) {
+    async lock(timeout = 60) {
         return new Promise((resolve, reject) => {
-            this._auth.getToken("")
+            this._auth.getToken("https://storage.azure.com/")
                 .then((token) => {
-                    return axios.put(this._endpoint, this._config);
+                    let headers = {};
+                    headers["Authorization"] = "Bearer "  + token;
+                    headers["x-ms-version"] = "2020-06-12";
+                    headers["x-ms-lease-action"] = "aquire";
+                    headers["x-ms-lease-duration"] = timeout;
+                    headers["x-ms-date"] = moment().utc().format("ddd, D MMM YYYY HH:mm:ss [GMT]");
+                    return axios.put(this._endpoint, null, {params: this._params, headers: headers});
                 })
                 .then((response) => {
-                    //
+                    this._id = response.headers["x-ms-lease-id"];
+                    resolve();
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -111,9 +113,21 @@ class BlobSemaphore extends Semaphore {
      */
     async unlock() {
         return new Promise((resolve, reject) => {
-            this._auth.getToken("")
+            this._auth.getToken("https://storage.azure.com/")
                 .then((token) => {
-                    //
+                    if(this._id != null) {
+                        let headers = {};
+                        headers["Authorization"] = token;
+                        headers["x-ms-lease-action"] = "release";
+                        headers["x-ms-lease-id"] = this._id;
+                        headers["x-ms-date"] = moment().utc().format("ddd, D MMM YYYY HH:mm:ss [GMT]");
+                        return axios.put(this._endpoint, null, {params: this._params, headers: headers});
+                    }
+                    else reject(CelastrinaError.newError("Not locked."));
+                })
+                .then((response) => {
+                    this._id = null;
+                    resolve();
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -121,3 +135,7 @@ class BlobSemaphore extends Semaphore {
         });
     }
 }
+
+module.exports = {
+    Semaphore: Semaphore, BlobSemaphore: BlobSemaphore
+};

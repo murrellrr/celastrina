@@ -27,3 +27,9 @@
  * @license MIT
  */
 "use strict";
+
+const {Semaphore, BlobSemaphore} = require("./Semaphore");
+
+module.exports = {
+    Semaphore: Semaphore, BlobSemaphore: BlobSemaphore
+};

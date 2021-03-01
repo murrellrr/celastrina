@@ -24,7 +24,9 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
+    "@celastrina/core": "^1.4.99",
     "axios": "^0.21.1",
+    "moment": "^2.29.1",
     "uuid": "^8.3.2"
   }
 }

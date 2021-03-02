@@ -69,18 +69,12 @@ class BlobSemaphore extends Semaphore {
      * @param {string} container
      * @param {string} blob
      * @param {ResourceAuthorization} auth
-     * @param {string} [id=uuidv4()]
      */
     constructor(name, container, blob, auth) {
         super();
-        /**@type{string}*/this._name = name;
-        /**@type{string}*/this._container = container;
         /**@type{ResourceAuthorization}*/this._auth = auth;
         /**@type{null|string}*/this._id = null;
-        /**@type{boolean}*/this._isLocked = false;
-        /**@type{URLSearchParams}*/this._params = new URLSearchParams();
-        this._params.append("comp", "lease");
-        /**@type{string}*/this._endpoint = "https://" + name + ".blob.core.windows.net/" + container + "/" + blob;
+        /**@type{string}*/this._endpoint = "https://" + name + ".blob.core.windows.net/" + container + "/" + blob + "?comp=lease";
     }
     /**@returns{boolean}*/get isLocked() {return this._id != null;}
     /**
@@ -89,15 +83,18 @@ class BlobSemaphore extends Semaphore {
      */
     async lock(timeout = 60) {
         return new Promise((resolve, reject) => {
+            if(timeout === 0 || timeout < -1)
+                timeout = -1;
+            else if(timeout > 60)
+                timeout = 60;
             this._auth.getToken("https://storage.azure.com/")
                 .then((token) => {
                     let headers = {};
                     headers["Authorization"] = "Bearer "  + token;
-                    headers["x-ms-version"] = "2020-06-12";
-                    headers["x-ms-lease-action"] = "aquire";
-                    headers["x-ms-lease-duration"] = timeout;
-                    headers["x-ms-date"] = moment().utc().format("ddd, D MMM YYYY HH:mm:ss [GMT]");
-                    return axios.put(this._endpoint, null, {params: this._params, headers: headers});
+                    headers["x-ms-version"] = "2017-11-09";
+                    headers["x-ms-lease-action"] = "acquire";
+                    headers["x-ms-lease-duration"] = 60;
+                    return axios.put(this._endpoint, null, {headers: headers});
                 })
                 .then((response) => {
                     this._id = response.headers["x-ms-lease-id"];
@@ -117,11 +114,11 @@ class BlobSemaphore extends Semaphore {
                 .then((token) => {
                     if(this._id != null) {
                         let headers = {};
-                        headers["Authorization"] = token;
+                        headers["Authorization"] = "Bearer "  + token;
+                        headers["x-ms-version"] = "2017-11-09";
                         headers["x-ms-lease-action"] = "release";
                         headers["x-ms-lease-id"] = this._id;
-                        headers["x-ms-date"] = moment().utc().format("ddd, D MMM YYYY HH:mm:ss [GMT]");
-                        return axios.put(this._endpoint, null, {params: this._params, headers: headers});
+                        return axios.put(this._endpoint, null, {headers: headers});
                     }
                     else reject(CelastrinaError.newError("Not locked."));
                 })
@@ -135,7 +132,6 @@ class BlobSemaphore extends Semaphore {
         });
     }
 }
-
 module.exports = {
     Semaphore: Semaphore, BlobSemaphore: BlobSemaphore
 };

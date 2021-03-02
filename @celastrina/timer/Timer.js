@@ -58,10 +58,11 @@ class TimerContext extends BaseContext {
         */
        constructor(azcontext, config) {
               super(azcontext, config);
-              /**@type{moment.Moment}*/this._lastRun = moment(azcontext.tick.scheduleStatus.last);
-              /**@type{moment.Moment}*/this._lastUpdated = moment(azcontext.tick.scheduleStatus.lastUpdated);
-              /**@type{moment.Moment}*/this._nextRun = moment(azcontext.tick.scheduleStatus.next);
-              /**@type{boolean}*/this._isPastDue = azcontext.tick.isPastDue;
+              let tick = azcontext.bindings.tick;
+              /**@type{moment.Moment}*/this._lastRun = moment(tick.scheduleStatus.last);
+              /**@type{moment.Moment}*/this._lastUpdated = moment(tick.scheduleStatus.lastUpdated);
+              /**@type{moment.Moment}*/this._nextRun = moment(tick.scheduleStatus.next);
+              /**@type{boolean}*/this._isPastDue = tick.isPastDue;
        }
        /**@returns{boolean}*/get isPastDue() {return this._isPastDue;}
        /**@returns{moment.Moment}*/get lastRun() {return this._lastRun;}
@@ -76,7 +77,7 @@ class TimerFunction extends BaseFunction {
        /**@param{Configuration}configuration*/
        constructor(configuration) {super(configuration);}
        /**
-        * @param {_AzureTimerContext} context
+        * @param {_AzureFunctionContext | _AzureTimerContext} context
         * @param {Configuration} config
         * @returns {Promise<BaseContext & HTTPContext>}
         */

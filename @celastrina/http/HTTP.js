@@ -137,6 +137,7 @@ class JwtSubject extends BaseSubject {
         });
     }
 }
+/**Issuer*/
 class Issuer {
     /**
      * @param {string|StringProperty} name
@@ -641,7 +642,7 @@ class JwtSentry extends BaseSentry {
                         // Going to initialize the acceptable issuers.
                         this._jwtconfig = this._configuration.getValue(JwtConfiguration.CONFIG_JWT);
                         if(this._jwtconfig == null) {
-                            this._configuration.context.log.error("JwtConfiguration missing or invalid.");
+                            this._configuration.context.log.error("[JwtSentry.initialize(config)]: JwtConfiguration missing or invalid.");
                             reject(CelastrinaError.newError("Invalid configration."));
                         }
                         else resolve();

@@ -34,7 +34,6 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const {EventEmitter} = require('events');
 const {TokenResponse, AuthenticationContext} = require("adal-node");
-
 /**
  * @typedef _ManagedResourceToken
  * @property {string} access_token
@@ -50,46 +49,7 @@ const {TokenResponse, AuthenticationContext} = require("adal-node");
  * @property {moment.Moment} expires
  */
 /**
- * @typedef _AzureFunctionRequest
- * @property {Object} headers
- * @property {Object} params
- * @property {Object} body
- */
-/**
- * @typedef _AzureFunctionResponse
- * @property {number} status
- * @property {Object} headers
- * @property {Object} body
- */
-/**
- * @typedef {Object} _Body
- */
-/**
- * @typedef _AzureLog
- * @function error
- * @function info
- * @function warn
- * @function verbose
- */
-/**
  * @typedef _AzureFunctionContext
- * @property {Object & {req: Object, res: Object}} bindings
- * @property {Object & {invocationId: string}} bindingData
- * @property {function(*)|_AzureLog} log
- * @property {function()|function(*)} done
- * @property {function(string)} log
- * @property {string} invocationId
- * @property {Object} traceContext
- */
-/**
- * @typedef {_AzureFunctionContext} _AzureHTTPFunctionContext
- * @property {_AzureFunctionResponse} res
- * @property {_AzureFunctionRequest} req
- * @property {Object} params
- * @property {Object} query
- * @property {string} method
- * @property {string} originalUrl
- * @property {string} rawBody
  */
 /**
  * @typedef _Credential
@@ -224,9 +184,8 @@ class ResourceAuthorization {
     async getToken(resource) {
         return new Promise((resolve, reject) => {
             try {
-                /** @type {_CelastrinaToken} */
-                let token = this._tokens[resource];
-                if (typeof token !== "object") {
+                /** @type{_CelastrinaToken}*/let token = this._tokens[resource];
+                if(typeof token !== "object" || moment().isSameOrAfter(token.expires)) {
                     this._refresh(resource)
                         .then((rtoken) => {
                             resolve(rtoken);
@@ -235,20 +194,8 @@ class ResourceAuthorization {
                             reject(exception);
                         });
                 }
-                else {
-                    let exp = token.expires;
-                    let now = moment();
-                    if (exp.isSameOrAfter(now))
-                        this._refresh(resource)
-                            .then((rtoken) => {
-                                resolve(rtoken);
-                            })
-                            .catch((exception) => {
-                                reject(exception);
-                            });
-                    else
-                        resolve(token.token);
-                }
+                else
+                    resolve(token.token);
             }
             catch(exception) {
                 reject(exception);
@@ -260,17 +207,10 @@ class ResourceAuthorization {
 class ManagedIdentityAuthorization extends ResourceAuthorization {
     /**@type{string}*/static SYSTEM_MANAGED_IDENTITY = "celastrinajs.core.system.managed.identity";
     /**
-     * @param {Array.<null|string>} [resources=null]
-     * @param {string}[apiVersion="2017-09-01"]
+     * @param {null|Array.<string>} [resources=null]
      */
-    constructor(apiVersion = "2017-09-01", resources = null) {
+    constructor(resources = null) {
         super(ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY, resources);
-        this._apiVersion = apiVersion;
-        let params = new URLSearchParams();
-        params.append("resource", null);
-        params.append("api-version", this._apiVersion);
-        this._config = {/**@type{URLSearchParams}*/params: params, headers: {"secret": process.env["IDENTITY_HEADER"]}};
-        this._endpoint = process.env["IDENTITY_ENDPOINT"];
     }
     /**
      * @param {string} resource
@@ -280,15 +220,14 @@ class ManagedIdentityAuthorization extends ResourceAuthorization {
     async _resolve(resource) {
         return new Promise((resolve, reject) => {
             try {
-                this._config.params.set("resource", resource);
-                axios.get(this._endpoint, this._config)
+                axios.get(process.env["IDENTITY_ENDPOINT"] + "?api-version=2019-08-01&resource=" + resource,
+                    {headers: {"x-identity-header": process.env["IDENTITY_HEADER"]}})
                     .then((response) => {
                         let token = {
                             resource: resource,
                             token: response.data.access_token,
                             expires: moment(response.data.expires_on)
                         };
-                        this._tokens[token.resource] = token;
                         resolve(token);
                     })
                     .catch((exception) => {
@@ -338,7 +277,6 @@ class AppRegistrationAuthorization extends ResourceAuthorization {
                                 token: response.accessToken,
                                 expires: moment(response.expiresOn)
                             };
-                            this._tokens[token.resource] = token;
                             resolve(token);
                         }
                     });
@@ -1943,7 +1881,7 @@ class BaseSentry {
                                         reject(CelastrinaError.newError("Forbidden.", 403));
                                 })
                                 .catch((exception) => {
-                                    context.log("Save Lifecycle.", LOG_LEVEL.LEVEL_ERROR,"BaseSentry.authorize(context)");
+                                    context.log("Exception authorizing role '" + role + "' for action '" + context.action + "', exception: " + exception, LOG_LEVEL.LEVEL_ERROR,"BaseSentry.authorize(context)");
                                     reject(CelastrinaError.newError("Forbidden.", 403));
                                 });
                         }
@@ -2250,8 +2188,7 @@ class BaseFunction {
     async monitor(context) {
         return new Promise((resolve, reject) => {
             try {
-                context.log("No monitoring checks performed, monitor not overridden.", LOG_LEVEL.LEVEL_VERBOSE, "BaseFunction.monitor(context)");
-                context.monitorResponse.addPassedDiagnostic("default", "Monitor not overridden.");
+                context.monitorResponse.addPassedDiagnostic("default", "Monitor not implemented.");
                 resolve();
             }
             catch(exception) {
@@ -2297,60 +2234,49 @@ class BaseFunction {
                     // Execute the rest of the lifecycle.
                     this.initialize(this._context)
                         .then(() => {
-                            this._context.log("Authenticate Lifecycle.", LOG_LEVEL.LEVEL_VERBOSE, "BaseFunction.execute(context)");
                             return this.authenticate(this._context);
                         })
                         .then((subject) => {
-                            this._context.log("Authorize Lifecycle.", LOG_LEVEL.LEVEL_VERBOSE, "BaseFunction.execute(context)");
                             this._context.subject = subject;
                             return this.authorize(this._context);
                         })
                         .then(() => {
-                            this._context.log("Validate Lifecycle.", LOG_LEVEL.LEVEL_VERBOSE, "BaseFunction.execute(context)");
                             return this.validate(this._context);
                         })
                         .then(() => {
-                            this._context.log("Load Lifecycle.", LOG_LEVEL.LEVEL_VERBOSE,"BaseFunction.execute(context)");
                             return this.load(this._context);
                         })
                         .then(() => {
-                            if(this._context.isMonitorInvocation) {
-                                this._context.log("Monitor Lifecycle.", LOG_LEVEL.LEVEL_VERBOSE,"BaseFunction.execute(context)");
+                            if(this._context.isMonitorInvocation)
                                 return this.monitor(this._context);
-                            }
-                            else {
-                                this._context.log("Process Lifecycle.", LOG_LEVEL.LEVEL_VERBOSE,"BaseFunction.execute(context)");
+                            else
                                 return this.process(this._context);
-                            }
                         })
                         .then(() => {
-                            this._context.log("Save Lifecycle.", LOG_LEVEL.LEVEL_VERBOSE,"BaseFunction.execute(context)");
                             return this.save(this._context);
                         })
                         .catch((exception) => {
-                            this._context.log("Exception Lifecycle.", LOG_LEVEL.LEVEL_ERROR,"BaseFunction.execute(context)");
+                            this._context.log("Exception Lifecycle invoked from Monitor or Process lifecycle: " + exception, LOG_LEVEL.LEVEL_ERROR,"BaseFunction.execute(context)");
                             return this.exception(this._context, exception);
                         })
                         .then(() => {
-                            this._context.log("Terminate Lifecycle.", LOG_LEVEL.LEVEL_VERBOSE, "BaseFunction.execute(context)");
                             return this.terminate(this._context);
                         })
                         .then(() => {
-                            this._context.log("Function lifecycle complete.", LOG_LEVEL.LEVEL_VERBOSE,"BaseFunction.execute(context)");
                             this._context.done();
                         })
                         .catch((exception) => {
-                            this._context.log("Critical Exception Lifecycle.", LOG_LEVEL.LEVEL_ERROR, "BaseFunction.execute(context)");
+                            this._context.log("Critical Exception Lifecycle invoked from Exception or Terminate Lifecycle: " + exception, LOG_LEVEL.LEVEL_ERROR, "BaseFunction.execute(context)");
                             this._unhandled(context, exception);
                         });
                 })
                 .catch((exception) => {
-                    context.log.error("[BaseFunction.execute(context)]: Critical unhandled exception, done.");
+                    context.log.error("[BaseFunction.execute(context)]: Critical unhandled exception during Bootstrap, done. Exception: " + exception);
                     this._unhandled(context, exception);
                 });
         }
         catch(exception) {
-            context.log.error("[BaseFunction.execute(context)]:Critical unhandled exception, done.");
+            context.log.error("[BaseFunction.execute(context)]: Critical unhandled exception, done. Exception: " + exception);
             this._unhandled(context, exception);
         }
     }

@@ -50,16 +50,16 @@ const MESSAGE_ENVIRONMENT = {
  */
 class Header {
     /**
-     * @param {string} resource
-     * @param {string} action
-     * @param {string} source
+     * @param {null|string} resource
+     * @param {null|string} action
+     * @param {null|string} source
      * @param {moment.Moment} [published=moment()]
      * @param {null|moment.Moment} [expires=null]
      * @param {string} [messageId=uuidv4()]
      * @param {string} [traceId=uuidv4()]
      * @param {number} [environment=MESSAGE_ENVIRONMENT.PRODUCTION]
      */
-    constructor(resource, action, source, published = moment(), expires = null,
+    constructor(resource = null, action = null, source = null, published = moment(), expires = null,
                 messageId = uuidv4(), traceId = uuidv4(), environment = MESSAGE_ENVIRONMENT.PRODUCTION) {
         /**@type{string}*/this._resource = resource;
         /**@type{string}*/this._action = action;
@@ -92,22 +92,32 @@ class Header {
  */
 class Message {
     /**
-     * @param {Header} header
-     * @param {*} payload
+     * @param {Header} [header=null]
+     * @param {*} [payload=null]
      */
-    constructor(header, payload) {
+    constructor(header = null, payload = null) {
         /**@type{Header}*/this._header = header;
-        this._payload = payload;
+        /**@type{*}*/this._payload = payload;
     }
     /**@returns{Header}*/get header() {return this._header;}
+    /**@param{Header}header*/set header(header) {this._header = header;}
     /**@returns{*}*/get payload() {return this._payload;}
+    /**@param{*}payload*/set payload(payload) {this._payload = payload;}
     /**
      * @param {Message} message
-     * @returns {Promise<Message>}
+     * @returns {Promise<string>}
      */
     static async marshall(message) {
         return new Promise((resolve, reject) => {
-            //
+            if(typeof message === "undefined" || message == null)
+                reject(CelastrinaValidationError.newValidationError("Invalid Message.", "Message"));
+            else if (typeof message._header === "undefined" || message._header == null)
+                reject(CelastrinaValidationError.newValidationError("Invalid Message Header.", "Message._header"));
+            else {
+                message._object = {_mime: "com.celastrinajs.message"};
+                message._header._object = {_mime: "com.celastrinajs.message.header"};
+                resolve(JSON.stringify(message));
+            }
         });
     }
     /**
@@ -117,6 +127,23 @@ class Message {
     static async unmarshall(message) {
         return new Promise((resolve, reject) => {
             let msg = JSON.stringify(message);
+            if(typeof msg !== "object")
+                reject(CelastrinaValidationError.newValidationError("Invalid message.", "Message"));
+            else {
+                if(!msg.hasOwnProperty("_object") || typeof msg._object !== "object")
+                    reject(CelastrinaValidationError.newValidationError("Invalid Message.", "Message._object"));
+                if(!msg._object.hasOwnProperty("_mime") || msg._object._mime !== "application/json; com.celastrinajs.message")
+                    reject(CelastrinaValidationError.newValidationError("Invalid Message type.", "Message._object._mime"));
+                if(!msg._header.hasOwnProperty("_header") || typeof msg._header !== "object")
+                    reject(CelastrinaValidationError.newValidationError("Invalid Header.", "Message._header"));
+                if(!msg._header.hasOwnProperty("_object") || typeof msg._header._object !== "object")
+                    reject(CelastrinaValidationError.newValidationError("Invalid Header.", "Message._header._object"));
+                if(!msg._header._object.hasOwnProperty("_mime") || msg._header._object._mime !== "application/json; com.celastrinajs.message.header")
+                    reject(CelastrinaValidationError.newValidationError("Invalid type.", "Message._header._object._mime"));
+                let _message = new Message();
+                Object.assign(_message, msg);
+                resolve(_message);
+            }
         });
     }
 }
@@ -154,13 +181,19 @@ class MessageFunction extends BaseFunction {
      */
     async createContext(azcontext, config) {
         return new Promise((resolve, reject) => {
-            Message.unmarshall(azcontext.message)
+            Message.unmarshall(azcontext.bindings.message)
                 .then((message) => {
                     resolve(new MessageContext(azcontext, config, message));
                 })
                 .catch((exception) => {
                     reject(exception);
                 });
+        });
+    }
+    async _onMonitor(context) {
+        return new Promise((resolve, reject) => {
+            context.log("Not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "MessageFunction._onMessage(context)");
+            resolve();
         });
     }
     /**
@@ -170,7 +203,7 @@ class MessageFunction extends BaseFunction {
      */
     async _onMessage(context) {
         return new Promise((resolve, reject) => {
-            context.log("Not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "Timer._tick(context)");
+            context.log("Not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "MessageFunction._onMessage(context)");
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
@@ -185,7 +218,12 @@ class MessageFunction extends BaseFunction {
                 resolve();
             }
             else {
-                this._onMessage(context)
+                /**@type{Promise<void>}*/let promise = null;
+                if(context.message.header.environment === MESSAGE_ENVIRONMENT.MONITOR)
+                    promise = this._onMonitor(context);
+                else
+                    promise = this._onMessage(context);
+                promise
                     .then(() => {
                         resolve();
                     })

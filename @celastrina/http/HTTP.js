@@ -27,6 +27,7 @@
  * @license MIT
  */
 "use strict";
+const axios  = require("axios").default;
 const moment = require("moment");
 const jwt = require("jsonwebtoken");
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Configuration, BaseSubject, BaseSentry,
@@ -54,50 +55,49 @@ const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Conf
 /**@type{BaseSubject}*/
 class JwtSubject extends BaseSubject {
     /**
-     * @param {string} sub
-     * @param {string} aud
-     * @param {string} iss
-     * @param {number} iat
-     * @param {number} exp
-     * @param {string} nonce
+     * @param {Object} header
+     * @param {Object} payload
+     * @param {Object} signature
      * @param {string} token
      * @param {Array.<string>} [roles]
      */
-    constructor(sub, aud, iss, iat, exp, nonce, token, roles = []) {
-        super(sub, roles);
-        /**@type{string}*/this._nonce = nonce;
-        /**@type{string}*/this._audience = aud;
-        /**@type{string}*/this._issuer = iss;
-        /**@type{moment.Moment}*/this._issued = moment.unix(iat);
-        /**@type{moment.Moment}*/this._expires = moment.unix(exp);
+    constructor(header, payload, signature, token, roles = []) {
+        super(payload.sub, roles);
+        this._header = header;
+        this._payload = payload;
+        this._signature = signature;
+        /**@type{moment.Moment}*/this._issued = moment.unix(payload.iat);
+        /**@type{moment.Moment}*/this._expires = moment.unix(payload.exp);
         /**@type{string}*/this._token = token;
     }
-    /**@returns{string}*/get nonce(){return this._nonce;}
-    /**@returns{string}*/get audience() {return this._audience;}
-    /**@returns{string}*/get issuer(){return this._issuer;}
+    /**@returns{object}*/get header() {return this._header;}
+    /**@returns{object}*/get payload() {return this._payload;}
+    /**@returns{object}*/get signature() {return this._signature}
+    /**@returns{string}*/get nonce(){return this._payload.nonce;}
+    /**@returns{string}*/get audience() {return this._payload.aud;}
+    /**@returns{string}*/get issuer(){return this._payload.iss;}
     /**@returns{moment.Moment}*/get issued(){return this._issued;}
     /**@returns{moment.Moment}*/get expires(){return this._expires;}
     /**@returns{string}*/get token(){return this._token;}
     /**@returns{boolean}*/isExpired(){return moment().isSameOrAfter(this._expires);}
-    /**@param{string[]}headers*/
     /**
      * @param {undefined|null|object}headers
      * @param {string}[name="Authorization]
-     * @param {string}[authType="Bearer "]
+     * @param {string}[scheme="Bearer "]
      * @returns {Promise<object>}
      */
-    async setAuthorizationHeader(headers, name = "Authorization", authType = "Bearer ") {
+    async setAuthorizationHeader(headers, name = "Authorization", scheme = "Bearer ") {
         return new Promise((resolve, reject) => {
             if(typeof headers === "undefined" || headers == null)
                 headers = {};
-            headers[name] = authType + this.token;
+            headers[name] = scheme + this._token;
             resolve(headers);
         });
     }
     /**
      * @param {string}name
      * @param {null|string}defaultValue
-     * @returns {Promise<number,string|Array.<string>>}
+     * @returns {Promise<number|string|Array.<string>>}
      */
     async getClaim(name, defaultValue = null) {
         return new Promise((resolve, reject) => {
@@ -106,15 +106,6 @@ class JwtSubject extends BaseSubject {
                 claim = defaultValue;
             resolve(claim);
         });
-    }
-    toJSON() {
-        let json = super.toJSON();
-        json.nonce = this._nonce;
-        json.audience = this._audience;
-        json.issuer = this._issuer;
-        json.issued = this._issued.format();
-        json.expires = this._expires.format();
-        return json;
     }
     /**
      * @param {string} token
@@ -126,9 +117,10 @@ class JwtSubject extends BaseSubject {
                 reject(CelastrinaError.newError("Not Authorized.", 401));
             else {
                 try {
-                    /** @type {null|_jwtpayload} */let payload = /** @type {null|_jwtpayload} */jwt.decode(token);
-                    if(typeof payload === "undefined" || payload == null) reject(CelastrinaError.newError("Not Authorized.", 401));
-                    else resolve(new JwtSubject(payload.sub, payload.aud, payload.iss, payload.iat, payload.exp, payload.nonce, token));
+                    /** @type {null|Object} */let decoded = /** @type {null|Object} */jwt.decode(token, {complete: true});
+                    if(typeof decoded === "undefined" || decoded == null)
+                        reject(CelastrinaError.newError("Not Authorized.", 401));
+                    else resolve(new JwtSubject(decoded.header, decoded.payload, decoded.signature, token));
                 }
                 catch (exception) {
                     reject(exception);
@@ -357,6 +349,82 @@ class HTTPParameterFetchProperty extends JsonProperty {
         });
     }
 }
+
+/**
+ * JwtValidator
+ * @author Robert R Murrell
+ */
+class JwtValidator {
+    /**
+     * @param {string} token
+     * @returns {Promise<JwtSubject>}
+     */
+    async validate(token) {
+        return new Promise((resolve, reject) => {
+            JwtSubject.decode(token)
+                .then((subject) => {});
+        });
+    }
+}
+/**
+ * AzureADPJwtValidator
+ * @extends {JwtValidator}
+ * @author Robert R Murrell
+ */
+class AzureIDPJwtValidator extends JwtValidator {
+    /**@param{null|string}subscriptionId*/
+    constructor(subscriptionId = null) {
+        super();
+        let tenant = "common";
+        if(subscriptionId != null) tenant = subscriptionId;
+        this._endpoint = "https://login.microsoftonline.com/" + tenant + "/.well-known/openid-configuration";
+    }
+    async validate(token) {
+        return new Promise((resolve, reject) => {
+            /**@type{null|JwtSubject}*/let _subject = null;
+            /**@type{null|string}*/let _kid = null;
+            /**@type{null|Array.<string>}*/let _x5c = null;
+            super.validate(token)
+                .then((subject) => {
+                    _subject = subject;
+                    _kid = _subject.header.kid;
+                    return axios.get(this._endpoint);
+                })
+                .then((response) => {
+                    let jwks = response.data["jwks_uri"];
+                    if(typeof jwks !== "string")
+                        reject(CelastrinaError.newError("Invalid JWKS Key URI."));
+                    else
+                        return axios.get(jwks);
+                })
+                .then((response) => {
+                    let keys = response.data.keys;
+                    for(const key of keys) {
+                        if(_kid === key.kid) {
+                            _x5c = key["x5c"];
+                            break;
+                        }
+                    }
+                    if(typeof _x5c !== "undefined" && _x5c != null) {
+                        for(const key of _x5c) {
+                            let decoded = jwt.verify(_subject.token, "-----BEGIN CERTIFICATE-----\n" + key + "\n-----END CERTIFICATE-----");
+                            if(typeof decoded !== "undefined" && decoded != null)
+                                break;
+                        }
+                    }
+                    else
+                        reject(CelastrinaError.newError("0 ir Invalid X5C Keys."));
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
+}
+/**
+ * JwtConfiguration
+ * @author Robert R Murrell
+ */
 class JwtConfiguration {
     /** @type{string}*/static CONFIG_JWT = "celastrinajs.http.jwt";
     /**

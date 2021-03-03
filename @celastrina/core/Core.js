@@ -27,7 +27,6 @@
  * @license MIT
  */
 "use strict";
-
 const axios  = require("axios").default;
 const moment = require("moment");
 const { v4: uuidv4 } = require('uuid');
@@ -136,19 +135,11 @@ class ConfigurationItem {
 class ResourceAuthorization {
     /**
      * @param {string} id
-     * @param {Array.<StringProperty|string>} [resources]
      */
-    constructor(id, resources = []) {
+    constructor(id) {
         this._id = id;
-        this._resources = resources;
         this._tokens = {};
     }
-    /**@returns{Array.<string>}*/get resources(){return this._resources;}
-    /**
-     * @param {StringProperty|string} resource
-     * @returns {ResourceAuthorization}
-     */
-    addResource(resource){this._resources.unshift(resource); return this;}
     /**@returns{string}*/get id(){return this._id;}
     /**
      * @param {string} resource
@@ -206,11 +197,8 @@ class ResourceAuthorization {
 /**@type{ResourceAuthorization}*/
 class ManagedIdentityAuthorization extends ResourceAuthorization {
     /**@type{string}*/static SYSTEM_MANAGED_IDENTITY = "celastrinajs.core.system.managed.identity";
-    /**
-     * @param {null|Array.<string>} [resources=null]
-     */
-    constructor(resources = null) {
-        super(ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY, resources);
+    constructor() {
+        super(ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY);
     }
     /**
      * @param {string} resource
@@ -247,11 +235,9 @@ class AppRegistrationAuthorization extends ResourceAuthorization {
      * @param {StringProperty|string} authority
      * @param {StringProperty|string} tenant
      * @param {StringProperty|string} secret
-     * @param {Array.<StringProperty|string>} [resources=null]
      */
-    constructor(id, authority, tenant, secret,
-                resources = null) {
-        super(id, resources);
+    constructor(id, authority, tenant, secret) {
+        super(id);
         this._authority = authority;
         this._tenant = tenant;
         this._secret = secret;
@@ -342,16 +328,27 @@ class ResourceAuthorizationConfiguration extends ConfigurationItem {
     /** */
     constructor() {
         super();
-        this._authorizations = [];
+        /**@type{Array.<JsonProperty|ResourceAuthorization>}*/this._authorizations = [];
     }
     /**@type{string}*/get key() {return ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH};
     /**
      * @param {JsonProperty|ResourceAuthorization} authorization
-     * @return {ResourceAuthorizationConfiguration}
+     * @returns {ResourceAuthorizationConfiguration}
      */
     addAuthorization(authorization) {
         this._authorizations.unshift(authorization);
         return this;
+    }
+    /**@returns{Array.<ResourceAuthorization>}*/get authorizations() {return /**@type{Array.<ResourceAuthorization>}*/this._authorizations;}
+    /**@returns{boolean}*/get containesManagedResourceAuthorization() {
+        let hasem = false;
+        for(const auth of this._authorizations) {
+            if(auth instanceof ManagedIdentityAuthorization) {
+                hasem = true;
+                break;
+            }
+        }
+        return hasem;
     }
     /**
      * @param {Configuration} config
@@ -361,7 +358,7 @@ class ResourceAuthorizationConfiguration extends ConfigurationItem {
         return new Promise((resolve, reject) => {
             try {
                 /**@type{ResourceAuthorizationContext}*/let authcontext = config.getValue(ResourceAuthorizationContext.CONFIG_RESOURCE_AUTH_CONTEXT);
-                for (/**@type{ResourceAuthorization}*/const auth of this._authorizations) {
+                for(/**@type{ResourceAuthorization}*/const auth of this._authorizations) {
                     authcontext.addAuthorization(auth);
                 }
                 resolve();
@@ -412,8 +409,19 @@ class PropertyHandler {
      * @returns {Promise<void>}
      */
     async initialize(azcontext, config) {
-        azcontext.log.error("[PropertyHandler.initialize(context)]: Not Implemented.");
-        return new Promise((resolve, reject) => {reject(CelastrinaError.newError("Not Implemented."));});
+        return new Promise((resolve, reject) => {
+            resolve();
+        });
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param {Object} config
+     * @returns {Promise<void>}
+     */
+    async ready(azcontext, config) {
+        return new Promise((resolve, reject) => {
+            resolve();
+        });
     }
     /**
      * @param {string} key
@@ -428,22 +436,6 @@ class PropertyHandler {
 /**@type{PropertyHandler}*/
 class AppSettingsPropertyHandler extends PropertyHandler {
     constructor(){super();}
-    /**
-     * @param {_AzureFunctionContext} azcontext
-     * @param {Object} config
-     * @returns {Promise<void>}
-     */
-    async initialize(azcontext, config) {
-        return new Promise((resolve, reject) => {
-            try {
-                azcontext.log.verbose("[AppSettingsPropertyHandler.initialize(context, config)]: AppSettingsPropertyHandler initialized.");
-                resolve();
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
     /**
      * @param {string} key
      * @param {*} [defaultValue=null]
@@ -462,8 +454,11 @@ class AppSettingsPropertyHandler extends PropertyHandler {
         });
     }
 }
-
-/**@type{AppSettingsPropertyHandler}*/
+/**
+ * AppConfigPropertyHandler
+ * @extends{AppSettingsPropertyHandler}
+ * @author Robert R Murrell
+ */
 class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
     /**
      * @param {string} subscriptionId
@@ -477,12 +472,8 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
         super();
         this._url = "https://management.azure.com/subscriptions/" + subscriptionId +
             "/resourceGroups/" + resourceGroupName + "/providers/Microsoft.AppConfiguration/configurationStores/" +
-            configStoreName + "/listKeyValue";
-        let params = new URLSearchParams();
-        params.append("api-version","2019-10-01");
-        this._requestBody = {key: "", label: label};
-        this._config = {params: params, headers: {}};
-        /** @type {null|ResourceAuthorizationConfiguration} */this._authConfig = null;
+            configStoreName + "/listKeyValue?api-version=2019-10-01";
+        /** @type {null|ResourceAuthorization} */this._auth = null;
         /** @type{boolean} */this._useVaultSecrets = useVaultSecrets;
         if(this._useVaultSecrets)
             /** @type{Vault} */this._vault = new Vault();
@@ -492,16 +483,11 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
      * @param {Object} config
      * @returns {Promise<void>}
      */
-    async initialize(azcontext, config) {
+    async ready(azcontext, config) {
         return new Promise((resolve, reject) => {
-            try {
-                this._authConfig = config[ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH];
-                azcontext.log.verbose("[AppConfigPropertyHandler.initialize(context, config)]: AppConfigPropertyHandler initialized.");
-                resolve();
-            }
-            catch(exception) {
-                reject(exception);
-            }
+            /**@type{ResourceAuthorizationContext}*/let authctx = config[ResourceAuthorizationContext.CONFIG_RESOURCE_AUTH_CONTEXT];
+            this._auth = authctx.getAuthorization();
+            resolve();
         });
     }
     /**
@@ -514,7 +500,7 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
             try {
                 if (kvp.contentType === "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8" &&
                     this._useVaultSecrets) {
-                    this._authConfig.getResourceToken("https://vault.azure.net")
+                    this._auth.getToken("https://vault.azure.net")
                         .then((token) => {
                             let vaultRef = JSON.parse(kvp.value);
                             return this._vault.getSecret(token, vaultRef.uri);
@@ -542,11 +528,9 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
     async _getAppConfigProperty(key) {
         return new Promise((resolve, reject) => {
             try {
-                this._requestBody.key = key;
-                this._authConfig.getResourceToken("https://management.azure.com/")
+                this._auth.getToken("https://management.azure.com/")
                     .then((token) => {
-                        this._config.headers["Authorization"] = "Bearer " + token;
-                        return axios.post(this._url, this._requestBody, this._config);
+                        return axios.post(this._endpoint, {key: key}, {headers: {"Authorization": "Bearer " + token}});
                     })
                     .then((response) => {
                         return this._resolveVaultReference(response.data);
@@ -1017,9 +1001,7 @@ class ApplicationAuthorizationProperty extends JsonProperty {
                             else if(!source.hasOwnProperty("_tenant")) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _tenant required."));
                             else if(!source.hasOwnProperty("_id")) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _id required."));
                             else if(!source.hasOwnProperty("_secret")) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _secret required."));
-                            else if(!source.hasOwnProperty("_resources")) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _resources required."));
-                            else if (!Array.isArray(source._resources)) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _resources must be array."));
-                            else source = new AppRegistrationAuthorization(source._authority, source._tenant, source._id, source._secret, source._resources);
+                            else source = new AppRegistrationAuthorization(source._authority, source._tenant, source._id, source._secret);
                         }
                         resolve(source);
                     })
@@ -1491,34 +1473,21 @@ class Configuration extends EventEmitter {
         return new Promise((resolve, reject) => {
             try {
                 if(!this._loaded) {
-                    /**@type{null|ResourceAuthorizationConfiguration}*/let authconfig = this.getValue(ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH);
-                    /**@type{null|FunctionRoleConfiguration}*/let roleconfig = this.getValue(FunctionRoleConfiguration.CONFIG_ROLES);
                     /**@type{null|ModuleConfiguration}*/let modconfig = this.getValue(ModuleConfiguration.CONFIG_MODULES);
-                    /**@type{Array.<Promise<void>>}*/let promises = [];
-                    if (authconfig != null)
-                        promises.unshift(authconfig.install(this));
-                    if (roleconfig != null)
-                        promises.unshift(roleconfig.install(this));
-                    Promise.all(promises)
-                        .then(() => {
-                            if(modconfig != null) {
-                                modconfig.install(this)
-                                    .then(() => {
-                                        this._loaded = true;
-                                        resolve();
-                                    })
-                                    .catch((exception) => {
-                                        reject(exception);
-                                    });
-                            }
-                            else {
+                    if(modconfig != null) {
+                        modconfig.install(this)
+                            .then(() => {
                                 this._loaded = true;
                                 resolve();
-                            }
-                        })
-                        .catch((exception) => {
-                            reject(exception);
-                        });
+                            })
+                            .catch((exception) => {
+                                reject(exception);
+                            });
+                    }
+                    else {
+                        this._loaded = true;
+                        resolve();
+                    }
                 }
                 else resolve();
             }
@@ -1612,9 +1581,8 @@ class Configuration extends EventEmitter {
                 this._config[Configuration.CONFIG_CONTEXT] = azcontext;
                 if(!this._loaded) {
                     /**@type{PropertyHandler}*/let handler = this._getPropertyHandler(azcontext);
-                    azcontext.log.info("[Configuration.load(context)]: Initial configuration.");
                     if(this._isPropertyHandlerOverridden()) {
-                        azcontext.log.info("[Configurationload(context)]: Local development override, using AppSettingsPropertyHandler.");
+                        azcontext.log.warn("[Configurationload(context)]: Local development override, using AppSettingsPropertyHandler.");
                         handler = new AppSettingsPropertyHandler();
                         this._config[Configuration.CONFIG_HANDLER] = handler;
                     }
@@ -1631,25 +1599,46 @@ class Configuration extends EventEmitter {
                         .then(() => {
                             let _name = this._config[Configuration.CONFIG_NAME];
                             if(typeof _name !== "string" || _name.trim().length === 0) {
-                                azcontext.log.error("[Configuration.load(context)]: Invalid Configuration. Name cannot be " +
-                                    "undefined, null, or 0 length.");
-                                reject(CelastrinaError.newError("Invalid Configuration."));
+                                azcontext.log.error("[Configuration.load(context)]: Invalid Configuration. Name cannot be undefined, null, or 0 length.");
+                                reject(CelastrinaValidationError.newValidationError("Name cannot be undefined, null, or 0 length.", Configuration.CONFIG_NAME));
                             }
                             else {
-                                azcontext.log.info("[Configuration.load(context)]: Initial configuration successful.");
-                                resolve();
+                                /**@type{null|undefined|string}*/let endpoint = process.env["IDENTITY_ENDPOINT"];
+                                /**@type{null|undefined|ResourceAuthorizationConfiguration}*/let authconfig = this._config[ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH];
+                                if(typeof endpoint !== "string") {
+                                    if(!(authconfig instanceof ResourceAuthorizationConfiguration)) {
+                                        authconfig = new ResourceAuthorizationConfiguration();
+                                        authconfig.addAuthorization(new ManagedIdentityAuthorization());
+                                        this._config[ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH] = authconfig;
+                                    }
+                                    else if(!authconfig.containesManagedResourceAuthorization)
+                                        authconfig.addAuthorization(new ManagedIdentityAuthorization());
+                                }
+                                /**@type{null|FunctionRoleConfiguration}*/let roleconfig = this.getValue(FunctionRoleConfiguration.CONFIG_ROLES);
+                                /**@type{Array.<Promise<void>>}*/let promises = [];
+                                if(authconfig != null)
+                                    promises.unshift(authconfig.install(this));
+                                if(roleconfig != null)
+                                    promises.unshift(roleconfig.install(this));
+                                return Promise.all(promises);
                             }
                         })
+                        .then((results) => {
+                            return handler.ready(azcontext, this._config);
+                        })
+                        .then(() => {
+                            resolve();
+                        })
                         .catch((exception) => {
+                            azcontext.log.error("[Configuration.load(context)]: Exception initializing handler: " + exception);
                             reject(exception);
                         });
                 }
-                else {
-                    azcontext.log.info("[Configuration.load(context)]: Configuration successful, aready loaded.");
+                else
                     resolve();
-                }
             }
             catch(exception) {
+                azcontext.log.error("[Configuration.load(context)]: Exception initializing configuration: " + exception);
                 reject(exception);
             }
         });

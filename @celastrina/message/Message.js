@@ -111,12 +111,12 @@ class Message {
         });
     }
     /**
-     * @param {string} object
+     * @param {string} message
      * @returns {Promise<Message>}
      */
-    static async unmarshall(object) {
+    static async unmarshall(message) {
         return new Promise((resolve, reject) => {
-            //
+            let msg = JSON.stringify(message);
         });
     }
 }
@@ -137,15 +137,6 @@ class MessageContext extends BaseContext {
     }
     /**@type{string}*/get raw() {return this._funccontext.message;}
     /**@type{null|Message}*/get message() {return this._message;}
-    /**
-     * @param {Message} message
-     * @returns {Promise<void>}
-     */
-    async send(message) {
-        return new Promise((resolve, reject) => {
-            //
-        });
-    }
 }
 /**
  * MessageFunction
@@ -189,7 +180,6 @@ class MessageFunction extends BaseFunction {
      */
     async process(context) {
         return new Promise((resolve, reject) => {
-            context.log("Processing message " + context.message.header.messageId + ".", LOG_LEVEL.LEVEL_INFO, "MessageFunction.process(context)");
             if(context.message.header.isExpired) {
                 context.log("Message " + context.message.header.messageId + " is expired, dropping.", LOG_LEVEL.LEVEL_WARN, "MessageFunction.process(context)");
                 resolve();

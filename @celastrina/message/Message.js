@@ -37,7 +37,9 @@ const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Conf
  * @typedef {_AzureFunctionContext} _AzureMessageContext
  * @property {string} message
  */
-
+/**
+ * @type {{TEST: number, MONITOR: number, DEVELOPMENT: number, PRODUCTION: number}}
+ */
 const MESSAGE_ENVIRONMENT = {
     PRODUCTION: 0,
     MONITOR: 1,
@@ -46,6 +48,7 @@ const MESSAGE_ENVIRONMENT = {
 };
 /**
  * Header
+ * @property {Object} _object
  * @author Robert R Murrell
  */
 class Header {
@@ -53,14 +56,14 @@ class Header {
      * @param {null|string} resource
      * @param {null|string} action
      * @param {null|string} source
+     * @param {number} [environment=MESSAGE_ENVIRONMENT.PRODUCTION]
      * @param {moment.Moment} [published=moment()]
      * @param {null|moment.Moment} [expires=null]
      * @param {string} [messageId=uuidv4()]
      * @param {string} [traceId=uuidv4()]
-     * @param {number} [environment=MESSAGE_ENVIRONMENT.PRODUCTION]
      */
-    constructor(resource = null, action = null, source = null, published = moment(), expires = null,
-                messageId = uuidv4(), traceId = uuidv4(), environment = MESSAGE_ENVIRONMENT.PRODUCTION) {
+    constructor(resource = null, action = null, source = null, environment = MESSAGE_ENVIRONMENT.PRODUCTION,
+                published = moment(), expires = null, messageId = uuidv4(), traceId = uuidv4()) {
         /**@type{string}*/this._resource = resource;
         /**@type{string}*/this._action = action;
         /**@type{string}*/this._source = source;
@@ -88,6 +91,7 @@ class Header {
 }
 /**
  * Message
+ * @property {Object} _object
  * @author Robert R Murrell
  */
 class Message {
@@ -114,8 +118,8 @@ class Message {
             else if (typeof message._header === "undefined" || message._header == null)
                 reject(CelastrinaValidationError.newValidationError("Invalid Message Header.", "Message._header"));
             else {
-                message._object = {_mime: "com.celastrinajs.message"};
-                message._header._object = {_mime: "com.celastrinajs.message.header"};
+                message._object = {_mime: "application/json; com.celastrinajs.message"};
+                message._header._object = {_mime: "application/json; com.celastrinajs.message.header"};
                 resolve(JSON.stringify(message));
             }
         });
@@ -126,23 +130,28 @@ class Message {
      */
     static async unmarshall(message) {
         return new Promise((resolve, reject) => {
-            let msg = JSON.stringify(message);
-            if(typeof msg !== "object")
-                reject(CelastrinaValidationError.newValidationError("Invalid message.", "Message"));
-            else {
-                if(!msg.hasOwnProperty("_object") || typeof msg._object !== "object")
-                    reject(CelastrinaValidationError.newValidationError("Invalid Message.", "Message._object"));
-                if(!msg._object.hasOwnProperty("_mime") || msg._object._mime !== "application/json; com.celastrinajs.message")
-                    reject(CelastrinaValidationError.newValidationError("Invalid Message type.", "Message._object._mime"));
-                if(!msg._header.hasOwnProperty("_header") || typeof msg._header !== "object")
-                    reject(CelastrinaValidationError.newValidationError("Invalid Header.", "Message._header"));
-                if(!msg._header.hasOwnProperty("_object") || typeof msg._header._object !== "object")
-                    reject(CelastrinaValidationError.newValidationError("Invalid Header.", "Message._header._object"));
-                if(!msg._header._object.hasOwnProperty("_mime") || msg._header._object._mime !== "application/json; com.celastrinajs.message.header")
-                    reject(CelastrinaValidationError.newValidationError("Invalid type.", "Message._header._object._mime"));
-                let _message = new Message();
-                Object.assign(_message, msg);
-                resolve(_message);
+            try {
+                let msg = JSON.parse(message);
+                if(typeof msg !== "object")
+                    reject(CelastrinaValidationError.newValidationError("Invalid message.", "Message"));
+                else {
+                    if (!msg.hasOwnProperty("_object") || typeof msg._object !== "object")
+                        reject(CelastrinaValidationError.newValidationError("Invalid Message object.", "Message._object"));
+                    if (!msg._object.hasOwnProperty("_mime") || msg._object._mime !== "application/json; com.celastrinajs.message")
+                        reject(CelastrinaValidationError.newValidationError("Invalid Message type.", "Message._object._mime"));
+                    if (!msg.hasOwnProperty("_header") || typeof msg._header !== "object")
+                        reject(CelastrinaValidationError.newValidationError("Invalid Header.", "Message._header"));
+                    if (!msg._header.hasOwnProperty("_object") || typeof msg._header._object !== "object")
+                        reject(CelastrinaValidationError.newValidationError("Invalid Header.", "Message._header._object"));
+                    if (!msg._header._object.hasOwnProperty("_mime") || msg._header._object._mime !== "application/json; com.celastrinajs.message.header")
+                        reject(CelastrinaValidationError.newValidationError("Invalid type.", "Message._header._object._mime"));
+                    let _message = new Message();
+                    Object.assign(_message, msg);
+                    resolve(_message);
+                }
+            }
+            catch(exception) {
+                reject(exception);
             }
         });
     }

@@ -136,7 +136,7 @@ class ResourceAuthorization {
     /**
      * @param {string} id
      */
-    constructor(id) {
+    constructor(id, skew = -120) {
         this._id = id;
         this._tokens = {};
     }
@@ -1162,8 +1162,6 @@ class BaseSubject {
             }
         });
     }
-    /**@returns{{subject:string,roles:Array.<string>}}*/
-    toJSON(){return {subject: this._id, roles: this._roles};}
 }
 /**@abstract*/
 class ValueMatch {

@@ -30,13 +30,23 @@
 
 "use strict";
 
+const {CelastrinaError, CelastrinaValidationError} = require("@celastrina/core");
+const {Header, Message} = require("../Message");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
-const {CelastrinaError, CelastrinaValidationError, StringProperty, Configuration, ModuleContext, FunctionRoleContext,
-       ResourceAuthorizationConfiguration, ResourceAuthorizationContext} = require("../Core");
 const assert = require("assert");
 
-describe("ResourceAuthorizationConfiguration", () => {
-    describe("", () => {
-        //
+const MessageSameple = "{\"_header\":{\"_resource\":\"robert\",\"_action\":\"update\",\"_source\":\"https://function.com\",\"_published\":\"2021-03-06T21:57:20.176Z\",\"_messageId\":\"b78b5241-99ac-4565-936d-494803fa3f33\",\"_traceId\":\"f33f107d-ec63-4a45-8ba4-1fa7328f9c9d\",\"_environment\":2,\"_expires\":\"2022-03-06T21:57:20.176Z\",\"_object\":{\"_mime\":\"application/json; com.celastrinajs.message.header\"}},\"_payload\":{\"test\":\"value\"},\"_object\":{\"_mime\":\"application/json; com.celastrinajs.message\"}}";
+
+describe("Message", () => {
+    describe("#unmarshall", () => {
+        it("should unmarshall to Message successfully with valid JSON.", () => {
+            Message.unmarshall(MessageSameple)
+                .then((message) => {
+                    //
+                })
+                .catch((exception) => {
+                    assert.fail(exception);
+                });
+        });
     });
 });

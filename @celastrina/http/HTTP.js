@@ -349,12 +349,12 @@ class HTTPParameterFetchProperty extends JsonProperty {
         });
     }
 }
-
 /**
  * JwtValidator
  * @author Robert R Murrell
  */
 class JwtValidator {
+    constructor(){}
     /**
      * @param {string} token
      * @returns {Promise<JwtSubject>}
@@ -362,7 +362,12 @@ class JwtValidator {
     async validate(token) {
         return new Promise((resolve, reject) => {
             JwtSubject.decode(token)
-                .then((subject) => {});
+                .then((subject) => {
+                    resolve(subject);
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
         });
     }
 }
@@ -373,11 +378,9 @@ class JwtValidator {
  */
 class AzureIDPJwtValidator extends JwtValidator {
     /**@param{null|string}subscriptionId*/
-    constructor(subscriptionId = null) {
+    constructor(subscriptionId = "common") {
         super();
-        let tenant = "common";
-        if(subscriptionId != null) tenant = subscriptionId;
-        this._endpoint = "https://login.microsoftonline.com/" + tenant + "/.well-known/openid-configuration";
+        this._endpoint = "https://login.microsoftonline.com/" + subscriptionId + "/.well-known/openid-configuration";
     }
     async validate(token) {
         return new Promise((resolve, reject) => {
@@ -393,9 +396,10 @@ class AzureIDPJwtValidator extends JwtValidator {
                 .then((response) => {
                     let jwks = response.data["jwks_uri"];
                     if(typeof jwks !== "string")
-                        reject(CelastrinaError.newError("Invalid JWKS Key URI."));
-                    else
+                        reject(CelastrinaError.newError("Not Authorized", 401));
+                    else {
                         return axios.get(jwks);
+                    }
                 })
                 .then((response) => {
                     let keys = response.data.keys;
@@ -406,14 +410,19 @@ class AzureIDPJwtValidator extends JwtValidator {
                         }
                     }
                     if(typeof _x5c !== "undefined" && _x5c != null) {
+                        let valid = false;
                         for(const key of _x5c) {
                             let decoded = jwt.verify(_subject.token, "-----BEGIN CERTIFICATE-----\n" + key + "\n-----END CERTIFICATE-----");
-                            if(typeof decoded !== "undefined" && decoded != null)
+                            if((valid = typeof decoded !== "undefined" && decoded != null))
                                 break;
                         }
+                        if(valid)
+                            resolve(_subject);
+                        else
+                            reject(CelastrinaError.newError("Not Authorized", 401));
                     }
                     else
-                        reject(CelastrinaError.newError("0 ir Invalid X5C Keys."));
+                        reject(CelastrinaError.newError("Not Authorized", 401));
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -429,20 +438,22 @@ class JwtConfiguration {
     /** @type{string}*/static CONFIG_JWT = "celastrinajs.http.jwt";
     /**
      * @param {Array.<IssuerProperty|Issuer>} [issures=[]]
+     * @param {JwtValidator} [validator=new JwtValidator()]
      * @param {(HTTPParameterFetchProperty|HTTPParameterFetch)} [param={HeaderParameterFetch}]
      * @param {(string|StringProperty)} [scheme="Bearer "]
      * @param {(boolean|BooleanProperty)} [remove=true]
      * @param {(string|StringProperty)} [token="authorization"]
      * @param {(boolean|BooleanProperty)} [validateNonce=false]
      */
-    constructor(issures = [], param = new HeaderParameterFetch(), scheme = "Bearer ",
+    constructor(issures = [], validator = new JwtValidator(), param = new HeaderParameterFetch(), scheme = "Bearer ",
                 remove = true, token = "authorization", validateNonce = false) {
-        /** @type{Array.<(IssuerProperty|Issuer)>}*/this._issuers = issures;
-        /** @type{null|HTTPParameterFetchProperty|HTTPParameterFetch}*/this._param  = param;
-        /** @type{string|StringProperty}*/this._scheme = scheme;
-        /** @type{boolean|BooleanProperty}*/this._remove = remove;
-        /** @type{string|StringProperty}*/this._token  = token;
-        /** @type{boolean|BooleanProperty}*/this._validateNonce = validateNonce;
+        /**@type{Array.<(IssuerProperty|Issuer)>}*/this._issuers = issures;
+        /**@type{null|HTTPParameterFetchProperty|HTTPParameterFetch}*/this._param  = param;
+        /**@type{string|StringProperty}*/this._scheme = scheme;
+        /**@type{boolean|BooleanProperty}*/this._remove = remove;
+        /**@type{string|StringProperty}*/this._token  = token;
+        /**@type{boolean|BooleanProperty}*/this._validateNonce = validateNonce;
+        /**@type{JsonProperty|JwtValidator}*/this._validator = validator;
     }
     /**@returns{Array.<Issuer>}*/get issuers(){return this._issuers;}
     /**@returns{HTTPParameterFetch}*/get param(){return this._param;}
@@ -450,13 +461,14 @@ class JwtConfiguration {
     /**@returns{boolean}*/get removeScheme(){return this._remove;}
     /**@returns{string}*/get token(){return this._token;}
     /**@returns{boolean}*/get validateNonce(){return this._validateNonce;}
+    /**@returns{JwtValidator}*/get validator() {return this._validator;}
     /**
      * @param {IssuerProperty|Issuer} issuer
      * @returns {JwtConfiguration}
      */
     addIssuer(issuer){this._issuers.unshift(issuer); return this;}
     /**
-     * @param {Array.<(IssuerProperty|Issuer)>} [issuers=[]]
+     * @param {Array.<IssuerProperty|Issuer>} [issuers=[]]
      * @returns {JwtConfiguration}
      */
     setIssuers(issuers = []){this._issuers = issuers; return this;}
@@ -481,10 +493,15 @@ class JwtConfiguration {
      */
     setToken(token = "authorization"){this._token = token; return this;}
     /**
-     * @param {(boolean|BooleanProperty)} [validateNonce=false]
+     * @param {boolean|BooleanProperty} [validateNonce=false]
      * @returns {JwtConfiguration}
      */
     setValidateNonce(validateNonce = false){this._validateNonce = validateNonce; return this;}
+    /**
+     * @param {null|JsonProperty|JwtValidator} [validator=null]
+     * @returns {JwtConfiguration}
+     */
+    setJwtValidator(validator = null) {if(validator != null) this._validator = validator; return this;}
 }
 /**@type{BaseContext}*/
 class HTTPContext extends BaseContext {
@@ -767,8 +784,7 @@ class JwtSentry extends BaseSentry {
                 /**@type{JwtSubject}*/let subject = null;
                 this._getToken(context)
                     .then((auth) => {
-                        // WARNING: Only decodes, does not validate!
-                        return JwtSubject.decode(auth);
+                        return this._jwtconfig.validator.validate(auth);
                     })
                     .then((jwtsub) => {
                         subject = jwtsub;
@@ -1217,7 +1233,8 @@ class JwtJSONHTTPFunction extends JSONHTTPFunction {
     }
 }
 module.exports = {
-    JwtSubject: JwtSubject, Issuer: Issuer, IssuerProperty: IssuerProperty, JwtConfiguration: JwtConfiguration,
+    JwtSubject: JwtSubject, Issuer: Issuer, IssuerProperty: IssuerProperty, AzureIDPJwtValidator: AzureIDPJwtValidator,
+    JwtValidator: JwtValidator, JwtConfiguration: JwtConfiguration,
     HTTPContext: HTTPContext, HTTPParameterFetch: HTTPParameterFetch, HeaderParameterFetch: HeaderParameterFetch,
     QueryParameterFetch: QueryParameterFetch, BodyParameterFetch: BodyParameterFetch,
     HTTPParameterFetchProperty: HTTPParameterFetchProperty, CookieSessionResolver: CookieSessionResolver,

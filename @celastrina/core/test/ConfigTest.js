@@ -30,7 +30,7 @@
 
 "use strict";
 
-const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock")
+const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {CelastrinaError, CelastrinaValidationError, StringProperty, Configuration, ModuleContext, FunctionRoleContext,
        ResourceAuthorizationConfiguration, ResourceAuthorizationContext} = require("../Core");
 const assert = require("assert");

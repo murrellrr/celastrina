@@ -135,10 +135,12 @@ class ConfigurationItem {
 class ResourceAuthorization {
     /**
      * @param {string} id
+     * @param {number} [skew=0]
      */
-    constructor(id, skew = -120) {
+    constructor(id, skew = 0) {
         this._id = id;
         this._tokens = {};
+        this._skew = skew;
     }
     /**@returns{string}*/get id(){return this._id;}
     /**
@@ -160,6 +162,8 @@ class ResourceAuthorization {
         return new Promise((resolve, reject) => {
             this._resolve(resource)
                 .then((token) => {
+                    if(this._skew !== 0)
+                        token.expires.add(this._skew, "s");
                     this._tokens[resource] = token;
                     resolve(token.token);
                 })
@@ -197,8 +201,9 @@ class ResourceAuthorization {
 /**@type{ResourceAuthorization}*/
 class ManagedIdentityAuthorization extends ResourceAuthorization {
     /**@type{string}*/static SYSTEM_MANAGED_IDENTITY = "celastrinajs.core.system.managed.identity";
-    constructor() {
-        super(ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY);
+    /**@param {number}[skew=0]*/
+    constructor(skew = 0) {
+        super(ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY, skew);
     }
     /**
      * @param {string} resource
@@ -235,9 +240,11 @@ class AppRegistrationAuthorization extends ResourceAuthorization {
      * @param {StringProperty|string} authority
      * @param {StringProperty|string} tenant
      * @param {StringProperty|string} secret
+     * @param {number} [skew=0]
      */
-    constructor(id, authority, tenant, secret) {
-        super(id);
+    constructor(id, authority, tenant, secret,
+                skew = 0) {
+        super(id, skew);
         this._authority = authority;
         this._tenant = tenant;
         this._secret = secret;
@@ -374,12 +381,7 @@ class ResourceAuthorizationConfiguration extends ConfigurationItem {
 }
 /** Vault */
 class Vault {
-    /** @param {string} [version="7.0"] */
-    constructor(version = "7.0") {
-        let params = new URLSearchParams();
-        params.append("api-version", version);
-        this._config = {params: params,headers:{}};
-    }
+    constructor() {}
     /**
      * @param {string} token
      * @param {string} identifier
@@ -388,8 +390,7 @@ class Vault {
     async getSecret(token, identifier) {
         return new Promise((resolve, reject) => {
             try {
-                this._config.headers["Authorization"] = "Bearer " + token;
-                axios.get(identifier, this._config)
+                axios.get(identifier + "?api-version=7.1", {headers: {"Authorization": "Bearer " + token}})
                     .then((response) => {
                         resolve(response.data.value);
                     })
@@ -474,8 +475,8 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
                 label = "development", useVaultSecrets = true, ) {
         super();
         this._url = "https://management.azure.com/subscriptions/" + subscriptionId +
-            "/resourceGroups/" + resourceGroupName + "/providers/Microsoft.AppConfiguration/configurationStores/" +
-            configStoreName + "/listKeyValue?api-version=2019-10-01";
+                    "/resourceGroups/" + resourceGroupName + "/providers/Microsoft.AppConfiguration/configurationStores/" +
+                    configStoreName + "/listKeyValue?api-version=2019-10-01";
         /** @type {null|ResourceAuthorization} */this._auth = null;
         /** @type{boolean} */this._useVaultSecrets = useVaultSecrets;
         if(this._useVaultSecrets)
@@ -632,19 +633,17 @@ class CachedProperty {
 }
 /**@type{AppSettingsPropertyHandler}*/
 class CachePropertyHandler extends PropertyHandler {
-    /**@type{string}*/static PROP_CACHE_DEFAULT_EXPIRE_TIME = "celastrinajs.core.property.cache.expire.time";
-    /**@type{string}*/static PROP_CACHE_DEFAULT_EXPIRE_UNIT = "celastrinajs.core.property.cache.expire.unit";
-    /**@type{string}*/static PROP_CACHE_DEFAULT_EXPIRE_OVERRIDE = "celastrinajs.core.property.cache.expire.override";
     /**
      * @param {PropertyHandler} [handler=new AppSettingsPropertyHandler()]
      * @param {number} [defaultTime=300]
      * @param {moment.DurationInputArg2} [defaultUnit="s"]
+     * @param {Object} [overrides={}]
      */
     constructor(handler = new AppSettingsPropertyHandler(), defaultTime = 300,
-                defaultUnit = "s") {
+                defaultUnit = "s", overrides = {}) {
         super();
         /**@type{PropertyHandler}*/this._handler = handler;
-        this._cache = {};
+        this._cache = overrides;
         this._defaultTime = defaultTime;
         /**@type{moment.DurationInputArg2}*/this._defaultUnit = defaultUnit;
     }
@@ -673,34 +672,6 @@ class CachePropertyHandler extends PropertyHandler {
             }
         });
     }
-    /**@returns{Promise<void>}*/
-    async _configure() {
-        return new Promise(async (resolve, reject) => {
-            try {
-                let time = await this._handler.getProperty(CachePropertyHandler.PROP_CACHE_DEFAULT_EXPIRE_TIME, 300);
-                let unit = await this._handler.getProperty(CachePropertyHandler.PROP_CACHE_DEFAULT_EXPIRE_UNIT, "s");
-                this._defaultTime = time;
-                this._defaultUnit = /**@type{moment.DurationInputArg2}*/unit;
-                let override = await this._handler.getProperty(CachePropertyHandler.PROP_CACHE_DEFAULT_EXPIRE_OVERRIDE, null);
-                if(typeof override === "string") {
-                    let tempovr = JSON.parse(override);
-                    if((typeof tempovr === "object") && tempovr.hasOwnProperty("_type") &&
-                        (typeof tempovr._type === "string") &&
-                        (tempovr._type === CachePropertyHandler.PROP_CACHE_DEFAULT_EXPIRE_OVERRIDE)) {
-                        /**@type{{_overrides:Array.<object>}}*/
-                        let overrides = tempovr._overrides;
-                        for(const /**@type{{_property:string,_time:number,_unit:moment.DurationInputArg2}}*/ovr of overrides) {
-                            this._cache[ovr._property] = new CachedProperty(ovr._time, ovr._unit);
-                        }
-                    }
-                }
-                resolve();
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
@@ -711,14 +682,8 @@ class CachePropertyHandler extends PropertyHandler {
             try {
                 this._handler.initialize(azcontext, config)
                     .then(() => {
-                        this._configure()
-                            .then(() => {
-                                azcontext.log.verbose("[CachePropertyHandler.initialize(context, config, force)]: Caching configured.");
-                                resolve();
-                            })
-                            .catch((exception) => {
-                                reject(exception);
-                            });
+                        azcontext.log.verbose("[CachePropertyHandler.initialize(context, config, force)]: Caching initialized.");
+                        resolve();
                     })
                     .catch((exception) => {
                         reject(exception);
@@ -939,21 +904,54 @@ class HandlerProperty {
     /**@param{null|string}[name=null]*/
     constructor(name = null){this._name = name;}
     /**@returns{string}*/get name(){return this._name}
-    /**@returns {PropertyHandler}*/
+    /**
+     * @abstract
+     * @returns {PropertyHandler}
+     * @private
+     */
     _createPropertyHandler(source) {return null;}
+    /**
+     * @param {PropertyHandler} handler
+     * @param {Object} source
+     * @returns {PropertyHandler}
+     * @private
+     */
+    _createCache(handler, source) {
+        // Checking to see if there is a cache object.
+        if(source.hasOwnProperty("cache") && typeof source.cache === "object" && source.cache != null) {
+            // Getting the attributes for the cache.
+            /**@type{{ttl:number, unit:moment.DurationInputArg2, overrides:null|undefined|Array.<object>}}*/let cache = source.cache;
+            if(!cache.hasOwnProperty("ttl") || typeof cache.ttl !== "number")
+                throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.ttl");
+            if(!cache.hasOwnProperty("unit") || typeof cache.unit !== "string" || cache.unit.length === 0)
+                throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.unit");
+            /**@type{Object}*/let overrides = {};
+            if(cache.hasOwnProperty("overrides") && Array.isArray(cache.overrides)) {
+                let overrides = cache.overrides;
+                for(/**@type{{key:string, ttl:number, unit:moment.DurationInputArg2}}*/const ovr of overrides) {
+                    if(!ovr.hasOwnProperty("key") || typeof ovr.key !== "string" || ovr.key.left === 0)
+                        throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.overrides.key");
+                    if(!ovr.hasOwnProperty("ttl") || typeof ovr.ttl !== "number")
+                        throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.overrides.ttl");
+                    if(!ovr.hasOwnProperty("unit") || typeof ovr.unit !== "string" || ovr.unit.length === 0)
+                        throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.overrides.unit");
+                    overrides[ovr.key] = new CachedProperty(ovr.ttl, ovr.unit);
+                }
+            }
+            return new CachePropertyHandler(handler, cache.ttl, cache.unit, overrides);
+        }
+        else
+            return handler;
+    }
     /**@returns{PropertyHandler}*/
-    initialize() {
+    createPropertyHandler() {
         let lname = this._name;
         if(typeof lname === "undefined" || lname == null)
             lname = HandlerProperty.PROP_PROPERTY;
         /**@type{string}*/let config = process.env[lname];
         if(typeof config === "string" && config.trim().length > 0) {
-            /**@type{{cached:boolean}}*/let source = JSON.parse(config);
-            let handler = this._createPropertyHandler(source);
-            if(source.hasOwnProperty("chached") && typeof source.chached === "boolean" && source.chached === true)
-                return new CachePropertyHandler(handler);
-            else
-                return handler;
+            /**@type{Object}*/let source = JSON.parse(config);
+            return this._createCache(this._createPropertyHandler(source), source);
         }
         else
             throw CelastrinaError.newError("Invalid Configuration for property '" + lname + "'.");
@@ -987,7 +985,7 @@ class AppConfigHandlerProperty extends HandlerProperty {
     }
 }
 /**@type{JsonProperty}*/
-class ApplicationAuthorizationProperty extends JsonProperty {
+class AppRegistrationAuthorizationProperty extends JsonProperty {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
@@ -1595,7 +1593,7 @@ class Configuration extends EventEmitter {
                     }
                     else if(handler instanceof HandlerProperty) {
                         azcontext.log.info("[Configuration.initialize(azcontext)]: Handler property identified, creating Property Handler.");
-                        handler = handler.initialize();
+                        handler = handler.createPropertyHandler();
                         this._config[Configuration.CONFIG_HANDLER] = handler;
                     }
                     handler.initialize(azcontext, this._config)
@@ -2307,7 +2305,7 @@ module.exports = {
     AppConfigPropertyHandler: AppConfigPropertyHandler, CachedProperty: CachedProperty, CachePropertyHandler: CachePropertyHandler,
     AppConfigHandlerProperty: AppConfigHandlerProperty, Property: Property, StringProperty: StringProperty,
     BooleanProperty: BooleanProperty, NumericProperty: NumericProperty, JsonProperty: JsonProperty, ModuleConfiguration: ModuleConfiguration, ModuleContext: ModuleContext,
-    Module: Module, ApplicationAuthorization: AppRegistrationAuthorization, ApplicationAuthorizationProperty: ApplicationAuthorizationProperty,
+    Module: Module, ApplicationAuthorization: AppRegistrationAuthorization, AppRegistrationAuthorizationProperty: AppRegistrationAuthorizationProperty,
     ValueMatch: ValueMatch, MatchAny: MatchAny, MatchAll: MatchAll, MatchNone: MatchNone, FunctionRole: FunctionRole,
     FunctionRoleProperty: FunctionRoleProperty, FunctionRoleConfiguration: FunctionRoleConfiguration, FunctionRoleContext: FunctionRoleContext, Configuration: Configuration, Algorithm: Algorithm, AES256Algorithm: AES256Algorithm,
     Cryptography: Cryptography, LOG_LEVEL: LOG_LEVEL, BaseSubject: BaseSubject, MonitorResponse: MonitorResponse, RoleResolver: RoleResolver,

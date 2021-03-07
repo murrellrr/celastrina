@@ -28,7 +28,7 @@ const {CelastrinaError, CelastrinaValidationError, ResourceAuthorization, Manage
        CacheHandlerProperty, VaultAppSettingHandlerProperty, AppConfigHandlerProperty, Property, JsonProperty,
        StringProperty, BooleanProperty, NumericProperty, ValueMatch, MatchAny, MatchAll, MatchNone, ModuleContext,
        Module, FunctionRole, FunctionRoleConfiguration, ModuleConfiguration, FunctionRoleContext, Configuration, Algorithm, AES256Algorithm, Cryptography, LOG_LEVEL, BaseSubject,
-       MonitorResponse, RoleResolver, BaseSentry, BaseContext, BaseFunction, ApplicationAuthorizationProperty,
+       MonitorResponse, RoleResolver, BaseSentry, BaseContext, BaseFunction, AppRegistrationAuthorizationProperty,
        FunctionRoleProperty} = require("./Core");
 module.exports = {
     CelastrinaError: CelastrinaError, CelastrinaValidationError: CelastrinaValidationError, ResourceAuthorization: ResourceAuthorization,
@@ -39,7 +39,7 @@ module.exports = {
     AppConfigPropertyHandler: AppConfigPropertyHandler, CachedProperty: CachedProperty, CachePropertyHandler: CachePropertyHandler,
     AppConfigHandlerProperty: AppConfigHandlerProperty, Property: Property, StringProperty: StringProperty,
     BooleanProperty: BooleanProperty, NumericProperty: NumericProperty, JsonProperty: JsonProperty, ModuleConfiguration: ModuleConfiguration, ModuleContext: ModuleContext,
-    Module: Module, ApplicationAuthorization: AppRegistrationAuthorization, ApplicationAuthorizationProperty: ApplicationAuthorizationProperty,
+    Module: Module, ApplicationAuthorization: AppRegistrationAuthorization, AppRegistrationAuthorizationProperty: AppRegistrationAuthorizationProperty,
     ValueMatch: ValueMatch, MatchAny: MatchAny, MatchAll: MatchAll, MatchNone: MatchNone, FunctionRole: FunctionRole,
     FunctionRoleProperty: FunctionRoleProperty, FunctionRoleConfiguration: FunctionRoleConfiguration, FunctionRoleContext: FunctionRoleContext, Configuration: Configuration, Algorithm: Algorithm, AES256Algorithm: AES256Algorithm,
     Cryptography: Cryptography, LOG_LEVEL: LOG_LEVEL, BaseSubject: BaseSubject, MonitorResponse: MonitorResponse, RoleResolver: RoleResolver,

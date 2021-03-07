@@ -282,11 +282,14 @@ class ResourceAuthorizationContext {
     addAuthorization(authorization) {
         this._authorizations[authorization.id] = authorization;
     }
-    /**@param {null|string} [id=ManagedIdentityAuthorization.MANAGED_IDENTITY_ID]*/
+    /**
+     * @param {null|string} [id=ManagedIdentityAuthorization.MANAGED_IDENTITY_ID]
+     * @returns {Promise<ResourceAuthorization>}
+     */
     async getAuthorization(id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY) {
         return new Promise((resolve, reject) => {
             try {
-                let authorization = this._authorizations[id];
+                /**@tye{ResourceAuthorization}*/let authorization = this._authorizations[id];
                 if (typeof authorization === "undefined" || authorization == null)
                     reject(CelastrinaError.newError("Not authorized.", 401));
                 else
@@ -486,8 +489,14 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
     async ready(azcontext, config) {
         return new Promise((resolve, reject) => {
             /**@type{ResourceAuthorizationContext}*/let authctx = config[ResourceAuthorizationContext.CONFIG_RESOURCE_AUTH_CONTEXT];
-            this._auth = authctx.getAuthorization();
-            resolve();
+            authctx.getAuthorization()
+                .then((_auth) => {
+                    this._auth = _auth;
+                    resolve();
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
         });
     }
     /**
@@ -498,8 +507,8 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
     async _resolveVaultReference(kvp) {
         return new Promise((resolve, reject) => {
             try {
-                if (kvp.contentType === "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8" &&
-                    this._useVaultSecrets) {
+                if(kvp.contentType === "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8" &&
+                        this._useVaultSecrets) {
                     this._auth.getToken("https://vault.azure.net")
                         .then((token) => {
                             let vaultRef = JSON.parse(kvp.value);
@@ -540,7 +549,7 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
                     })
                     .catch((exception) => {
                         reject(CelastrinaError.newError("Error getting value for '" + key + "'.",
-                            exception.response.status, false));
+                               exception.response.status, false));
                     });
             }
             catch(exception) {
@@ -1580,16 +1589,18 @@ class Configuration extends EventEmitter {
                 if(!this._loaded) {
                     /**@type{PropertyHandler}*/let handler = this._getPropertyHandler(azcontext);
                     if(this._isPropertyHandlerOverridden()) {
-                        azcontext.log.warn("[Configurationload(context)]: Local development override, using AppSettingsPropertyHandler.");
+                        azcontext.log.warn("[Configuration.initialize(azcontext)]: Local development override, using AppSettingsPropertyHandler.");
                         handler = new AppSettingsPropertyHandler();
                         this._config[Configuration.CONFIG_HANDLER] = handler;
                     }
                     else if(handler instanceof HandlerProperty) {
+                        azcontext.log.info("[Configuration.initialize(azcontext)]: Handler property identified, creating Property Handler.");
                         handler = handler.initialize();
                         this._config[Configuration.CONFIG_HANDLER] = handler;
                     }
                     handler.initialize(azcontext, this._config)
                         .then(() => {
+                            azcontext.log.info("[Configuration.initialize(azcontext)]: Property Handler initialized.");
                             /**@type{Array.<Promise<void>>}*/let promises = [];
                             this._load(this, promises);
                             return Promise.all(promises);
@@ -1604,6 +1615,7 @@ class Configuration extends EventEmitter {
                                 /**@type{null|undefined|string}*/let endpoint = process.env["IDENTITY_ENDPOINT"];
                                 /**@type{null|undefined|ResourceAuthorizationConfiguration}*/let authconfig = this._config[ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH];
                                 if(typeof endpoint !== "string") {
+                                    azcontext.log.info("[Configuration.initialize(azcontext)]: Managed Identity detected, validating managed resource authorization configuration.");
                                     if(!(authconfig instanceof ResourceAuthorizationConfiguration)) {
                                         authconfig = new ResourceAuthorizationConfiguration();
                                         authconfig.addAuthorization(new ManagedIdentityAuthorization());
@@ -1622,9 +1634,11 @@ class Configuration extends EventEmitter {
                             }
                         })
                         .then((results) => {
+                            azcontext.log.info("[Configuration.initialize(azcontext)]: Changing Property Handler to Ready.");
                             return handler.ready(azcontext, this._config);
                         })
                         .then(() => {
+                            azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration initialized.");
                             resolve();
                         })
                         .catch((exception) => {

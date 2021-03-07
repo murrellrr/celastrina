@@ -1,6 +1,6 @@
 {
   "name": "@celastrina/semaphore",
-  "version": "1.5.8",
+  "version": "1.6.1",
   "description": "Semaphore Locking across cloud zones and regions.",
   "main": "index.js",
   "scripts": {
@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/core": "^1.5.8",
+    "@celastrina/core": "^1.6.1",
     "axios": "^0.21.1",
     "moment": "^2.29.1",
     "uuid": "^8.3.2"

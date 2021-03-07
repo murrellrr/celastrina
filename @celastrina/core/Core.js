@@ -673,6 +673,28 @@ class CachePropertyHandler extends PropertyHandler {
         });
     }
     /**
+     * @param azcontext
+     * @param config
+     * @returns {Promise<void>}
+     */
+    async ready(azcontext, config) {
+        return new Promise((resolve, reject) => {
+            try {
+                this._handler.ready(azcontext, config)
+                    .then(() => {
+                        azcontext.log.verbose("[CachePropertyHandler.ready(context, config, force)]: Caching ready.");
+                        resolve();
+                    })
+                    .catch((exception) => {
+                        reject(exception);
+                    });
+            }
+            catch(exception) {
+                reject(exception);
+            }
+        });
+    }
+    /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
      * @returns {Promise<void>}
@@ -682,7 +704,7 @@ class CachePropertyHandler extends PropertyHandler {
             try {
                 this._handler.initialize(azcontext, config)
                     .then(() => {
-                        azcontext.log.verbose("[CachePropertyHandler.initialize(context, config, force)]: Caching initialized.");
+                        azcontext.log.verbose("[CachePropertyHandler.initialize(context, config)]: Caching initialized.");
                         resolve();
                     })
                     .catch((exception) => {

@@ -1,6 +1,6 @@
 {
   "name": "@celastrina/message",
-  "version": "1.6.14",
+  "version": "1.7.0",
   "description": "Celastrina QStorage Function packages for Azure",
   "main": "index.js",
   "scripts": {
@@ -29,7 +29,7 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/core": "^1.6.14",
+    "@celastrina/core": "^1.7.0",
     "moment": "^2.29.1",
     "uuid": "^8.3.2"
   }

@@ -69,19 +69,22 @@ class BlobSemaphore extends Semaphore {
      * @param {string} container
      * @param {string} blob
      * @param {ResourceAuthorization} auth
+     * @param {null|string} [leaseId=null]
      */
-    constructor(name, container, blob, auth) {
+    constructor(name, container, blob, auth, leaseId = null) {
         super();
         /**@type{ResourceAuthorization}*/this._auth = auth;
-        /**@type{null|string}*/this._id = null;
+        /**@type{null|string}*/this._id = leaseId;
         /**@type{string}*/this._endpoint = "https://" + name + ".blob.core.windows.net/" + container + "/" + blob + "?comp=lease";
     }
     /**@returns{boolean}*/get isLocked() {return this._id != null;}
+    /**@returns{null|string}*/get leaseId() {return this._id;}
+    /**@param{null|string} leaseId*/set leaseId(leaseId) {this._id = leaseId;}
     /**
      * @param {number} [timeout=0]
      * @returns {Promise<void>}
      */
-    async lock(timeout = 60) {
+    async lock(timeout = -1) {
         return new Promise((resolve, reject) => {
             if(timeout === 0 || timeout < -1)
                 timeout = -1;
@@ -93,7 +96,7 @@ class BlobSemaphore extends Semaphore {
                     headers["Authorization"] = "Bearer "  + token;
                     headers["x-ms-version"] = "2017-11-09";
                     headers["x-ms-lease-action"] = "acquire";
-                    headers["x-ms-lease-duration"] = 60;
+                    headers["x-ms-lease-duration"] = timeout;
                     return axios.put(this._endpoint, null, {headers: headers});
                 })
                 .then((response) => {
@@ -120,7 +123,7 @@ class BlobSemaphore extends Semaphore {
                         headers["x-ms-lease-id"] = this._id;
                         return axios.put(this._endpoint, null, {headers: headers});
                     }
-                    else reject(CelastrinaError.newError("Not locked."));
+                    else reject(CelastrinaError.newError("Not locked.", 400));
                 })
                 .then((response) => {
                     this._id = null;

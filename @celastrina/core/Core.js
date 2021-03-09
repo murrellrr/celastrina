@@ -395,7 +395,7 @@ class Vault {
                         resolve(response.data.value);
                     })
                     .catch((exception) => {
-                        reject(CelastrinaError.newError("Error getting secret for '" + identifier + "'."));
+                        reject(CelastrinaError.newError("Error getting secret for '" + identifier + "' from vault."));
                     });
             }
             catch(exception) {
@@ -474,7 +474,8 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
     constructor(subscriptionId, resourceGroupName, configStoreName,
                 label = "development", useVaultSecrets = true, ) {
         super();
-        this._url = "https://management.azure.com/subscriptions/" + subscriptionId +
+        this._label = label;
+        this._endpoint = "https://management.azure.com/subscriptions/" + subscriptionId +
                     "/resourceGroups/" + resourceGroupName + "/providers/Microsoft.AppConfiguration/configurationStores/" +
                     configStoreName + "/listKeyValue?api-version=2019-10-01";
         /** @type {null|ResourceAuthorization} */this._auth = null;
@@ -519,7 +520,7 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
                             resolve(value);
                         })
                         .catch((exception) => {
-                            reject(exception);
+                            reject(CelastrinaError.newError("Exception getting '" + kvp.value + "' from vault." + exception));
                         });
                 }
                 else
@@ -540,7 +541,7 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
             try {
                 this._auth.getToken("https://management.azure.com/")
                     .then((token) => {
-                        return axios.post(this._endpoint, {key: key}, {headers: {"Authorization": "Bearer " + token}});
+                        return axios.post(this._endpoint, {key: key, label: this._label}, {headers: {"Authorization": "Bearer " + token}});
                     })
                     .then((response) => {
                         return this._resolveVaultReference(response.data);
@@ -549,8 +550,8 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
                         resolve(value);
                     })
                     .catch((exception) => {
-                        reject(CelastrinaError.newError("Error getting value for '" + key + "'.",
-                               exception.response.status, false));
+                        reject(CelastrinaError.newError("Error getting value for key '" + key + "', from end-point '" + this._endpoint + "': " +
+                                                         exception));
                     });
             }
             catch(exception) {
@@ -564,7 +565,7 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
      * @returns {Promise<*>}
      */
     async getProperty(key, defaultValue = null) {
-        return new Promise(async (resolve, reject) => {
+        return new Promise((resolve, reject) => {
             try {
                 this._getAppConfigProperty(key)
                     .then((value) => {
@@ -1719,6 +1720,13 @@ class AES256Algorithm extends Algorithm {
                 reject(exception);
             }
         });
+    }
+    /**
+     * @param {{key:string,iv:string}} options
+     * @returns{AES256Algorithm}
+     */
+    static create(options) {
+        return new AES256Algorithm(options.key, options.iv);
     }
 }
 /** Cryptography */

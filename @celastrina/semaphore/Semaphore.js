@@ -38,14 +38,59 @@ const {CelastrinaError, ResourceAuthorization} = require("@celastrina/core");
  * @author Robert R Murrell
  */
 class Semaphore {
-    constructor() {}
+    /**
+     * @param {number} [retryDelay=1500]
+     * @param {number} [maxRetries=4]
+     */
+    constructor(retryDelay = 1500, maxRetries = 4) {
+        this._retryDelay = retryDelay;
+        this._maxRetries = maxRetries - 1;
+    }
+    /**
+     * @param {number} [timeout=0]
+     * @returns {Promise<boolean>}
+     * @private
+     */
+    async _lock(timeout = 0) {
+        return new Promise((resolve, reject) => {
+            reject(CelastrinaError.newError("Not Implemented.", 501));
+        });
+    }
     /**
      * @param {number} [timeout=0]
      * @returns {Promise<void>}
      */
     async lock(timeout = 0) {
-        return new Promise((resolve, reject) => {
-            reject(CelastrinaError.newError("Not Implemented.", 501));
+        return new Promise(async (resolve, reject) => {
+            let intervalId = null;
+            let counter = this._maxRetries;
+            try {
+                if (await this._lock())
+                    resolve();
+                else {
+                    intervalId = setInterval(async () => {
+                        try {
+                            if(await this._lock()) {
+                                clearInterval(intervalId);
+                                resolve();
+                            }
+                            else {
+                                if ((--counter) <= 0) {
+                                    clearInterval(intervalId);
+                                    reject(CelastrinaError.newError("Unable to lock semapthore after '" +
+                                           this._maxRetries + "' retries.", 409));
+                                }
+                            }
+                        }
+                        catch(_exception) {
+                            reject(_exception);
+                        }
+                    }, this._retryDelay);
+                }
+            }
+            catch(exception) {
+                reject(exception);
+            }
         });
     }
     /**@returns{boolean}*/get isLocked() {return false;}
@@ -59,23 +104,35 @@ class Semaphore {
     }
 }
 /**
+ * @typedef _BlobSemaphoreConfig
+ * @property {ResourceAuthorization} auth
+ * @property {string} storage
+ * @property {string} container
+ * @property {string} blob
+ * @property {null|string} [leaseId=null]
+ */
+/**
  * BlobSemaphore
  * @extends {Semaphore}
  * @author Robert R Murrell
  */
 class BlobSemaphore extends Semaphore {
     /**
-     * @param {string} name
+     * @param {ResourceAuthorization} auth
+     * @param {string} storage
      * @param {string} container
      * @param {string} blob
-     * @param {ResourceAuthorization} auth
      * @param {null|string} [leaseId=null]
+     * @param {number} [retryDelay=1500]
+     * @param {number} [maxRetries=4]
      */
-    constructor(name, container, blob, auth, leaseId = null) {
-        super();
+    constructor(auth, storage, container, blob, leaseId = null,
+                retryDelay= 1500, maxRetries= 4) {
+        super(retryDelay, maxRetries);
         /**@type{ResourceAuthorization}*/this._auth = auth;
         /**@type{null|string}*/this._id = leaseId;
-        /**@type{string}*/this._endpoint = "https://" + name + ".blob.core.windows.net/" + container + "/" + blob + "?comp=lease";
+        /**@type{string}*/this._endpoint = "https://" + storage + ".blob.core.windows.net/" + container + "/" +
+                                           blob + "?comp=lease";
     }
     /**@returns{boolean}*/get isLocked() {return this._id != null;}
     /**@returns{null|string}*/get leaseId() {return this._id;}
@@ -83,28 +140,31 @@ class BlobSemaphore extends Semaphore {
     /**
      * @param {number} [timeout=0]
      * @returns {Promise<void>}
+     * @private
      */
-    async lock(timeout = -1) {
-        return new Promise((resolve, reject) => {
+    async _lock(timeout = -1) {
+        return new Promise(async (resolve, reject) => {
             if(timeout === 0 || timeout < -1)
                 timeout = -1;
             else if(timeout > 60)
                 timeout = 60;
             this._auth.getToken("https://storage.azure.com/")
                 .then((token) => {
-                    let headers = {};
-                    headers["Authorization"] = "Bearer "  + token;
-                    headers["x-ms-version"] = "2017-11-09";
-                    headers["x-ms-lease-action"] = "acquire";
-                    headers["x-ms-lease-duration"] = timeout;
-                    return axios.put(this._endpoint, null, {headers: headers});
+                    return axios.put(this._endpoint, null, {headers:
+                                    {"Authorization": "Bearer "  + token,
+                                     "x-ms-version": "2017-11-09",
+                                     "x-ms-lease-action": "acquire",
+                                     "x-ms-lease-duration": timeout}});
                 })
                 .then((response) => {
                     this._id = response.headers["x-ms-lease-id"];
-                    resolve();
+                    resolve(true);
                 })
                 .catch((exception) => {
-                    reject(exception);
+                    if(exception.code === 409)
+                        resolve(false);
+                    else
+                        reject(CelastrinaError.wrapError(exception, exception.code));
                 });
         });
     }
@@ -116,21 +176,20 @@ class BlobSemaphore extends Semaphore {
             this._auth.getToken("https://storage.azure.com/")
                 .then((token) => {
                     if(this._id != null) {
-                        let headers = {};
-                        headers["Authorization"] = "Bearer "  + token;
-                        headers["x-ms-version"] = "2017-11-09";
-                        headers["x-ms-lease-action"] = "release";
-                        headers["x-ms-lease-id"] = this._id;
-                        return axios.put(this._endpoint, null, {headers: headers});
+                        return axios.put(this._endpoint, null, {headers:
+                                         {"Authorization": "Bearer "  + token,
+                                          "x-ms-version": "2017-11-09",
+                                          "x-ms-lease-action": "release",
+                                          "x-ms-lease-id": this._id}});
                     }
-                    else reject(CelastrinaError.newError("Not locked.", 400));
+                    else resolve();
                 })
                 .then((response) => {
                     this._id = null;
                     resolve();
                 })
                 .catch((exception) => {
-                    reject(exception);
+                    reject(CelastrinaError.wrapError(exception, exception.code));
                 });
         });
     }

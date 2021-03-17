@@ -59,72 +59,92 @@ const {TokenResponse, AuthenticationContext} = require("adal-node");
  * @property {string} client_id
  */
 /** @author Robert R Murrell */
-class CelastrinaError {
+class CelastrinaError extends Error {
     /**
-     * @param {Error} cause
+     * @param {string} message
      * @param {int} code
-     * @param {boolean} drop
+     * @param {boolean} [drop=false]
+     * @param {Error} [cause=null]
      */
-    constructor(cause, code = 500, drop = false) {
+    constructor(message, code = 500, drop = false, cause = null) {
+        super(message);
         this.cause = cause;
         this.code  = code;
         this.drop  = drop;
     }
-    /**@returns{string}*/toString() {return "[" + this.code + "][" + this.drop + "]: " + this.cause.message;}
-    toJSON() {return {message: this.cause.message, code: this.code, drop: this.drop};}
+    /**@returns{string}*/toString() {return "[" + this.code + "][" + this.drop + "]: " + this.message;}
     /**
      * @param {string} message
      * @param {int} code
-     * @param {boolean} drop
+     * @param {boolean} [drop=false]
+     * @param {Error} [cause=null]
      * @returns {CelastrinaError}
      */
-    static newError(message, code = 500, drop = false) {
-        return new CelastrinaError(new Error(message), code, drop);
+    static newError(message, code = 500, drop = false, cause = null) {
+        return new CelastrinaError(message, code, drop, cause);
     }
     /**
-     * @param {Error} error
+     * @param {*} error
      * @param {int} code
      * @param {boolean} drop
      * @returns {CelastrinaError}
      */
     static wrapError(error, code = 500, drop = false) {
-        return new CelastrinaError(error, code, drop);
+        let ex = error;
+        if(!(ex instanceof Error)) {
+            if(typeof ex === "undefined")
+                ex = "Unspecified Server Error.";
+            if(typeof ex === "object" && ex == null)
+                ex = "Unspecified Server Error.";
+            return new CelastrinaError(ex, code, drop);
+        }
+        else
+            return new CelastrinaError(ex.message, code, drop, ex);
     }
 }
 /**@type{CelastrinaError}*/
 class CelastrinaValidationError extends CelastrinaError {
     /**
-     * @param {Error} error
+     * @param {string} message
      * @param {int} code
-     * @param {boolean} drop
-     * @param {string} tag
+     * @param {boolean} [drop=false]
+     * @param {string} [tag=""]
+     * @param {Error} [cause=null]
      */
-    constructor(error, code = 500, drop = false, tag = "") {
-        super(error, code, drop);
+    constructor(message, code = 500, drop = false, tag = "", cause = null) {
+        super(message, code, drop, cause);
         this.tag = tag;
     }
     /**@returns{string}*/toString(){return "[" + this.tag + "]" + super.toString();}
-    toJSON(){return {message: this.cause.message, code: this.code, tag: this.tag, drop: this.drop};}
     /**
      * @param {string} message
-     * @param {int} code
-     * @param {boolean} drop
-     * @param {string} tag
-     *
+     * @param {int} [code=400]
+     * @param {boolean} [drop=false]
+     * @param {string} [tag=""]
+     * @param {Error} [cause=null]
      * @returns {CelastrinaValidationError}
      */
-    static newValidationError(message, tag = "", drop = false, code = 400) {
-        return new CelastrinaValidationError(new Error(message), code, drop, tag);
+    static newValidationError(message, tag = "", drop = false, code = 400, cause = null) {
+        return new CelastrinaValidationError(message, code, drop, tag);
     }
     /**
-     * @param {Error} error
-     * @param {int} code
-     * @param {boolean} drop
-     * @param {string} tag
+     * @param {*} error
+     * @param {int} [code=400]
+     * @param {boolean} [drop=false]
+     * @param {string} [tag=""]
      * @returns {CelastrinaValidationError}
      */
     static wrapValidationError(error, tag = "", drop = false, code = 400) {
-        return new CelastrinaValidationError(error, code, drop, tag);
+        let ex = error;
+        if(!(ex instanceof Error)) {
+            if(typeof ex === "undefined")
+                ex = "Unspecified Server Error.";
+            if(typeof ex === "object" && ex == null)
+                ex = "Unspecified Server Error.";
+            return new CelastrinaValidationError(ex, code, drop, tag);
+        }
+        else
+            return new CelastrinaValidationError(ex.message, code, drop, tag, ex);
     }
 }
 /**@abstract*/
@@ -1615,13 +1635,11 @@ class Configuration extends EventEmitter {
                         this._config[Configuration.CONFIG_HANDLER] = handler;
                     }
                     else if(handler instanceof HandlerProperty) {
-                        azcontext.log.info("[Configuration.initialize(azcontext)]: Handler property identified, creating Property Handler.");
                         handler = handler.createPropertyHandler();
                         this._config[Configuration.CONFIG_HANDLER] = handler;
                     }
                     handler.initialize(azcontext, this._config)
                         .then(() => {
-                            azcontext.log.info("[Configuration.initialize(azcontext)]: Property Handler initialized.");
                             /**@type{Array.<Promise<void>>}*/let promises = [];
                             this._load(this, promises);
                             return Promise.all(promises);
@@ -1636,8 +1654,8 @@ class Configuration extends EventEmitter {
                                 /**@type{null|undefined|string}*/let endpoint = process.env["IDENTITY_ENDPOINT"];
                                 /**@type{null|undefined|ResourceAuthorizationConfiguration}*/let authconfig = this._config[ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH];
                                 if(typeof endpoint !== "string") {
-                                    azcontext.log.info("[Configuration.initialize(azcontext)]: Managed Identity detected, validating managed resource authorization configuration.");
                                     if(!(authconfig instanceof ResourceAuthorizationConfiguration)) {
+                                        azcontext.log.info("[Configuration.initialize(azcontext)]: Managed Identity detected, autoconfiguring ResourceAuthorizationConfiguration with ManagedIdentityAuthorization.");
                                         authconfig = new ResourceAuthorizationConfiguration();
                                         authconfig.addAuthorization(new ManagedIdentityAuthorization());
                                         this._config[ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH] = authconfig;
@@ -1655,7 +1673,6 @@ class Configuration extends EventEmitter {
                             }
                         })
                         .then((results) => {
-                            azcontext.log.info("[Configuration.initialize(azcontext)]: Changing Property Handler to Ready.");
                             return handler.ready(azcontext, this._config);
                         })
                         .then(() => {
@@ -2042,7 +2059,7 @@ class BaseContext {
     /**
      * @param {string} key
      * @param {null|string} [defaultValue=null]
-     * @return {Promise<string>}
+     * @return {Promise<*>}
      */
     async getProperty(key, defaultValue = null){return this._config.properties.getProperty(key, defaultValue);}
     /**
@@ -2051,7 +2068,7 @@ class BaseContext {
      * @param {null|string} [subject=null]
      */
     log(message = "[NO MESSAGE]", level = LOG_LEVEL.LEVEL_VERBOSE, subject = null) {
-        let out = "[" + this._config.name + "][LEVEL " + level + "]";
+        let out = "[" + this._config.name + "]";
         if(typeof subject === "string") out += "[" + subject + "]";
         out += "[" + this._funccontext.invocationId + "]:" + "[" + this._requestId + "]:" + message.toString();
         switch(level) {
@@ -2321,7 +2338,7 @@ class BaseFunction {
             else if (typeof ex === "undefined" || ex == null) ex = CelastrinaError.newError("Unhandled server error.");
             else ex = CelastrinaError.newError(ex.toString());
         }
-        context.log.error("[BaseFunction._unhandled(context, exception)][exception](NAME:" + ex.cause.name + ") (MESSAGE:" + ex.cause.message + ") (STACK:" + ex.cause.stack + ")");
+        context.log.error("[BaseFunction._unhandled(context, exception)][exception](NAME:" + ex.name + ") (MESSAGE:" + ex.message + ") (STACK:" + ex.stack + ") (CAUSE:" + ex.cause + ")");
         if(ex.drop) context.done();
         else context.done(ex);
     }

@@ -84,9 +84,17 @@ class Header {
     /**@returns{string}*/get messageId() {return this._messageId}
     /**@returns{string}*/get traceId() {return this._traceId}
     /**@type{number}*/get environment() {return this._environment;}
-    /**@type{boolean}*/get isExpired() {
-        let now = moment();
-        return now.isBefore(this._expires);
+    /**@type{boolean}*/get isExpired() {return moment().isSameOrAfter(this._expires);}
+    /**
+     * @param {Object} _oheader
+     * @returns {Header}
+     */
+    static create(_oheader) {
+        let _lheader = new Header();
+        Object.assign(_lheader, _oheader);
+        _lheader._published = moment(_lheader._published); // Convert from string to moment.
+        _lheader._expires = moment(_lheader._expires);
+        return _lheader;
     }
 }
 /**
@@ -107,6 +115,14 @@ class Message {
     /**@param{Header}header*/set header(header) {this._header = header;}
     /**@returns{*}*/get payload() {return this._payload;}
     /**@param{*}payload*/set payload(payload) {this._payload = payload;}
+    /**
+     * @param {Header} _header
+     * @param {*} _opayload
+     * @returns {Message}
+     */
+    static create(_header, _opayload) {
+        return new Message(_header, _opayload);
+    }
     /**
      * @param {Message} message
      * @returns {Promise<string>}
@@ -139,22 +155,17 @@ class Message {
                 if(typeof msg !== "object" || msg == null)
                     reject(CelastrinaValidationError.newValidationError("Invalid message.", "Message"));
                 else {
-                    if (!msg.hasOwnProperty("_object") || typeof msg._object !== "object")
+                    if(!msg.hasOwnProperty("_object") || typeof msg._object !== "object")
                         reject(CelastrinaValidationError.newValidationError("Invalid Message object.", "Message._object"));
-                    if (!msg._object.hasOwnProperty("_mime") || msg._object._mime !== "application/json; com.celastrinajs.message")
+                    if(!msg._object.hasOwnProperty("_mime") || msg._object._mime !== "application/json; com.celastrinajs.message")
                         reject(CelastrinaValidationError.newValidationError("Invalid Message type.", "Message._object._mime"));
-                    if (!msg.hasOwnProperty("_header") || typeof msg._header !== "object")
+                    if(!msg.hasOwnProperty("_header") || typeof msg._header !== "object")
                         reject(CelastrinaValidationError.newValidationError("Invalid Header.", "Message._header"));
-                    if (!msg._header.hasOwnProperty("_object") || typeof msg._header._object !== "object")
+                    if(!msg._header.hasOwnProperty("_object") || typeof msg._header._object !== "object")
                         reject(CelastrinaValidationError.newValidationError("Invalid Header.", "Message._header._object"));
-                    if (!msg._header._object.hasOwnProperty("_mime") || msg._header._object._mime !== "application/json; com.celastrinajs.message.header")
+                    if(!msg._header._object.hasOwnProperty("_mime") || msg._header._object._mime !== "application/json; com.celastrinajs.message.header")
                         reject(CelastrinaValidationError.newValidationError("Invalid type.", "Message._header._object._mime"));
-                    let _header = new Header();
-                    let _message = new Message();
-                    Object.assign(_header, msg._header);
-                    Object.assign(_message, msg._payload);
-                    _message.header = _header;
-                    resolve(_message);
+                    resolve(Message.create(Header.create(msg._header), msg._payload));
                 }
             }
             catch(exception) {
@@ -172,14 +183,14 @@ class MessageContext extends BaseContext {
     /**
      * @param {Object} azcontext
      * @param {Configuration} config
-     * @param {null|Message} message
      */
-    constructor(azcontext, config, message) {
+    constructor(azcontext, config) {
         super(azcontext, config);
-        /**@type{null|Message}*/this._message = message;
+        /**@type{null|Message}*/this._message = null;
     }
-    /**@type{string}*/get raw() {return this._funccontext.message;}
-    /**@type{null|Message}*/get message() {return this._message;}
+    /**@returns{string}*/get raw() {return this._funccontext.message;}
+    /**@returns{null|Message}*/get message() {return this._message;}
+    /**@param{Message}message*/set message(message) {this._message = message;}
 }
 /**
  * MessageFunction
@@ -197,15 +208,14 @@ class MessageFunction extends BaseFunction {
      */
     async createContext(azcontext, config) {
         return new Promise((resolve, reject) => {
-            Message.unmarshall(azcontext.bindings.message)
-                .then((message) => {
-                    resolve(new MessageContext(azcontext, config, message));
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            resolve(new MessageContext(azcontext, config));
         });
     }
+    /**
+     * @param {MessageContext} context
+     * @returns {Promise<void>}
+     * @private
+     */
     async _onMonitor(context) {
         return new Promise((resolve, reject) => {
             context.log("Not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "MessageFunction._onMessage(context)");
@@ -213,7 +223,7 @@ class MessageFunction extends BaseFunction {
         });
     }
     /**
-     * @param {BaseContext | MessageContext} context
+     * @param {MessageContext} context
      * @returns {Promise<void>}
      * @private
      */
@@ -223,30 +233,55 @@ class MessageFunction extends BaseFunction {
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
+
+    /**
+     * @param {MessageContext} context
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _onPoisonMessage(context) {
+        return new Promise((resolve, reject) => {
+            context.log("Dropping poison message: " + context.raw +"'. Override this method to take different action", LOG_LEVEL.LEVEL_WARN, "MessageFunction._onMessage(context)");
+            context.done();
+            resolve();
+        });
+    }
     /**
      * @param {BaseContext | MessageContext} context
      * @returns {Promise<void>}
      */
     async process(context) {
         return new Promise((resolve, reject) => {
-            if(context.message.header.isExpired) {
-                context.log("Message " + context.message.header.messageId + " is expired, dropping.", LOG_LEVEL.LEVEL_WARN, "MessageFunction.process(context)");
-                resolve();
-            }
-            else {
-                /**@type{Promise<void>}*/let promise = null;
-                if(context.message.header.environment === MESSAGE_ENVIRONMENT.MONITOR)
-                    promise = this._onMonitor(context);
-                else
-                    promise = this._onMessage(context);
-                promise
-                    .then(() => {
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
+            Message.unmarshall(context.getBinding("message"))
+                .then((message) => {
+                    context.message = message;
+                    /**@type{Promise<void>}*/let promise;
+                    if(context.message.header.isExpired) {
+                        context.log("Message '" + context.message.header.messageId + "' is expired.", LOG_LEVEL.LEVEL_WARN, "MessageFunction.process(context)");
+                        promise = this._onPoisonMessage(context);
+                    }
+                    else if (context.message.header.environment === MESSAGE_ENVIRONMENT.MONITOR) {
+                        context.log("Message '" + context.message.header.messageId + "' is a monitor message.", LOG_LEVEL.LEVEL_INFO, "MessageFunction.process(context)");
+                        promise = this._onMonitor(context);
+                    }
+                    else promise = this._onMessage(context);
+                    promise
+                        .then(() => {
+                            resolve();
+                        })
+                        .catch((exception) => {
+                            reject(exception);
+                        });
+                })
+                .catch((exception) => {
+                    this._onPoisonMessage(context)
+                        .then(() => {
+                            resolve();
+                        })
+                        .catch((exception) => {
+                            reject(exception);
+                        });
+                });
         });
     }
 }

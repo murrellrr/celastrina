@@ -1846,7 +1846,6 @@ class MonitorResponse {
 }
 /**@abstract*/
 class RoleResolver {
-    /**@type{string}*/static CONFIG_SENTRY_ROLE_RESOLVER = "celastrinajs.core.function.roles.resolver";
     constructor(){}
     /**
      * @param {BaseContext} context

@@ -125,14 +125,18 @@ class Message {
         });
     }
     /**
-     * @param {string} message
+     * @param {*} message
      * @returns {Promise<Message>}
      */
     static async unmarshall(message) {
         return new Promise((resolve, reject) => {
             try {
-                let msg = JSON.parse(message);
-                if(typeof msg !== "object")
+                let msg;
+                if(typeof message === "string")
+                    msg = JSON.parse(message);
+                else msg = message;
+
+                if(typeof msg !== "object" || msg == null)
                     reject(CelastrinaValidationError.newValidationError("Invalid message.", "Message"));
                 else {
                     if (!msg.hasOwnProperty("_object") || typeof msg._object !== "object")
@@ -145,13 +149,16 @@ class Message {
                         reject(CelastrinaValidationError.newValidationError("Invalid Header.", "Message._header._object"));
                     if (!msg._header._object.hasOwnProperty("_mime") || msg._header._object._mime !== "application/json; com.celastrinajs.message.header")
                         reject(CelastrinaValidationError.newValidationError("Invalid type.", "Message._header._object._mime"));
+                    let _header = new Header();
                     let _message = new Message();
-                    Object.assign(_message, msg);
+                    Object.assign(_header, msg._header);
+                    Object.assign(_message, msg._payload);
+                    _message.header = _header;
                     resolve(_message);
                 }
             }
             catch(exception) {
-                reject(exception);
+                reject(CelastrinaError.wrapError(exception));
             }
         });
     }

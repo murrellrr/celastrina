@@ -169,7 +169,7 @@ class Message {
                 }
             }
             catch(exception) {
-                reject(CelastrinaError.wrapError(exception));
+                reject(CelastrinaError.newError(exception));
             }
         });
     }

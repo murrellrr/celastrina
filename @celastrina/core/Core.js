@@ -2332,10 +2332,10 @@ class BaseFunction {
      */
     _unhandled(context, exception) {
         /**@type{exception|Error|CelastrinaError|*}*/let ex = exception;
-        if(!(ex instanceof CelastrinaError)) {
+        if(typeof ex === "undefined" || ex == null) ex = CelastrinaError.newError("Unhandled server error.");
+        else if(!(ex instanceof CelastrinaError)) {
             if(ex instanceof Error) ex = CelastrinaError.wrapError(ex);
-            else if (typeof ex === "undefined" || ex == null) ex = CelastrinaError.newError("Unhandled server error.");
-            else ex = CelastrinaError.newError(ex.toString());
+            else ex = CelastrinaError.newError(ex);
         }
         context.log.error("[BaseFunction._unhandled(context, exception)][exception](NAME:" + ex.name + ") (MESSAGE:" + ex.message + ") (STACK:" + ex.stack + ") (CAUSE:" + ex.cause + ")");
         if(ex.drop) context.done();

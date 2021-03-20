@@ -29,6 +29,7 @@
 "use strict";
 
 const axios  = require("axios").default;
+const {AxiosError, AxiosResponse} = require("axios");
 const moment = require("moment");
 const {CelastrinaError, ResourceAuthorization} = require("@celastrina/core");
 
@@ -143,7 +144,7 @@ class BlobSemaphore extends Semaphore {
      * @private
      */
     async _lock(timeout = -1) {
-        return new Promise(async (resolve, reject) => {
+        return new Promise((resolve, reject) => {
             if(timeout === 0 || timeout < -1)
                 timeout = -1;
             else if(timeout > 60)
@@ -160,11 +161,15 @@ class BlobSemaphore extends Semaphore {
                     this._id = response.headers["x-ms-lease-id"];
                     resolve(true);
                 })
-                .catch((exception) => {
-                    if(exception.code === 409)
-                        resolve(false);
+                .catch((/**@type{*|AxiosError}*/exception) => {
+                    if(exception instanceof AxiosError) {
+                        if (exception.response.status === 409)
+                            resolve(false);
+                        else
+                            reject(CelastrinaError.newError(exception.response.statusText, exception.response.status));
+                    }
                     else
-                        reject(CelastrinaError.wrapError(exception, exception.code));
+                        reject(CelastrinaError.wrapError(exception));
                 });
         });
     }

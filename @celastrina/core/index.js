@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 "use strict";
-const {CelastrinaError, CelastrinaValidationError, ResourceAuthorization, ManagedIdentityAuthorization, AppRegistrationAuthorization,
+const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, ResourceAuthorization, ManagedIdentityAuthorization, AppRegistrationAuthorization,
        ResourceAuthorizationContext, ResourceAuthorizationConfiguration, Vault, PropertyHandler, AppSettingsPropertyHandler, VaultAppSettingPropertyHandler,
        AppConfigPropertyHandler, CachedProperty, CachePropertyHandler,
        CacheHandlerProperty, VaultAppSettingHandlerProperty, AppConfigHandlerProperty, Property, JsonProperty,
@@ -31,7 +31,7 @@ const {CelastrinaError, CelastrinaValidationError, ResourceAuthorization, Manage
        MonitorResponse, RoleResolver, BaseSentry, BaseContext, BaseFunction, AppRegistrationAuthorizationProperty,
        FunctionRoleProperty} = require("./Core");
 module.exports = {
-    CelastrinaError: CelastrinaError, CelastrinaValidationError: CelastrinaValidationError, ResourceAuthorization: ResourceAuthorization,
+    CelastrinaError: CelastrinaError, CelastrinaValidationError: CelastrinaValidationError, ConfigurationItem: ConfigurationItem, ResourceAuthorization: ResourceAuthorization,
     ResourceAuthorizationContext: ResourceAuthorizationContext, ResourceAuthorizationConfiguration: ResourceAuthorizationConfiguration,
     ManagedIdentityAuthorization: ManagedIdentityAuthorization, AppRegistrationAuthorization: AppRegistrationAuthorization,
     Vault: Vault, PropertyHandler: PropertyHandler,

@@ -30,7 +30,7 @@
 const axios  = require("axios").default;
 const moment = require("moment");
 const jwt = require("jsonwebtoken");
-const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Configuration, BaseSubject, BaseSentry,
+const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL, JsonProperty, Configuration, BaseSubject, BaseSentry,
        ValueMatch, MatchAll, MatchAny, MatchNone, Algorithm, AES256Algorithm, Cryptography, RoleResolver, BaseContext,
        BaseFunction} = require("@celastrina/core");
 /**
@@ -434,7 +434,7 @@ class AzureIDPJwtValidator extends JwtValidator {
  * JwtConfiguration
  * @author Robert R Murrell
  */
-class JwtConfiguration {
+class JwtConfiguration extends ConfigurationItem {
     /** @type{string}*/static CONFIG_JWT = "celastrinajs.http.jwt";
     /**
      * @param {Array.<IssuerProperty|Issuer>} [issures=[]]
@@ -447,6 +447,7 @@ class JwtConfiguration {
      */
     constructor(issures = [], validator = new JwtValidator(), param = new HeaderParameterFetch(), scheme = "Bearer ",
                 remove = true, token = "authorization", validateNonce = false) {
+        super();
         /**@type{Array.<(IssuerProperty|Issuer)>}*/this._issuers = issures;
         /**@type{null|HTTPParameterFetchProperty|HTTPParameterFetch}*/this._param  = param;
         /**@type{string|StringProperty}*/this._scheme = scheme;
@@ -455,6 +456,8 @@ class JwtConfiguration {
         /**@type{boolean|BooleanProperty}*/this._validateNonce = validateNonce;
         /**@type{JsonProperty|JwtValidator}*/this._validator = validator;
     }
+
+    /**@returns{string}*/get key() {return JwtConfiguration.CONFIG_JWT;}
     /**@returns{Array.<Issuer>}*/get issuers(){return this._issuers;}
     /**@returns{HTTPParameterFetch}*/get param(){return this._param;}
     /**@returns{string}*/get scheme(){return this._scheme;}

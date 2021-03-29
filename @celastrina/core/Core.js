@@ -149,6 +149,7 @@ class CelastrinaValidationError extends CelastrinaError {
 }
 /**@abstract*/
 class ConfigurationItem {
+    constructor(){}
     /**@type{string}*/get key() {return ""}
 }
 /**@abstract*/
@@ -2337,13 +2338,13 @@ class BaseFunction {
             if(ex instanceof Error) ex = CelastrinaError.wrapError(ex);
             else ex = CelastrinaError.newError(ex);
         }
-        context.log.error("[BaseFunction._unhandled(context, exception)][exception](NAME:" + ex.name + ") (MESSAGE:" + ex.message + ") (STACK:" + ex.stack + ") (CAUSE:" + ex.cause + ")");
+        context.log.error("[BaseFunction._unhandled(context, exception)][exception](MESSAGE:" + ex.message + ") \r\n (STACK:" + ex.stack + ") \r\n (CAUSE:" + ex.cause + ")");
         if(ex.drop) context.done();
         else context.done(ex);
     }
 }
 module.exports = {
-    CelastrinaError: CelastrinaError, CelastrinaValidationError: CelastrinaValidationError, ResourceAuthorization: ResourceAuthorization,
+    CelastrinaError: CelastrinaError, CelastrinaValidationError: CelastrinaValidationError, ConfigurationItem: ConfigurationItem, ResourceAuthorization: ResourceAuthorization,
     ResourceAuthorizationContext: ResourceAuthorizationContext, ResourceAuthorizationConfiguration: ResourceAuthorizationConfiguration,
     ManagedIdentityAuthorization: ManagedIdentityAuthorization, AppRegistrationAuthorization: AppRegistrationAuthorization,
     Vault: Vault, PropertyHandler: PropertyHandler,

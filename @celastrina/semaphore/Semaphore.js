@@ -31,7 +31,7 @@
 const axios  = require("axios").default;
 const {AxiosError, AxiosResponse} = require("axios");
 const moment = require("moment");
-const {CelastrinaError, ResourceAuthorization} = require("@celastrina/core");
+const {CelastrinaError, LOG_LEVEL, ResourceAuthorization, BaseContext} = require("@celastrina/core");
 
 /**
  * Semaphore
@@ -49,24 +49,28 @@ class Semaphore {
     }
     /**
      * @param {number} [timeout=0]
+     * @param {BaseContext} [context = null]
      * @returns {Promise<boolean>}
      * @private
      */
-    async _lock(timeout = 0) {
+    async _lock(timeout = 0, context = null) {
         return new Promise((resolve, reject) => {
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
     }
     /**
      * @param {number} [timeout=0]
+     * @param {BaseContext} [context = null]
      * @returns {Promise<void>}
      */
-    async lock(timeout = 0) {
+    async lock(timeout = 0, context = null) {
         return new Promise(async (resolve, reject) => {
             let intervalId = null;
             let counter = this._maxRetries;
             try {
-                if (await this._lock())
+                if(context != null)
+                    context.log("Invoking concrete type private lock.", LOG_LEVEL.LEVEL_INFO, "Semaphore.lock(timeout = 0, context = null)");
+                if(await this._lock(timeout, context))
                     resolve();
                 else {
                     intervalId = setInterval(async () => {
@@ -96,9 +100,10 @@ class Semaphore {
     }
     /**@returns{boolean}*/get isLocked() {return false;}
     /**
+     * @param {BaseContext} [context = null]
      * @returns {Promise<void>}
      */
-    async unlock() {
+    async unlock(context = null) {
         return new Promise((resolve, reject) => {
             reject(CelastrinaError.newError("Not Implemented.", 501));
         });
@@ -140,10 +145,11 @@ class BlobSemaphore extends Semaphore {
     /**@param{null|string} leaseId*/set leaseId(leaseId) {this._id = leaseId;}
     /**
      * @param {number} [timeout=0]
+     * @param {BaseContext} [context = null]
      * @returns {Promise<void>}
      * @private
      */
-    async _lock(timeout = -1) {
+    async _lock(timeout = -1, context = null) {
         return new Promise((resolve, reject) => {
             if(timeout === 0 || timeout < -1)
                 timeout = -1;
@@ -151,6 +157,8 @@ class BlobSemaphore extends Semaphore {
                 timeout = 60;
             this._auth.getToken("https://storage.azure.com/")
                 .then((token) => {
+                    if(context != null)
+                        context.log("Attempting blob storage lease for '" + this._endpoint + "'.", LOG_LEVEL.LEVEL_INFO, "BlobSemaphore._lock(timeout = -1, context = null)");
                     return axios.put(this._endpoint, null, {headers:
                                     {"Authorization": "Bearer "  + token,
                                      "x-ms-version": "2017-11-09",
@@ -162,21 +170,28 @@ class BlobSemaphore extends Semaphore {
                     resolve(true);
                 })
                 .catch((/**@type{*|AxiosError}*/exception) => {
-                    if(exception instanceof AxiosError) {
-                        if (exception.response.status === 409)
+                    if(context != null)
+                        context.log("Exception leasing blob: " + exception, LOG_LEVEL.LEVEL_INFO, "BlobSemaphore._lock(timeout = -1, context = null)");
+                    // Checking to see if this was an axios error.
+                    if(exception.hasOwnProperty("response")) {
+                        if(context != null)
+                            context.log("AxiosError response was returned: " + exception.response.statusText + ", " + exception.response.status, LOG_LEVEL.LEVEL_INFO, "BlobSemaphore._lock(timeout = -1, context = null)");
+                        if(exception.response.status === 409)
                             resolve(false);
                         else
                             reject(CelastrinaError.newError(exception.response.statusText, exception.response.status));
                     }
-                    else
-                        reject(CelastrinaError.wrapError(exception));
+                    else {
+                        reject(CelastrinaError.newError(exception));
+                    }
                 });
         });
     }
     /**
+     * @param {BaseContext} [context = null]
      * @returns {Promise<void>}
      */
-    async unlock() {
+    async unlock(context = null) {
         return new Promise((resolve, reject) => {
             this._auth.getToken("https://storage.azure.com/")
                 .then((token) => {

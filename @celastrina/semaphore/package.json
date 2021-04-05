@@ -1,6 +1,6 @@
 {
   "name": "@celastrina/semaphore",
-  "version": "1.8.0",
+  "version": "1.8.22",
   "description": "Semaphore Locking across cloud zones and regions.",
   "main": "index.js",
   "scripts": {

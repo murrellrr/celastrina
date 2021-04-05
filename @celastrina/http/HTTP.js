@@ -357,13 +357,19 @@ class JwtValidator {
     constructor(){}
     /**
      * @param {string} token
+     * @param {HTTPContext} context
      * @returns {Promise<JwtSubject>}
      */
-    async validate(token) {
+    async validate(token, context) {
         return new Promise((resolve, reject) => {
             JwtSubject.decode(token)
                 .then((subject) => {
-                    resolve(subject);
+                    if(subject.isExpired()) {
+                        context.log("JWT Token expired.", LOG_LEVEL.LEVEL_VERBOSE, "JwtValidator.authenticate(context)");
+                        reject(CelastrinaError.newError("Not Authorized.", 401));
+                    }
+                    else
+                        resolve(subject);
                 })
                 .catch((exception) => {
                     reject(exception);
@@ -372,62 +378,185 @@ class JwtValidator {
     }
 }
 /**
- * AzureADPJwtValidator
+ * AzureIDPJwtValidator
  * @extends {JwtValidator}
  * @author Robert R Murrell
+ * @abstract
  */
 class AzureIDPJwtValidator extends JwtValidator {
-    /**@param{null|string}subscriptionId*/
-    constructor(subscriptionId = "common") {
+    constructor() {
         super();
-        this._endpoint = "https://login.microsoftonline.com/" + subscriptionId + "/.well-known/openid-configuration";
     }
-    async validate(token) {
+    /**
+     * @param {JwtSubject} subject
+     * @param {HTTPContext} context
+     * @returns {Promise<{type:string, x5c?:string, e?:string, n?:string}>}
+     * @private
+     * @abstract
+     */
+    async _getKey(subject, context) {}
+    /**
+     * @param {{type:string, x5c?:string, e?:string, n?:string}} key
+     * @param {HTTPContext} context
+     * @returns {Promise<string>}
+     * @private
+     */
+    async _getPemX5C(key, context) {
         return new Promise((resolve, reject) => {
-            /**@type{null|JwtSubject}*/let _subject = null;
-            /**@type{null|string}*/let _kid = null;
-            /**@type{null|Array.<string>}*/let _x5c = null;
-            super.validate(token)
+            resolve("-----BEGIN CERTIFICATE-----\n" + key.x5c + "\n-----END CERTIFICATE-----\n");
+        });
+    }
+    /**
+     * @param {{type:string, x5c?:string, e?:string, n?:string}} key
+     * @param {HTTPContext} context
+     * @returns {Promise<string>}
+     * @private
+     */
+    async _getPemModExp(key, context) {
+        return new Promise((resolve, reject) => {
+            resolve(this._rsaPublicKeyPem(key.n, key.e));
+        });
+    }
+    /**
+     * @param {string} token
+     * @param {HTTPContext} context
+     * @returns {Promise<JwtSubject>}
+     */
+    async validate(token, context) {
+        return new Promise((resolve, reject) => {
+            let _subject = null;
+            super.validate(token, context)
                 .then((subject) => {
                     _subject = subject;
-                    _kid = _subject.header.kid;
-                    return axios.get(this._endpoint);
+                    return this._getKey(_subject, context);
                 })
-                .then((response) => {
-                    let jwks = response.data["jwks_uri"];
-                    if(typeof jwks !== "string")
-                        reject(CelastrinaError.newError("Not Authorized", 401));
-                    else {
-                        return axios.get(jwks);
+                .then((key) => {
+                    if(typeof key.x5c === "undefined" || key.x5c == null)
+                        return this._getPemModExp(key, context);
+                    else
+                        return this._getPemX5C(key, context);
+                })
+                .then((pem) => {
+                    let decoded = jwt.verify(_subject.token, pem);
+                    if(typeof decoded === "undefined" || decoded == null) {
+                        context.log("Invalid Token Signature.", LOG_LEVEL.LEVEL_WARN, "AzureIDPJwtValidator.validate(token, context)");
+                        reject(CelastrinaError.newError("Not Authorized.", 401));
                     }
+                    else
+                        resolve(_subject);
                 })
-                .then((response) => {
-                    let keys = response.data.keys;
-                    for(const key of keys) {
-                        if(_kid === key.kid) {
-                            _x5c = key["x5c"];
+                .catch((exception) => {
+                    context.log("Exception encountered while validating: " + exception, LOG_LEVEL.LEVEL_WARN, "AzureIDPJwtValidator.validate(token, context)");
+                    reject(CelastrinaError.newError("Not Authorized.", 401));
+                });
+        });
+    }
+    _rsaPublicKeyPem(modulus_b64, exponent_b64) {
+        let modulus = new Buffer(modulus_b64, 'base64');
+        let exponent = new Buffer(exponent_b64, 'base64');
+        let modulus_hex = modulus.toString('hex')
+        let exponent_hex = exponent.toString('hex')
+        modulus_hex = this._prepadSigned(modulus_hex)
+        exponent_hex = this._prepadSigned(exponent_hex)
+        let modlen = modulus_hex.length/2
+        let explen = exponent_hex.length/2
+        let encoded_modlen = this._encodeLengthHex(modlen)
+        let encoded_explen = this._encodeLengthHex(explen)
+        let encoded_pubkey = '30' +
+            this._encodeLengthHex(
+                modlen +
+                explen +
+                encoded_modlen.length/2 +
+                encoded_explen.length/2 + 2
+            ) +
+            '02' + encoded_modlen + modulus_hex +
+            '02' + encoded_explen + exponent_hex;
+        let der_b64 = new Buffer(encoded_pubkey, 'hex').toString('base64');
+        let pem = '-----BEGIN RSA PUBLIC KEY-----\n'
+            + der_b64.match(/.{1,64}/g).join('\n')
+            + '\n-----END RSA PUBLIC KEY-----\n';
+        return pem
+    }
+    _prepadSigned(hexStr) {
+        let msb = hexStr[0]
+        if (msb < '0' || msb > '7') {
+            return '00'+hexStr;
+        } else {
+            return hexStr;
+        }
+    }
+    /**
+     * @param {Number} number
+     * @returns {string}
+     * @private
+     */
+    _toHex(number) {
+        let nstr = number.toString(16);
+        if (nstr.length%2) return '0'+nstr;
+        return nstr;
+    }
+    _encodeLengthHex(n) {
+        if (n<=127) return this._toHex(n)
+        else {
+            let n_hex = this._toHex(n)
+            let length_of_length_byte = 128 + n_hex.length/2 // 0x80+numbytes
+            return this._toHex(length_of_length_byte)+n_hex
+        }
+    }
+}
+/**
+ * AzureADB2CJwtValidator
+ * @extends {AzureIDPJwtValidator}
+ * @author Robert R Murrell
+ */
+class AzureADB2CJwtValidator extends AzureIDPJwtValidator {
+    constructor(tenantName, policies = ["B2C_1_SIGNIN"]) {
+        super();
+        /**@type{{url:string, policies:Array.<string>}}*/
+        this._openId = {url: "https://" + tenantName + ".b2clogin.com/" + tenantName + ".onmicrosoft.com/{policy}/v2.0/.well-known/openid-configuration",
+                        policies: policies};
+    }
+    /**
+     * @param {JwtSubject} subject
+     * @returns {Promise<null|{type:string, x5c?:string, e?:string, n?:string}>}
+     * @private
+     */
+    async _getKey(subject) {
+        /**@type{null|{type:string, x5c?:string, e?:string, n?:string}}*/let _key = null;
+        /**@type{string}*/let endpoint = this._openId.url;
+        try {
+            /**@type{null|undefined|string}*/let tfpHint = await subject.getClaim("tfp");
+            if(tfpHint != null) {
+                if(this._openId.policies.includes(tfpHint)) {
+                    let index = this._openId.policies.findIndex(element => element === tfpHint);
+                    this._openId.policies.splice(index, 1);
+                    this._openId.policies.unshift(tfpHint);
+                }
+            }
+            /**@type{AxiosResponse<T>}*/let response;
+            for(const policy of this._openId.policies) {
+                try {
+                    response = await axios.get(endpoint.replace("{policy}", policy));
+                    response = await axios.get(response.data["jwks_uri"]);
+                    for (const key of response.data.keys) {
+                        if (key.kid === subject.header.kid) {
+                            _key = {type: key.kty, e: key.e, n: key.n};
                             break;
                         }
                     }
-                    if(typeof _x5c !== "undefined" && _x5c != null) {
-                        let valid = false;
-                        for(const key of _x5c) {
-                            let decoded = jwt.verify(_subject.token, "-----BEGIN CERTIFICATE-----\n" + key + "\n-----END CERTIFICATE-----");
-                            if((valid = typeof decoded !== "undefined" && decoded != null))
-                                break;
-                        }
-                        if(valid)
-                            resolve(_subject);
-                        else
-                            reject(CelastrinaError.newError("Not Authorized", 401));
-                    }
-                    else
-                        reject(CelastrinaError.newError("Not Authorized", 401));
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
-        });
+                    if(_key != null)
+                        break;
+                }
+                catch(exception) {
+                    // Swallow this error and move on to the next one.
+                    // TODO: Gonna log and move on.
+                }
+            }
+            return _key;
+        }
+        catch(exception) {
+            //
+        }
     }
 }
 /**
@@ -713,9 +842,8 @@ class HTTPContext extends BaseContext {
 }
 /**@type{BaseSentry}*/
 class JwtSentry extends BaseSentry {
-    /**@param{Configuration}config*/
-    constructor(config) {
-        super(config);
+    constructor() {
+        super();
         /**@type{JwtConfiguration}*/this._jwtconfig = null;
     }
     /**
@@ -728,9 +856,9 @@ class JwtSentry extends BaseSentry {
                 .then(() => {
                     try {
                         // Going to initialize the acceptable issuers.
-                        this._jwtconfig = this._configuration.getValue(JwtConfiguration.CONFIG_JWT);
+                        this._jwtconfig = config.getValue(JwtConfiguration.CONFIG_JWT);
                         if(this._jwtconfig == null) {
-                            this._configuration.context.log.error("[JwtSentry.initialize(config)]: JwtConfiguration missing or invalid.");
+                            config.context.log.error("[JwtSentry.initialize(config)]: JwtConfiguration missing or invalid.");
                             reject(CelastrinaError.newError("Invalid configration."));
                         }
                         else resolve();
@@ -787,7 +915,7 @@ class JwtSentry extends BaseSentry {
                 /**@type{JwtSubject}*/let subject = null;
                 this._getToken(context)
                     .then((auth) => {
-                        return this._jwtconfig.validator.validate(auth);
+                        return this._jwtconfig.validator.validate(auth, context);
                     })
                     .then((jwtsub) => {
                         subject = jwtsub;
@@ -1120,7 +1248,7 @@ class HTTPFunction extends BaseFunction {
                 context.sendServerError(ex);
             }
 
-            context.log("Request failed to process. (NAME:" + ex.cause.name + ") (MESSAGE:" + ex.cause.message + ") (STACK:" + ex.cause.stack + ")", LOG_LEVEL.LEVEL_ERROR, "HTTP.exception(context, exception)");
+            context.log("Request failed to process. (MESSAGE:" + ex.cause.message + ") (STACK:" + ex.cause.stack + ")", LOG_LEVEL.LEVEL_ERROR, "HTTP.exception(context, exception)");
             resolve();
         });
     }

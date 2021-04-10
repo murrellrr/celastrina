@@ -24,7 +24,7 @@
 "use strict";
 const {JwtSubject, Issuer, IssuerProperty, JwtValidator, AzureIDPJwtValidator,JwtConfiguration, HTTPContext, HTTPParameterFetch, HeaderParameterFetch,
        QueryParameterFetch, BodyParameterFetch, HTTPParameterFetchProperty, JwtSentry, CookieSessionResolver,
-       CookieSessionResolverProperty, SecureCookieSessionResolver, SecureCookieSessionResolverProperty, HTTPFunction,
+       CookieSessionResolverPropertyType, SecureCookieSessionResolver, SecureCookieSessionResolverPropertyType, HTTPFunction,
        JwtHTTPFunction, JSONHTTPContext, JSONHTTPFunction, JwtJSONHTTPFunction} = require("./HTTP");
 const {Recaptcha, RecaptchaFunctionRole} = require("./Recaptcha");
 module.exports = {
@@ -33,8 +33,8 @@ module.exports = {
     HTTPContext: HTTPContext, HTTPParameterFetch: HTTPParameterFetch, HeaderParameterFetch: HeaderParameterFetch,
     QueryParameterFetch: QueryParameterFetch, BodyParameterFetch: BodyParameterFetch,
     HTTPParameterFetchProperty: HTTPParameterFetchProperty, CookieSessionResolver: CookieSessionResolver,
-    CookieSessionResolverProperty: CookieSessionResolverProperty, SecureCookieSessionResolver: SecureCookieSessionResolver,
-    SecureCookieSessionResolverProperty: SecureCookieSessionResolverProperty, JwtSentry: JwtSentry,
+    CookieSessionResolverPropertyType: CookieSessionResolverPropertyType, SecureCookieSessionResolver: SecureCookieSessionResolver,
+    SecureCookieSessionResolverPropertyType: SecureCookieSessionResolverPropertyType, JwtSentry: JwtSentry,
     HTTPFunction: HTTPFunction, JwtHTTPFunction: JwtHTTPFunction, JSONHTTPContext: JSONHTTPContext, JSONHTTPFunction: JSONHTTPFunction,
     JwtJSONHTTPFunction: JwtJSONHTTPFunction
 };

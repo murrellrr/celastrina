@@ -29,7 +29,7 @@
 "use strict";
 
 const moment = require("moment");
-const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Configuration,
+const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration,
        BaseContext, BaseFunction} = require("@celastrina/core");
 
 /**

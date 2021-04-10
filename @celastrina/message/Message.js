@@ -30,7 +30,7 @@
 
 const moment = require("moment");
 const { v4: uuidv4 } = require('uuid');
-const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, JsonProperty, Configuration,
+const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration,
       BaseContext, BaseFunction} = require("@celastrina/core");
 
 /**

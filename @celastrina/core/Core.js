@@ -68,11 +68,19 @@ class CelastrinaError extends Error {
      */
     constructor(message, code = 500, drop = false, cause = null) {
         super(message);
-        this.cause = cause;
+        /**@type{Error}*/this.cause = cause;
         this.code  = code;
         this.drop  = drop;
     }
-    /**@returns{string}*/toString() {return "[" + this.code + "][" + this.drop + "]: " + this.message;}
+    /**
+     * @returns {string}
+     */
+    toString() {
+        let tostring = "[" + this.code + "][" + this.drop + "]: " + this.message;
+        if(this.cause != null)
+            tostring += " Caused by " + this.cause.toString();
+        return tostring;
+    }
     /**
      * @param {string} message
      * @param {int} code
@@ -91,15 +99,16 @@ class CelastrinaError extends Error {
      */
     static wrapError(error, code = 500, drop = false) {
         let ex = error;
-        if(!(ex instanceof Error)) {
-            if(typeof ex === "undefined")
-                ex = "Unspecified Server Error.";
-            if(typeof ex === "object" && ex == null)
-                ex = "Unspecified Server Error.";
+        if(typeof ex === "string" || typeof ex === "number")
             return new CelastrinaError(ex, code, drop);
+        else if(typeof ex === "object") {
+            if(ex instanceof Error || ex.hasOwnProperty("message"))
+                return new CelastrinaError(ex.message, code, drop, ex);
+            else
+                return new CelastrinaError(ex, code, drop);
         }
         else
-            return new CelastrinaError(ex.message, code, drop, ex);
+            return new CelastrinaError("Unhandled Exception.",code, drop);
     }
 }
 /**@type{CelastrinaError}*/
@@ -257,10 +266,10 @@ class ManagedIdentityAuthorization extends ResourceAuthorization {
 /**@type{ResourceAuthorization}*/
 class AppRegistrationAuthorization extends ResourceAuthorization {
     /**
-     * @param {StringProperty|string} id
-     * @param {StringProperty|string} authority
-     * @param {StringProperty|string} tenant
-     * @param {StringProperty|string} secret
+     * @param {StringPropertyType|string} id
+     * @param {StringPropertyType|string} authority
+     * @param {StringPropertyType|string} tenant
+     * @param {StringPropertyType|string} secret
      * @param {number} [skew=0]
      */
     constructor(id, authority, tenant, secret,
@@ -359,11 +368,11 @@ class ResourceAuthorizationConfiguration extends ConfigurationItem {
     /** */
     constructor() {
         super();
-        /**@type{Array.<JsonProperty|ResourceAuthorization>}*/this._authorizations = [];
+        /**@type{Array.<JsonPropertyType|ResourceAuthorization>}*/this._authorizations = [];
     }
     /**@type{string}*/get key() {return ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH};
     /**
-     * @param {JsonProperty|ResourceAuthorization} authorization
+     * @param {JsonPropertyType|ResourceAuthorization} authorization
      * @returns {ResourceAuthorizationConfiguration}
      */
     addAuthorization(authorization) {
@@ -416,7 +425,15 @@ class Vault {
                         resolve(response.data.value);
                     })
                     .catch((exception) => {
-                        reject(CelastrinaError.newError("Error getting secret for '" + identifier + "' from vault."));
+                        if(typeof exception === "object" && exception.hasOwnProperty("response")) {
+                            if(exception.response.status === 404)
+                                reject(CelastrinaError.newError("Vault secret '" + identifier + "' not found.", 404));
+                            else
+                                reject(CelastrinaError.newError("Exception getting Vault secret '" + identifier + "': " +
+                                                                 exception.response.statusText, exception.response.status));
+                        }
+                        else
+                            reject(CelastrinaError.newError("Exception getting Vault secret '" + identifier + "'."));
                     });
             }
             catch(exception) {
@@ -425,7 +442,11 @@ class Vault {
         });
     }
 }
-/**@abstract*/
+/**
+ * PropertyHandler
+ * @abstract
+ * @author Robert R Murrell
+ */
 class PropertyHandler {
     constructor(){}
     /**
@@ -456,6 +477,20 @@ class PropertyHandler {
      */
     async getProperty(key, defaultValue = null) {
         return new Promise((resolve, reject) => {reject(CelastrinaError.newError("Not Implemented."));});
+    }
+    /**
+     * @param {PropertyType} type
+     * @returns {Promise<PropertyType>}
+     */
+    async getPropertyType(type) {
+        return new Promise((resolve, reject) => {
+            if(typeof type === "undefined" || type === null)
+                resolve(null);
+            else {
+                type.load(this);
+                resolve(type);
+            }
+        });
     }
 }
 /**@type{PropertyHandler}*/
@@ -541,6 +576,7 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
                             resolve(value);
                         })
                         .catch((exception) => {
+                            if(typeof exception === "object" && exception.hasOwnProperty("response"))
                             reject(CelastrinaError.newError("Exception getting '" + kvp.value + "' from vault." + exception));
                         });
                 }
@@ -571,8 +607,17 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
                         resolve(value);
                     })
                     .catch((exception) => {
-                        reject(CelastrinaError.newError("Error getting value for key '" + key + "', from end-point '" + this._endpoint + "': " +
-                                                         exception));
+                        if(exception instanceof CelastrinaError)
+                            reject(exception);
+                        else if(typeof exception === "object" && exception.hasOwnProperty("response")) {
+                            if(exception.response.status === 404)
+                                reject(CelastrinaError.newError("App Configuration '" + key + "' not found.", 404));
+                            else
+                                reject(CelastrinaError.newError("Exception getting App Configuration '" + key + "': " +
+                                                                 exception.response.statusText, exception.response.status));
+                        }
+                        else
+                            reject(CelastrinaError.newError("Exception getting App Configuration '" + key + "'."));
                     });
             }
             catch(exception) {
@@ -789,16 +834,21 @@ class CachePropertyHandler extends PropertyHandler {
     }
 }
 /**@abstract*/
-class Property {
+class PropertyType {
     /**
-     * @param {string} name
+     * @param {string} key
      * @param {*} [defaultValue = null]
      */
-    constructor(name, defaultValue = null) {
-        this._name = name;
+    constructor(key, defaultValue = null) {
+        this._key = key;
         this._defaultValue = defaultValue;
     }
-    /**@returns{string}*/get name(){return this._name;}
+    /**
+     * @returns {string}
+     * @abstract
+     */
+    get mime() {return "text/plain; celastrinajs.core.property.PropertyType"}
+    /**@returns{string}*/get name(){return this._key;}
     /**@returns{*}*/get defaultValue(){return this._defaultValue;}
     /**
      * @param {PropertyHandler} handler
@@ -807,7 +857,7 @@ class Property {
     async lookup(handler) {
         return new Promise((resolve, reject) => {
             try {
-                handler.getProperty(this._name, this._defaultValue)
+                handler.getProperty(this._key, this._defaultValue)
                     .then((value) => {
                         resolve(value);
                     })
@@ -825,7 +875,7 @@ class Property {
      * @returns {Promise<null|Object|string|boolean|number>}
      */
     async resolve(value) {
-        return new Promise((resolve, reject) => {reject(CelastrinaError.newError("Property not supported."));});
+        return new Promise((resolve, reject) => {reject(CelastrinaError.newError("PropertyType not supported."));});
     }
     /**
      * @param {PropertyHandler} handler
@@ -851,13 +901,18 @@ class Property {
         });
     }
 }
-/**@type{Property}*/
-class JsonProperty extends Property {
+/**@type{PropertyType}*/
+class JsonPropertyType extends PropertyType {
     /**
      * @param {string} name
      * @param {null|Object} defaultValue
      */
     constructor(name, defaultValue = null) {super(name, defaultValue);}
+    /**
+     * @returns {string}
+     * @abstract
+     */
+    get mime() {return "application/json; celastrinajs.core.property.JsonPropertyType"}
     /**
      * @param {null|string} value
      * @returns {Promise<null|Object>}
@@ -874,13 +929,18 @@ class JsonProperty extends Property {
         });
     }
 }
-/**@type{Property}*/
-class StringProperty extends Property {
+/**@type{PropertyType}*/
+class StringPropertyType extends PropertyType {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
      */
     constructor(name, defaultValue = null){super(name, defaultValue);}
+    /**
+     * @returns {string}
+     * @abstract
+     */
+    get mime() {return "text/plain; celastrinajs.core.property.StringPropertyType"}
     /**
      * @param {string} value
      * @returns {Promise<null|string>}
@@ -896,14 +956,19 @@ class StringProperty extends Property {
         });
     }
 }
-/**@type{Property}*/
-class BooleanProperty extends Property {
+/**@type{PropertyType}*/
+class BooleanPropertyType extends PropertyType {
     /**
      * @brief
      * @param {string} name
      * @param {null|boolean} defaultValue
      */
     constructor(name, defaultValue = null){super(name, defaultValue);}
+    /**
+     * @returns {string}
+     * @abstract
+     */
+    get mime() {return "text/plain; celastrinajs.core.property.BooleanPropertyType"}
     /**
      * @brief
      * @param {string} value
@@ -920,13 +985,18 @@ class BooleanProperty extends Property {
         });
     }
 }
-/**@type{Property}*/
-class NumericProperty extends Property {
+/**@type{PropertyType}*/
+class NumericPropertyType extends PropertyType {
     /**
      * @param {string} name
      * @param {null|number} defaultValue
      */
     constructor(name, defaultValue = null){super(name, defaultValue);}
+    /**
+     * @returns {string}
+     * @abstract
+     */
+    get mime() {return "text/plain; celastrinajs.core.property.NumericPropertyType"}
     /**
      * @param {string} value
      * @returns {Promise<null|number>}
@@ -1028,8 +1098,8 @@ class AppConfigHandlerProperty extends HandlerProperty {
         return new AppConfigPropertyHandler(source.subscriptionId, source.resourceGroupName, source.configStoreName, _label, _useVault);
     }
 }
-/**@type{JsonProperty}*/
-class AppRegistrationAuthorizationProperty extends JsonProperty {
+/**@type{JsonPropertyType}*/
+class AppRegistrationAuthorizationPropertyType extends JsonPropertyType {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
@@ -1038,6 +1108,11 @@ class AppRegistrationAuthorizationProperty extends JsonProperty {
         super(name, defaultValue);
         this._type = "ApplicationAuthorization";
     }
+    /**
+     * @returns {string}
+     * @abstract
+     */
+    get mime() {return "application/json; celastrinajs.core.property.AppRegistrationAuthorizationPropertyType"}
     /**
      * @param {string} value
      * @returns {Promise<null|Object>}
@@ -1071,7 +1146,7 @@ class PropertyLoader {
     /**
      * @param {Object} object
      * @param {string} attribute
-     * @param {Property} property
+     * @param {PropertyType} property
      * @param {PropertyHandler} handler
      * @returns {Promise<void>}
      */
@@ -1116,15 +1191,15 @@ class ModuleConfiguration extends ConfigurationItem {
     /**@type{string}*/static CONFIG_MODULES = "celastrinajs.core.configuration.modules";
     constructor() {
         super();
-        /**@type{empty|Array.<JsonProperty|Module>}*/this._modules = [];
+        /**@type{empty|Array.<JsonPropertyType|Module>}*/this._modules = [];
     }
     /**@type{string}*/get key() {return ModuleConfiguration.CONFIG_MODULES}
     /**
-     * @param {JsonProperty|Module} module
+     * @param {JsonPropertyType|Module} module
      * @returns {ModuleConfiguration}
      */
     addModule(module){
-        if(!(module instanceof Module) || !(module instanceof JsonProperty))
+        if(!(module instanceof Module) || !(module instanceof JsonPropertyType))
             throw CelastrinaValidationError.newValidationError("Argument 'module' is required.", "module");
         this._modules.unshift(module);
         return this;
@@ -1347,13 +1422,18 @@ class FunctionRole {
         });
     }
 }
-/**@type{JsonProperty}*/
-class FunctionRoleProperty extends JsonProperty {
+/**@type{JsonPropertyType}*/
+class FunctionRolePropertyType extends JsonPropertyType {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
      */
     constructor(name, defaultValue = null){super(name, defaultValue);}
+    /**
+     * @returns {string}
+     * @abstract
+     */
+    get mime() {return "application/json; celastrinajs.core.property.FunctionRolePropertyType"}
     /**
      * @param type
      * @returns {Promise<ValueMatch>}
@@ -1390,7 +1470,7 @@ class FunctionRoleProperty extends JsonProperty {
                             else if(!source.hasOwnProperty("_match")) reject(CelastrinaError.newError("Invalid FunctionRole, _match required."));
                             else if(!source._match.hasOwnProperty("_type")) reject(CelastrinaError.newError("Invalid FunctionRole._match._type, _type required."));
                             else {
-                                FunctionRoleProperty._getMatchType(source._match._type)
+                                FunctionRolePropertyType._getMatchType(source._match._type)
                                     .then((match) => {
                                         resolve(new FunctionRole(source._action, source._roles, match));
                                     })
@@ -1451,17 +1531,17 @@ class FunctionRoleConfiguration extends ConfigurationItem {
     /**@type{string}*/static CONFIG_ROLES = "celastrinajs.core.configuration.roles";
     constructor() {
         super();
-        /**@type{Array.<JsonProperty|FunctionRole>}*/this._roles = [];
-        /**@type{null|JsonProperty|RoleResolver}*/this._resolver = null;
+        /**@type{Array.<JsonPropertyType|FunctionRole>}*/this._roles = [];
+        /**@type{null|JsonPropertyType|RoleResolver}*/this._resolver = null;
     }
     /**@type{string}*/get key() {return FunctionRoleConfiguration.CONFIG_ROLES};
     /**
-     * @param {JsonProperty|FunctionRole} role
+     * @param {JsonPropertyType|FunctionRole} role
      * @returns {FunctionRoleConfiguration}
      */
     addFunctionRole(role){this._roles.unshift(role); return this;}
     /**
-     * @param {JsonProperty|RoleResolver} resolver
+     * @param {JsonPropertyType|RoleResolver} resolver
      * @returns {FunctionRoleConfiguration}
      */
     setResolver(resolver) {this._resolver = resolver; return this;}
@@ -1496,13 +1576,13 @@ class Configuration extends EventEmitter {
     /**@type{string}*/static CONFIG_HANDLER = "celastrinajs.core.configuration.handler";
     /**@type{string}*/static CONFIG_CONTEXT = "celastrinajs.core.configuration.context";
     /**@type{string}*/static PROP_LOCAL_DEV = "celastringjs.core.property.deployment.local.development";
-    /**@param{StringProperty|string} name*/
+    /**@param{StringPropertyType|string} name*/
     constructor(name) {
         super();
         if(typeof name === "string") {
             if(name.trim().length === 0) throw CelastrinaError.newError("Invalid configuration. Name cannot be undefined, null or 0 length.");
         }
-        else if(!(name instanceof StringProperty)) throw CelastrinaError.newError("Invalid configuration. Name must be string or StringProperty.");
+        else if(!(name instanceof StringPropertyType)) throw CelastrinaError.newError("Invalid configuration. Name must be string or StringPropertyType.");
         this._config = {};
         /**@type{boolean}*/this._loaded = false;
         this._config[Configuration.CONFIG_CONTEXT] = null;
@@ -1586,8 +1666,8 @@ class Configuration extends EventEmitter {
             for(let prop in obj) {
                 let local = obj[prop];
                 if(typeof local !== "undefined" && local != null) {
-                    if(local instanceof Property) promises.unshift(PropertyLoader.load(obj, prop, local,
-                                                                   this._config[Configuration.CONFIG_HANDLER]));
+                    if(local instanceof PropertyType) promises.unshift(PropertyLoader.load(obj, prop, local,
+                                                                            this._config[Configuration.CONFIG_HANDLER]));
                     else this._load(local, promises);
                 }
             }
@@ -1641,11 +1721,6 @@ class Configuration extends EventEmitter {
                     }
                     handler.initialize(azcontext, this._config)
                         .then(() => {
-                            /**@type{Array.<Promise<void>>}*/let promises = [];
-                            this._load(this, promises);
-                            return Promise.all(promises);
-                        })
-                        .then(() => {
                             let _name = this._config[Configuration.CONFIG_NAME];
                             if(typeof _name !== "string" || _name.trim().length === 0) {
                                 azcontext.log.error("[Configuration.load(context)]: Invalid Configuration. Name cannot be undefined, null, or 0 length.");
@@ -1677,11 +1752,17 @@ class Configuration extends EventEmitter {
                             return handler.ready(azcontext, this._config);
                         })
                         .then(() => {
+                            azcontext.log.info("[Configuration.initialize(azcontext)]: Property Handler Ready, loading dynamic property types.");
+                            /**@type{Array.<Promise<void>>}*/let promises = [];
+                            this._load(this, promises);
+                            return Promise.all(promises);
+                        })
+                        .then(() => {
                             azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration initialized.");
                             resolve();
                         })
                         .catch((exception) => {
-                            azcontext.log.error("[Configuration.load(context)]: Exception initializing handler: " + exception);
+                            azcontext.log.error("[Configuration.initialize(context)]: Exception initializing handler: " + exception);
                             reject(exception);
                         });
                 }
@@ -2350,11 +2431,11 @@ module.exports = {
     Vault: Vault, PropertyHandler: PropertyHandler,
     AppSettingsPropertyHandler: AppSettingsPropertyHandler,
     AppConfigPropertyHandler: AppConfigPropertyHandler, CachedProperty: CachedProperty, CachePropertyHandler: CachePropertyHandler,
-    AppConfigHandlerProperty: AppConfigHandlerProperty, Property: Property, StringProperty: StringProperty,
-    BooleanProperty: BooleanProperty, NumericProperty: NumericProperty, JsonProperty: JsonProperty, ModuleConfiguration: ModuleConfiguration, ModuleContext: ModuleContext,
-    Module: Module, ApplicationAuthorization: AppRegistrationAuthorization, AppRegistrationAuthorizationProperty: AppRegistrationAuthorizationProperty,
+    AppConfigHandlerProperty: AppConfigHandlerProperty, Property: PropertyType, StringProperty: StringPropertyType,
+    BooleanProperty: BooleanPropertyType, NumericProperty: NumericPropertyType, JsonProperty: JsonPropertyType, ModuleConfiguration: ModuleConfiguration, ModuleContext: ModuleContext,
+    Module: Module, ApplicationAuthorization: AppRegistrationAuthorization, AppRegistrationAuthorizationProperty: AppRegistrationAuthorizationPropertyType,
     ValueMatch: ValueMatch, MatchAny: MatchAny, MatchAll: MatchAll, MatchNone: MatchNone, FunctionRole: FunctionRole,
-    FunctionRoleProperty: FunctionRoleProperty, FunctionRoleConfiguration: FunctionRoleConfiguration, FunctionRoleContext: FunctionRoleContext, Configuration: Configuration, Algorithm: Algorithm, AES256Algorithm: AES256Algorithm,
+    FunctionRoleProperty: FunctionRolePropertyType, FunctionRoleConfiguration: FunctionRoleConfiguration, FunctionRoleContext: FunctionRoleContext, Configuration: Configuration, Algorithm: Algorithm, AES256Algorithm: AES256Algorithm,
     Cryptography: Cryptography, LOG_LEVEL: LOG_LEVEL, BaseSubject: BaseSubject, MonitorResponse: MonitorResponse, RoleResolver: RoleResolver,
     BaseSentry: BaseSentry, BaseContext: BaseContext, BaseFunction: BaseFunction
 };

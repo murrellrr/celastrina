@@ -30,7 +30,7 @@
 const axios  = require("axios").default;
 const moment = require("moment");
 const jwt = require("jsonwebtoken");
-const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL, JsonProperty, Configuration, BaseSubject, BaseSentry,
+const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL, JsonPropertyType, Configuration, BaseSubject, BaseSentry,
        ValueMatch, MatchAll, MatchAny, MatchNone, Algorithm, AES256Algorithm, Cryptography, RoleResolver, BaseContext,
        BaseFunction} = require("@celastrina/core");
 /**
@@ -178,7 +178,7 @@ class Issuer {
     }
 }
 /**@type{JsonProperty}*/
-class IssuerProperty extends JsonProperty {
+class IssuerProperty extends JsonPropertyT {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
@@ -311,7 +311,7 @@ class BodyParameterFetch extends HTTPParameterFetch {
     }
 }
 /**@type{JsonProperty}*/
-class HTTPParameterFetchProperty extends JsonProperty {
+class HTTPParameterFetchPropertyType extends JsonPropertyType {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
@@ -568,7 +568,7 @@ class JwtConfiguration extends ConfigurationItem {
     /**
      * @param {Array.<IssuerProperty|Issuer>} [issures=[]]
      * @param {JwtValidator} [validator=new JwtValidator()]
-     * @param {(HTTPParameterFetchProperty|HTTPParameterFetch)} [param={HeaderParameterFetch}]
+     * @param {(HTTPParameterFetchPropertyType|HTTPParameterFetch)} [param={HeaderParameterFetch}]
      * @param {(string|StringProperty)} [scheme="Bearer "]
      * @param {(boolean|BooleanProperty)} [remove=true]
      * @param {(string|StringProperty)} [token="authorization"]
@@ -578,7 +578,7 @@ class JwtConfiguration extends ConfigurationItem {
                 remove = true, token = "authorization", validateNonce = false) {
         super();
         /**@type{Array.<(IssuerProperty|Issuer)>}*/this._issuers = issures;
-        /**@type{null|HTTPParameterFetchProperty|HTTPParameterFetch}*/this._param  = param;
+        /**@type{null|HTTPParameterFetchPropertyType|HTTPParameterFetch}*/this._param  = param;
         /**@type{string|StringProperty}*/this._scheme = scheme;
         /**@type{boolean|BooleanProperty}*/this._remove = remove;
         /**@type{string|StringProperty}*/this._token  = token;
@@ -605,7 +605,7 @@ class JwtConfiguration extends ConfigurationItem {
      */
     setIssuers(issuers = []){this._issuers = issuers; return this;}
     /**
-     * @param {HTTPParameterFetchProperty|HTTPParameterFetch} [param={HeaderParameterFetch}]
+     * @param {HTTPParameterFetchPropertyType|HTTPParameterFetch} [param={HeaderParameterFetch}]
      * @return {JwtConfiguration}
      */
     setParam(param= new HeaderParameterFetch()){this._param = param; return this;}
@@ -1043,12 +1043,17 @@ class SecureCookieSessionResolver extends CookieSessionResolver {
     }
 }
 /**@type{JsonProperty}*/
-class CookieSessionResolverProperty extends JsonProperty {
+class CookieSessionResolverPropertyType extends JsonPropertyType {
     /**
      * @param {string} name
      * @param {null|string} [defaultValue=null]
      */
     constructor(name, defaultValue = null) {super(name, defaultValue);}
+    /**
+     * @returns {string}
+     * @abstract
+     */
+    get mime() {return "application/json; celastrinajs.http.property.CookieSessionResolverPropertyType"}
     /**
      * @param {string} value
      * @returns {Promise<null|Object>}
@@ -1067,12 +1072,17 @@ class CookieSessionResolverProperty extends JsonProperty {
     }
 }
 /**@type{JsonProperty}*/
-class SecureCookieSessionResolverProperty extends JsonProperty {
+class SecureCookieSessionResolverPropertyType extends JsonPropertyType {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
      */
     constructor(name, defaultValue = null){super(name, defaultValue);}
+    /**
+     * @returns {string}
+     * @abstract
+     */
+    get mime() {return "application/json; celastrinajs.http.property.SecureCookieSessionResolverPropertyType"}
     /**
      * @param {string} value
      * @returns {Promise<null|Object>}
@@ -1368,9 +1378,9 @@ module.exports = {
     JwtValidator: JwtValidator, JwtConfiguration: JwtConfiguration,
     HTTPContext: HTTPContext, HTTPParameterFetch: HTTPParameterFetch, HeaderParameterFetch: HeaderParameterFetch,
     QueryParameterFetch: QueryParameterFetch, BodyParameterFetch: BodyParameterFetch,
-    HTTPParameterFetchProperty: HTTPParameterFetchProperty, CookieSessionResolver: CookieSessionResolver,
-    CookieSessionResolverProperty: CookieSessionResolverProperty, SecureCookieSessionResolver: SecureCookieSessionResolver,
-    SecureCookieSessionResolverProperty: SecureCookieSessionResolverProperty, JwtSentry: JwtSentry,
+    HTTPParameterFetchProperty: HTTPParameterFetchPropertyType, CookieSessionResolver: CookieSessionResolver,
+    CookieSessionResolverPropertyType: CookieSessionResolverPropertyType, SecureCookieSessionResolver: SecureCookieSessionResolver,
+    SecureCookieSessionResolverPropertyType: SecureCookieSessionResolverPropertyType, JwtSentry: JwtSentry,
     HTTPFunction: HTTPFunction, JwtHTTPFunction: JwtHTTPFunction, JSONHTTPContext: JSONHTTPContext, JSONHTTPFunction: JSONHTTPFunction,
     JwtJSONHTTPFunction: JwtJSONHTTPFunction
 };

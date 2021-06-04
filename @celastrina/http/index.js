@@ -22,14 +22,16 @@
  * SOFTWARE.
  */
 "use strict";
-const {JwtSubject, Issuer, IssuerProperty, JwtValidator, AzureIDPJwtValidator,AzureADB2CJwtValidator, JwtConfiguration, HTTPContext, HTTPParameterFetch, HeaderParameterFetch,
+const {JwtSubject, Issuer, IssuerProperty, JwtValidator, AzureIDPJwtValidator,AzureADJwtValidator, AzureADB2CJwtValidator,
+       JwtConfiguration, HTTPContext, HTTPParameterFetch, HeaderParameterFetch,
        QueryParameterFetch, BodyParameterFetch, HTTPParameterFetchProperty, JwtSentry, CookieSessionResolver,
        CookieSessionResolverPropertyType, SecureCookieSessionResolver, SecureCookieSessionResolverPropertyType, HTTPFunction,
        JwtHTTPFunction, JSONHTTPContext, JSONHTTPFunction, JwtJSONHTTPFunction} = require("./HTTP");
 const {Recaptcha, RecaptchaFunctionRole} = require("./Recaptcha");
 module.exports = {
     JwtSubject: JwtSubject, Issuer: Issuer, IssuerProperty: IssuerProperty,
-    JwtValidator: JwtValidator, AzureADB2CJwtValidator: AzureADB2CJwtValidator, AzureIDPJwtValidator: AzureIDPJwtValidator, JwtConfiguration: JwtConfiguration,
+    JwtValidator: JwtValidator, AzureIDPJwtValidator: AzureIDPJwtValidator, AzureADJwtValidator: AzureADJwtValidator,
+    AzureADB2CJwtValidator: AzureADB2CJwtValidator, JwtConfiguration: JwtConfiguration,
     HTTPContext: HTTPContext, HTTPParameterFetch: HTTPParameterFetch, HeaderParameterFetch: HeaderParameterFetch,
     QueryParameterFetch: QueryParameterFetch, BodyParameterFetch: BodyParameterFetch,
     HTTPParameterFetchProperty: HTTPParameterFetchProperty, CookieSessionResolver: CookieSessionResolver,

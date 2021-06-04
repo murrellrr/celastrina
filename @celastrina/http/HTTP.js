@@ -101,10 +101,23 @@ class JwtSubject extends BaseSubject {
      */
     async getClaim(name, defaultValue = null) {
         return new Promise((resolve, reject) => {
-            let claim = this._token[name];
+            let claim = this._payload[name];
             if(typeof claim === "undefined" || claim == null)
                 claim = defaultValue;
             resolve(claim);
+        });
+    }
+    /**
+     * @param {string}name
+     * @param {null|string}defaultValue
+     * @returns {Promise<number|string|Array.<string>>}
+     */
+    async getHeader(name, defaultValue = null) {
+        return new Promise((resolve, reject) => {
+            let header = this._header[name];
+            if(typeof header === "undefined" || header == null)
+                header = defaultValue;
+            resolve(header);
         });
     }
     /**
@@ -394,11 +407,49 @@ class AzureIDPJwtValidator extends JwtValidator {
     /**
      * @param {JwtSubject} subject
      * @param {HTTPContext} context
-     * @returns {Promise<{type:string, x5c?:string, e?:string, n?:string}>}
+     * @return{Promise<string>}
      * @private
      * @abstract
      */
-    async _getKey(subject, context) {}
+    async _generateEndpointUrl(subject, context) {
+        return new Promise((resolve, reject) => {
+            reject(CelastrinaError.newError("Not Implemented."));
+        });
+    };
+    /**
+     * @param {JwtSubject} subject
+     * @param {HTTPContext} context
+     * @returns {Promise<null|{type:string, x5c?:string, e?:string, n?:string}>}
+     * @private
+     */
+    async _getKey(subject, context) {
+        return new Promise((resolve, reject) => {
+            this._generateEndpointUrl(subject, context)
+                .then((endpoint) => {
+                    return axios.get(endpoint);
+                })
+                .then((response) => {
+                    return axios.get(response.data["jwks_uri"])
+                })
+                .then((response) => {
+                    /**@type{null|{type:string, x5c?:string, e?:string, n?:string}}*/let _key = null;
+                    for(const key of response.data.keys) {
+                        if (key.kid === subject.header.kid) {
+                            _key = {type: key.kty, e: key.e, n: key.n};
+                            break;
+                        }
+                    }
+                    if(_key != null)
+                        resolve(_key);
+                    else
+                        reject(CelastrinaError.newError("Key not found for configuration '" + endpoint + "' on subject '" +
+                                                                subject.id + "'."));
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    }
     /**
      * @param {{type:string, x5c?:string, e?:string, n?:string}} key
      * @param {HTTPContext} context
@@ -513,56 +564,41 @@ class AzureIDPJwtValidator extends JwtValidator {
  * @extends {AzureIDPJwtValidator}
  * @author Robert R Murrell
  */
-class AzureADB2CJwtValidator extends AzureIDPJwtValidator {
-    constructor(tenantName, policies = ["B2C_1_SIGNIN"]) {
+class AzureADJwtValidator extends AzureIDPJwtValidator {
+    constructor() {
         super();
-        /**@type{{url:string, policies:Array.<string>}}*/
-        this._openId = {url: "https://" + tenantName + ".b2clogin.com/" + tenantName + ".onmicrosoft.com/{policy}/v2.0/.well-known/openid-configuration",
-                        policies: policies};
     }
-    /**
-     * @param {JwtSubject} subject
-     * @param {HTTPContext} context
-     * @returns {Promise<null|{type:string, x5c?:string, e?:string, n?:string}>}
-     * @private
-     */
-    async _getKey(subject, context) {
-        /**@type{null|{type:string, x5c?:string, e?:string, n?:string}}*/let _key = null;
-        /**@type{string}*/let endpoint = this._openId.url;
-        try {
-            /**@type{null|undefined|string}*/let tfpHint = await subject.getClaim("tfp");
-            if(tfpHint != null) {
-                if(this._openId.policies.includes(tfpHint)) {
-                    let index = this._openId.policies.findIndex(element => element === tfpHint);
-                    this._openId.policies.splice(index, 1);
-                    this._openId.policies.unshift(tfpHint);
-                }
-            }
-            /**@type{AxiosResponse<T>}*/let response;
-            for(const policy of this._openId.policies) {
-                try {
-                    response = await axios.get(endpoint.replace("{policy}", policy));
-                    response = await axios.get(response.data["jwks_uri"]);
-                    for (const key of response.data.keys) {
-                        if (key.kid === subject.header.kid) {
-                            _key = {type: key.kty, e: key.e, n: key.n};
-                            break;
-                        }
-                    }
-                    if(_key != null)
-                        break;
-                }
-                catch(exception) {
-                    // Swallow this error and move on to the next one.
-                    // TODO: Gonna log and move on.
-                }
-            }
-            return _key;
-        }
-        catch(exception) {
-            //
-        }
+    async _generateEndpointUrl(subject, context) {
+        return new Promise((resolve) => {
+            resolve("https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration");
+        });
+    };
+}
+/**
+ * AzureADB2CJwtValidator
+ * @extends {AzureIDPJwtValidator}
+ * @author Robert R Murrell
+ */
+class AzureADB2CJwtValidator extends AzureIDPJwtValidator {
+    constructor(tenantName) {
+        super();
+        /**@type{string}}*/
+        this._url = "https://" + tenantName + ".b2clogin.com/" + tenantName + ".onmicrosoft.com/{policy}/v2.0/.well-known/openid-configuration";
     }
+    async _generateEndpointUrl(subject, context) {
+        return new Promise((resolve, reject) => {
+            subject.getClaim("tfp")
+                .then((claim) => {
+                    if(claim == null)
+                        reject(CelastrinaError.newError("No TFP policy claim found for subject '" + subject.id + "'."));
+                    else
+                        resolve(this._url.replace("{policy}", claim));
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
+        });
+    };
 }
 /**
  * JwtConfiguration
@@ -1380,7 +1416,7 @@ class JwtJSONHTTPFunction extends JSONHTTPFunction {
 }
 module.exports = {
     JwtSubject: JwtSubject, Issuer: Issuer, IssuerProperty: IssuerProperty, AzureIDPJwtValidator: AzureIDPJwtValidator,
-    AzureADB2CJwtValidator: AzureADB2CJwtValidator, JwtValidator: JwtValidator, JwtConfiguration: JwtConfiguration,
+    AzureADJwtValidator: AzureADJwtValidator, AzureADB2CJwtValidator: AzureADB2CJwtValidator, JwtValidator: JwtValidator, JwtConfiguration: JwtConfiguration,
     HTTPContext: HTTPContext, HTTPParameterFetch: HTTPParameterFetch, HeaderParameterFetch: HeaderParameterFetch,
     QueryParameterFetch: QueryParameterFetch, BodyParameterFetch: BodyParameterFetch,
     HTTPParameterFetchProperty: HTTPParameterFetchPropertyType, CookieSessionResolver: CookieSessionResolver,

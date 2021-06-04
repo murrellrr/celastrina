@@ -99,7 +99,7 @@ class CelastrinaError extends Error {
      */
     static wrapError(error, code = 500, drop = false) {
         let ex = error;
-        if(typeof ex === "undefined")
+        if(typeof ex === "undefined" || ex == null)
             return new CelastrinaError("Unhandled Exception.", code, drop);
         if(ex instanceof CelastrinaError)
             return ex;

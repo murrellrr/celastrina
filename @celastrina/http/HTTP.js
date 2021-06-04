@@ -1380,7 +1380,7 @@ class JwtJSONHTTPFunction extends JSONHTTPFunction {
 }
 module.exports = {
     JwtSubject: JwtSubject, Issuer: Issuer, IssuerProperty: IssuerProperty, AzureIDPJwtValidator: AzureIDPJwtValidator,
-    JwtValidator: JwtValidator, JwtConfiguration: JwtConfiguration,
+    AzureADB2CJwtValidator: AzureADB2CJwtValidator, JwtValidator: JwtValidator, JwtConfiguration: JwtConfiguration,
     HTTPContext: HTTPContext, HTTPParameterFetch: HTTPParameterFetch, HeaderParameterFetch: HeaderParameterFetch,
     QueryParameterFetch: QueryParameterFetch, BodyParameterFetch: BodyParameterFetch,
     HTTPParameterFetchProperty: HTTPParameterFetchPropertyType, CookieSessionResolver: CookieSessionResolver,

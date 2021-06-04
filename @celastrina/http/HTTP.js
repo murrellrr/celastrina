@@ -177,8 +177,12 @@ class Issuer {
         });
     }
 }
-/**@type{JsonProperty}*/
-class IssuerProperty extends JsonPropertyT {
+/**
+ * IssuerProperty
+ * @author Robert R Murrell
+ * @extends {JsonPropertyType}
+ */
+class IssuerProperty extends JsonPropertyType {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
@@ -518,10 +522,11 @@ class AzureADB2CJwtValidator extends AzureIDPJwtValidator {
     }
     /**
      * @param {JwtSubject} subject
+     * @param {HTTPContext} context
      * @returns {Promise<null|{type:string, x5c?:string, e?:string, n?:string}>}
      * @private
      */
-    async _getKey(subject) {
+    async _getKey(subject, context) {
         /**@type{null|{type:string, x5c?:string, e?:string, n?:string}}*/let _key = null;
         /**@type{string}*/let endpoint = this._openId.url;
         try {
@@ -569,21 +574,21 @@ class JwtConfiguration extends ConfigurationItem {
      * @param {Array.<IssuerProperty|Issuer>} [issures=[]]
      * @param {JwtValidator} [validator=new JwtValidator()]
      * @param {(HTTPParameterFetchPropertyType|HTTPParameterFetch)} [param={HeaderParameterFetch}]
-     * @param {(string|StringProperty)} [scheme="Bearer "]
-     * @param {(boolean|BooleanProperty)} [remove=true]
-     * @param {(string|StringProperty)} [token="authorization"]
-     * @param {(boolean|BooleanProperty)} [validateNonce=false]
+     * @param {(string|StringPropertyType)} [scheme="Bearer "]
+     * @param {(boolean|BooleanPropertyType)} [remove=true]
+     * @param {(string|StringPropertyType)} [token="authorization"]
+     * @param {(boolean|BooleanPropertyType)} [validateNonce=false]
      */
     constructor(issures = [], validator = new JwtValidator(), param = new HeaderParameterFetch(), scheme = "Bearer ",
                 remove = true, token = "authorization", validateNonce = false) {
         super();
         /**@type{Array.<(IssuerProperty|Issuer)>}*/this._issuers = issures;
         /**@type{null|HTTPParameterFetchPropertyType|HTTPParameterFetch}*/this._param  = param;
-        /**@type{string|StringProperty}*/this._scheme = scheme;
-        /**@type{boolean|BooleanProperty}*/this._remove = remove;
-        /**@type{string|StringProperty}*/this._token  = token;
-        /**@type{boolean|BooleanProperty}*/this._validateNonce = validateNonce;
-        /**@type{JsonProperty|JwtValidator}*/this._validator = validator;
+        /**@type{string|StringPropertyType}*/this._scheme = scheme;
+        /**@type{boolean|BooleanPropertyType}*/this._remove = remove;
+        /**@type{string|StringPropertyType}*/this._token  = token;
+        /**@type{boolean|BooleanPropertyType}*/this._validateNonce = validateNonce;
+        /**@type{JsonPropertyType|JwtValidator}*/this._validator = validator;
     }
 
     /**@returns{string}*/get key() {return JwtConfiguration.CONFIG_JWT;}
@@ -610,27 +615,27 @@ class JwtConfiguration extends ConfigurationItem {
      */
     setParam(param= new HeaderParameterFetch()){this._param = param; return this;}
     /**
-     * @param {string|StringProperty} [scheme="Bearer "]
+     * @param {string|StringPropertyType} [scheme="Bearer "]
      * @return {JwtConfiguration}
      */
     setScheme(scheme = "Bearer "){this._scheme = scheme; return this;}
     /**
-     * @param {boolean|BooleanProperty} [remove=true]
+     * @param {boolean|BooleanPropertyType} [remove=true]
      * @return {JwtConfiguration}
      */
     setRemoveScheme(remove = true){this._remove = remove; return this;}
     /**
-     * @param {string|StringProperty} [token="authorization"]
+     * @param {string|StringPropertyType} [token="authorization"]
      * @return {JwtConfiguration}
      */
     setToken(token = "authorization"){this._token = token; return this;}
     /**
-     * @param {boolean|BooleanProperty} [validateNonce=false]
+     * @param {boolean|BooleanPropertyType} [validateNonce=false]
      * @returns {JwtConfiguration}
      */
     setValidateNonce(validateNonce = false){this._validateNonce = validateNonce; return this;}
     /**
-     * @param {null|JsonProperty|JwtValidator} [validator=null]
+     * @param {null|JsonPropertyType|JwtValidator} [validator=null]
      * @returns {JwtConfiguration}
      */
     setJwtValidator(validator = null) {if(validator != null) this._validator = validator; return this;}

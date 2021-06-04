@@ -99,14 +99,14 @@ class CelastrinaError extends Error {
      */
     static wrapError(error, code = 500, drop = false) {
         let ex = error;
-        if(typeof ex === "string" || typeof ex === "number")
+        if(typeof ex === "undefined")
+            return new CelastrinaError("Unhandled Exception.", code, drop);
+        if(ex instanceof CelastrinaError)
+            return ex;
+        else if(typeof ex === "string" || typeof ex === "number"  || typeof ex === "boolean")
             return new CelastrinaError(ex, code, drop);
-        else if(typeof ex === "object") {
-            if(ex instanceof Error || ex.hasOwnProperty("message"))
-                return new CelastrinaError(ex.message, code, drop, ex);
-            else
-                return new CelastrinaError(ex, code, drop);
-        }
+        else if(ex instanceof Error)
+            return new CelastrinaError(ex.message, code, drop, ex);
         else
             return new CelastrinaError("Unhandled Exception.",code, drop);
     }
@@ -145,15 +145,16 @@ class CelastrinaValidationError extends CelastrinaError {
      */
     static wrapValidationError(error, tag = "", drop = false, code = 400) {
         let ex = error;
-        if(!(ex instanceof Error)) {
-            if(typeof ex === "undefined")
-                ex = "Unspecified Server Error.";
-            if(typeof ex === "object" && ex == null)
-                ex = "Unspecified Server Error.";
+        if(typeof ex === "undefined")
+            return new CelastrinaValidationError("Unhandled Exception.", code, drop, tag);
+        if(ex instanceof CelastrinaValidationError)
+            return ex;
+        else if(typeof ex === "string" || typeof ex === "number"  || typeof ex === "boolean")
             return new CelastrinaValidationError(ex, code, drop, tag);
-        }
-        else
+        else if(ex instanceof Error)
             return new CelastrinaValidationError(ex.message, code, drop, tag, ex);
+        else
+            return new CelastrinaValidationError("Unhandled Exception.",code, drop, tag);
     }
 }
 /**@abstract*/
@@ -2431,8 +2432,8 @@ module.exports = {
     Vault: Vault, PropertyHandler: PropertyHandler,
     AppSettingsPropertyHandler: AppSettingsPropertyHandler,
     AppConfigPropertyHandler: AppConfigPropertyHandler, CachedProperty: CachedProperty, CachePropertyHandler: CachePropertyHandler,
-    AppConfigHandlerProperty: AppConfigHandlerProperty, Property: PropertyType, StringProperty: StringPropertyType,
-    BooleanProperty: BooleanPropertyType, NumericProperty: NumericPropertyType, JsonProperty: JsonPropertyType, ModuleConfiguration: ModuleConfiguration, ModuleContext: ModuleContext,
+    AppConfigHandlerProperty: AppConfigHandlerProperty, PropertyType: PropertyType, StringPropertyType: StringPropertyType,
+    BooleanPropertyType: BooleanPropertyType, NumericPropertyType: NumericPropertyType, JsonPropertyType: JsonPropertyType, ModuleConfiguration: ModuleConfiguration, ModuleContext: ModuleContext,
     Module: Module, ApplicationAuthorization: AppRegistrationAuthorization, AppRegistrationAuthorizationProperty: AppRegistrationAuthorizationPropertyType,
     ValueMatch: ValueMatch, MatchAny: MatchAny, MatchAll: MatchAll, MatchNone: MatchNone, FunctionRole: FunctionRole,
     FunctionRoleProperty: FunctionRolePropertyType, FunctionRoleConfiguration: FunctionRoleConfiguration, FunctionRoleContext: FunctionRoleContext, Configuration: Configuration, Algorithm: Algorithm, AES256Algorithm: AES256Algorithm,

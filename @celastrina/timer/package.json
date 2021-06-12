@@ -1,31 +1,99 @@
 {
-  "name": "@celastrina/timer",
-  "version": "1.8.56",
-  "description": "Timer Function Module for Celastrina",
-  "main": "index.js",
-  "scripts": {
-    "test": "mocha"
+  "_header": {
+    "_resource": "booking",
+    "_action": "update",
+    "_source": "Lodgify.api.southandsunset.rentals",
+    "_published": "2021-06-09T11:56:46.056Z",
+    "_messageId": "717cc4b7-8ebb-4351-92f1-ec4b9f830b55",
+    "_traceId": "cb07e217-8e24-460d-bc64-1929ae59d0a3",
+    "_environment": 0,
+    "_expires": "2022-06-09T11:56:46.056Z",
+    "_object": {
+      "_mime": "application/json; com.celastrinajs.message.header"
+    }
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/murrellrr/celastrina.git"
+  "_payload": {
+    "action": "booking_change",
+    "booking": {
+      "type": "Booking",
+      "id": 3206967,
+      "date_arrival": "2021-09-03T00:00:00",
+      "date_departure": "2021-09-06T00:00:00",
+      "date_created": "2021-06-09T01:33:10+00:00",
+      "property_id": 312693,
+      "property_name": "South & Sunset Lodge of Spruce, Michigan",
+      "property_image_url": "https://l.icdbcdn.com/oh/3c3c2f33-9a00-441d-8fda-8ed573c3c5d6.jpg?f=32",
+      "status": "Tentative",
+      "room_types": [
+        {
+          "id": 3306792,
+          "room_type_id": 377734,
+          "image_url": null,
+          "name": "",
+          "people": 2
+        }
+      ],
+      "add_ons": [
+        {
+          "add_on_id": 26920,
+          "name": "Lifetime Guster 10 ft Kayak, Pair",
+          "units": null
+        }
+      ],
+      "currency_code": "USD",
+      "source": "Manual",
+      "source_text": "Face-to-Face",
+      "notes": null,
+      "language": "en",
+      "ip_address": null,
+      "ip_country": null,
+      "is_policy_active": true,
+      "external_url": null,
+      "nights": 3,
+      "promotion_code": null
+    },
+    "guest": {
+      "uid": "CMze_nMXLkG_J1XLEH99RA",
+      "name": "Robert Murrell",
+      "email": "murrell.robert@gmail.com",
+      "phone_number": "+12483029227",
+      "country": "United States",
+      "country_code": "US"
+    },
+    "current_order": {
+      "id": 1515046,
+      "property_id": 312693,
+      "currency_code": "USD",
+      "status": "NotSent",
+      "amount_gross": {
+        "amount": "0"
+      },
+      "amount_net": {
+        "amount": "1.68"
+      },
+      "date_agreed": null,
+      "cancellation_policy_text": "100% of paid prepayments refundable when cancelled 0\r\n days before arrival or earlier.\r\n0% refundable if canceled after.",
+      "security_deposit_text": "No damage deposit is due.",
+      "scheduled_policy_text": "100% due at time of booking.\r\nRemaining balance: Not scheduled in Lodgify",
+      "rate_policy_name": "Primary policy",
+      "rental_agreement_accepted": false,
+      "owner_payout": 0
+    },
+    "subowner": {
+      "user_id": 427826,
+      "first_name": "Karen",
+      "last_name": "Fishman",
+      "email": "kfishman1@gmail.com",
+      "phone": "2487654678"
+    },
+    "booking_total_amount": "0",
+    "booking_currency_code": "USD",
+    "total_transactions": {
+      "amount": "0"
+    },
+    "balance_due": "0"
   },
-  "keywords": [
-    "Microsoft",
-    "Azure",
-    "Function",
-    "Javascript",
-    "Node.js",
-    "Timer"
-  ],
-  "author": "Robert R Murrell",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/murrellrr/celastrina/issues"
-  },
-  "homepage": "https://github.com/murrellrr/celastrina#readme",
-  "dependencies": {
-    "@celastrina/core": "^1.8.56",
-    "moment": "^2.29.1"
+  "_object": {
+    "_mime": "application/json; com.celastrinajs.message"
   }
 }

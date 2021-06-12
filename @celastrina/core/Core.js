@@ -577,8 +577,7 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
                             resolve(value);
                         })
                         .catch((exception) => {
-                            if(typeof exception === "object" && exception.hasOwnProperty("response"))
-                            reject(CelastrinaError.newError("Exception getting '" + kvp.value + "' from vault." + exception));
+                            reject(exception);
                         });
                 }
                 else

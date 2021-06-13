@@ -69,15 +69,17 @@ class AbstractTransaction {
      */
     async _extract(source) {throw CelastrinaError.newError("Not Implemented.");}
     /**
+     * @param {*} id
      * @return {Promise<Object>}
      * @abstract
      */
-    async _construct() {throw CelastrinaError.newError("Not Implemented.");}
+    async _construct(id) {throw CelastrinaError.newError("Not Implemented.");}
     /**
+     * @param {*} _object
      * @return {Promise<object>}
      * @abstract
      */
-    async _create() {throw CelastrinaError.newError("Not Implemented.");}
+    async _create(_object) {throw CelastrinaError.newError("Not Implemented.");}
     /**
      * @return {Promise<Object>}
      * @abstract
@@ -147,8 +149,10 @@ class AbstractTransaction {
      * @return {Promise<Object>}
      */
     async create() {
-        if(this._state === "started")
-            return this._load(this._create(), true);
+        if(this._state === "started") {
+            let _object = await this._construct(this._id);
+            return this._load(this._create(_object), true);
+        }
         else
             throw CelastrinaError.newError("Invalid transaction state. Unable to create when '" +
                                                    this._state + "'.");
@@ -289,22 +293,17 @@ class BlobStorageTransaction extends AbstractTransaction {
         });
     }
     /**
+     * @param {*} _object
      * @return {Promise<Object>}
      */
-    async _create() {
+    async _create(_object) {
         return new Promise((resolve, reject) => {
             this._context.log("Create " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "BlobStorageTransaction._create()");
-            let _token  = null;
-            let _object = null;
             this._auth.getToken("https://storage.azure.com/")
                 .then((token) => {
-                    _token = token;
-                    return this._construct();
-                })
-                .then((object) => {
-                    _object = JSON.stringify(this._extract(object));
+                    _object = JSON.stringify(this._extract(_object));
                     return axios.put(this._endpoint, _object,
-                        {headers: {"Authorization": "Bearer " + _token, "x-ms-version": "2020-06-12",
+                        {headers: {"Authorization": "Bearer " + token, "x-ms-version": "2020-06-12",
                                          "Content-Type": "application/json", "x-ms-blob-content-type": "application/json",
                                          "Content-Length": _object.length, "x-ms-blob-type": "BlockBlob"}});
                 })

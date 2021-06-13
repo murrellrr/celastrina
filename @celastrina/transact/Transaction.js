@@ -34,6 +34,8 @@ const moment = require("moment");
 const {v4: uuidv4} = require("uuid");
 
 /**
+ * AbstractTransaction
+ * @author Robert R Murrell
  * @abstract
  */
 class AbstractTransaction {
@@ -44,6 +46,16 @@ class AbstractTransaction {
         /**@type{string}*/this._state = "invalid";
         /**@type{Object}*/this._source = null; // The original
         /**@type{Object}*/this._target = null; // Copy of the original
+    }
+    /**
+     * @param {*} params
+     * @param {number} index
+     * @return {boolean}
+     */
+    _checkArray(params, index) {
+        if(typeof params === "undefined" || params == null)
+            return false;
+        return Array.isArray(params) && params.length > index;
     }
     /**
      * @param {Object} source
@@ -83,29 +95,19 @@ class AbstractTransaction {
      * @abstract
      */
     async _delete() {throw CelastrinaError.newError("Not Implemented.");}
+    /**
+     * @return {Promise<void>}
+     * @abstract
+     */
+    async _rollback() {throw CelastrinaError.newError("Not Implemented.");}
     /**@returns{*}*/get id() {return this._id;}
     /**@returns{boolean}*/get isNew() {return this._new;}
     /**@returns{Object}*/get source() {return this._source;}
     /**@returns{Object}*/get target() {return this._target;}
-    async start(id = uuidv4()) {
-        return new Promise((resolve, reject) => {
-            if(typeof id === "undefined" || id == null)
-                reject(CelastrinaError.newError("Invalid Object Id.", 400));
-            else {
-                this._new = false;
-                this._state = "started";
-                this._source = null;
-                this._target = null;
-                this._id = id;
-                resolve(this._id);
-            }
-        });
-    }
     /**
      * @param {Promise<Object>} promise
      * @param {boolean} [__new=false]
      * @return {Promise<Object>}
-     * @private
      */
     async _load(promise, __new = false) {
         return new Promise((resolve, reject) => {
@@ -121,6 +123,25 @@ class AbstractTransaction {
                 .catch((exception) => {
                     reject(exception);
                 });
+        });
+    }
+    /**
+     * @param {*} id
+     * @param {...} params
+     * @return {Promise<*>}
+     */
+    async start(id = uuidv4(), ...params) {
+        return new Promise((resolve, reject) => {
+            if(typeof id === "undefined" || id == null)
+                reject(CelastrinaError.newError("Invalid Object Id.", 400));
+            else {
+                this._new = false;
+                this._state = "started";
+                this._source = null;
+                this._target = null;
+                this._id = id;
+                resolve(this._id);
+            }
         });
     }
     /**
@@ -179,10 +200,7 @@ class AbstractTransaction {
      */
     async rollback() {
         if(this._state === "comitted") {
-            if(!this._new)
-                await this._load(this._update(this._source));
-            else
-                await this._delete();
+            await this._rollback();
             this._state = "rolled-back";
         }
         else
@@ -209,7 +227,10 @@ class AbstractTransaction {
     }
 }
 /**
+ * BlobStorageTransaction
+ * @author Robert R Murrell
  * @abstract
+ * @extends AbstractTransaction
  */
 class BlobStorageTransaction extends AbstractTransaction {
     /**
@@ -230,17 +251,29 @@ class BlobStorageTransaction extends AbstractTransaction {
     }
     /**@type{null|string}*/get blobName() {return this._blob;}
     /**
+     * @param {*} params
+     * @return {null|*}
+     * @private
+     */
+    _getPath(params) {
+        if(this._checkArray(params, 0) && typeof params[0] === "string")
+            return params[0];
+        else
+            return null;
+    }
+    /**
      * @param id
-     * @param {null|string} [path=null]
+     * @param {...} [params]
      * @return {Promise<void>}
      */
-    async start(id, path = null) {
+    async start(id, ...params) {
         return new Promise((resolve, reject) => {
             super.start(id)
                 .then((id) => {
                     this._blob = id + ".json";
                     this._context.authorizationContext.getAuthorization(ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY)
                         .then((auth) => {
+                            let path = this._getPath(params);
                             if(path != null && path.trim().length > 0)
                                 this._blob = path + "/" + this._blob;
                             this._endpoint = "https://" + this._storage + ".blob.core.windows.net/" + this._container + "/" + this._blob;
@@ -261,6 +294,7 @@ class BlobStorageTransaction extends AbstractTransaction {
      */
     async _create() {
         return new Promise((resolve, reject) => {
+            this._context.log("Create " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "BlobStorageTransaction._create()");
             let _token  = null;
             let _object = null;
             this._auth.getToken("https://storage.azure.com/")
@@ -279,9 +313,13 @@ class BlobStorageTransaction extends AbstractTransaction {
                     return this._semaphore.lock(this._lockTimeout, this._context);
                 })
                 .then(() => {
+                    this._context.log("Create " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
+                        "BlobStorageTransaction._create()");
                     resolve(_object);
                 })
                 .catch((exception) => {
+                    this._context.log("Create " + this._endpoint + " failed. Exception " + exception, LOG_LEVEL.LEVEL_INFO,
+                        "BlobStorageTransaction._create()");
                     reject(exception);
                 });
         });
@@ -292,6 +330,7 @@ class BlobStorageTransaction extends AbstractTransaction {
      */
     async _read() {
         return new Promise((resolve, reject) => {
+            this._context.log("Read " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "BlobStorageTransaction._read()");
             this._semaphore.lock(this._lockTimeout, this._context)
                 .then(() => {
                     return this._auth.getToken("https://storage.azure.com/")
@@ -302,9 +341,13 @@ class BlobStorageTransaction extends AbstractTransaction {
                                           "x-ms-lease-id": this._semaphore.leaseId, "Accept": "application/json"}});
                 })
                 .then((response) => {
+                    this._context.log("Read " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
+                        "BlobStorageTransaction._read()");
                     resolve(response.data);
                 })
                 .catch((exception) => {
+                    this._context.log("Read " + this._endpoint + " failed. Exception " + exception, LOG_LEVEL.LEVEL_INFO,
+                        "BlobStorageTransaction._read()");
                     reject(exception);
                 });
         });
@@ -316,6 +359,7 @@ class BlobStorageTransaction extends AbstractTransaction {
      */
     async _update(_object) {
         return new Promise((resolve, reject) => {
+            this._context.log("Update " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "BlobStorageTransaction._update()");
             this._auth.getToken("https://storage.azure.com/")
                 .then((token) => {
                     let __object = JSON.stringify(_object);
@@ -329,9 +373,13 @@ class BlobStorageTransaction extends AbstractTransaction {
                     return this._semaphore.unlock(this._context);
                 })
                 .then(() => {
+                    this._context.log("Update " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
+                        "BlobStorageTransaction._update()");
                     resolve();
                 })
                 .catch((exception) => {
+                    this._context.log("Update " + this._endpoint + " failed. Exception " + exception, LOG_LEVEL.LEVEL_INFO,
+                        "BlobStorageTransaction._update()");
                     reject(exception);
                 });
         });
@@ -342,6 +390,7 @@ class BlobStorageTransaction extends AbstractTransaction {
      */
     async _delete() {
         return new Promise((resolve, reject) => {
+            this._context.log("Delete " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "BlobStorageTransaction._delete()");
             this._auth.getToken("https://storage.azure.com/")
                 .then((token) => {
                     return axios.delete(this._endpoint,
@@ -350,11 +399,34 @@ class BlobStorageTransaction extends AbstractTransaction {
                                          "x-ms-blob-type": "BlockBlob", "x-ms-lease-id": this._semaphore.leaseId}});
                 })
                 .then((response) => {
+                    this._context.log("Delete " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO, "" +
+                        "BlobStorageTransaction._delete()");
                     resolve();
                 })
                 .catch((exception) => {
+                    this._context.log("Delete " + this._endpoint + " failed. Exception " + exception, LOG_LEVEL.LEVEL_INFO,
+                        "BlobStorageTransaction._delete()");
                     reject(exception);
                 });
         });
+    }
+    /**
+     * @return {Promise<Object>}
+     * @private
+     */
+    async _rollback() {
+        this._context.log("Rollback " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "BlobStorageTransaction._rollback()");
+        if(!this._new) {
+            await this._update(this._source);
+        }
+        else {
+            this._context.log(this._endpoint + " is a new Blob, deleting leased record.", LOG_LEVEL.LEVEL_INFO,
+                "BlobStorageTransaction._rollback()");
+            await this._delete();
+            this._source = null;
+            this._target = null;
+            this._context.log("Rollback of new Blob " + this._endpoint + " successful, leased Blob deleted.", LOG_LEVEL.LEVEL_INFO,
+                "BlobStorageTransaction._rollback()");
+        }
     }
 }

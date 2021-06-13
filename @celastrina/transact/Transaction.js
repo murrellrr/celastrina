@@ -32,7 +32,6 @@ const {BlobSemaphore} = require("@celastrina/semaphore");
 const axios = require("axios").default;
 const moment = require("moment");
 const {v4: uuidv4} = require("uuid");
-
 /**
  * AbstractTransaction
  * @author Robert R Murrell
@@ -429,4 +428,8 @@ class BlobStorageTransaction extends AbstractTransaction {
                 "BlobStorageTransaction._rollback()");
         }
     }
+}
+
+module.exports = {
+    AbstractTransaction: AbstractTransaction, BlobStorageTransaction: BlobStorageTransaction
 }

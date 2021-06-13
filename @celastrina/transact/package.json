@@ -1,0 +1,29 @@
+{
+  "name": "@celastrina/transact",
+  "version": "1.0.0",
+  "description": "Lightweight CRUD transaction API for loading JSON object from various data stores.",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/murrellrr/celastrina.git",
+    "directory": "@celastrina/transact"
+  },
+  "keywords": [
+    "Microsoft",
+    "Azure",
+    "Function",
+    "Blob",
+    "Container",
+    "Javascript",
+    "Node.js"
+  ],
+  "author": "Robert R Murrell",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/murrellrr/celastrina/issues"
+  },
+  "homepage": "https://github.com/murrellrr/celastrina#readme"
+}

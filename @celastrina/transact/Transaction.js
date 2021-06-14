@@ -327,9 +327,9 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
             this._endpoint = "https://" + this._storage + ".blob.core.windows.net/" +
                 this._container + "/" + this._blob;
 
-            let auth = await this._context.authorizationContext.getAuthorization(
+            this._auth = await this._context.authorizationContext.getAuthorization(
                 ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY);
-            this._semaphore = new BlobSemaphore(auth, this._storage, this._container, this._blob);
+            this._semaphore = new BlobSemaphore(this._auth, this._storage, this._container, this._blob);
 
             this._context.log("Transaction " + this._endpoint + " started.", LOG_LEVEL.LEVEL_INFO,
                                "AbstractBlobStorageTransaction.start(id, config)");

@@ -794,6 +794,16 @@ class HTTPContext extends BaseContext {
      * @param {null|string} [defaultValue=null]
      * @return {null|string}
      */
+    getURIBinding(name, defaultValue = null) {
+        let uirbinding = this._funccontext.bindingData[name];
+        if(typeof uirbinding !== "string") return defaultValue
+        else return uirbinding;
+    }
+    /**
+     * @param {string} name
+     * @param {null|string} [defaultValue=null]
+     * @return {null|string}
+     */
     getCookie(name, defaultValue = null) {
         let cookie = this._cookies[name];
         if(typeof cookie !== "string") return defaultValue

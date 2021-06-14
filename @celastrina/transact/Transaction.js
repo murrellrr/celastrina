@@ -38,24 +38,19 @@ const {v4: uuidv4} = require("uuid");
  * @abstract
  */
 class AbstractTransaction {
+    /**
+     * @param {BaseContext} context
+     */
     constructor(context) {
         /**@type{*}*/this._id = null;
         /**@type{BaseContext}*/this._context = context;
+        /**@type{null|{...}}*/this._config = null;
         /**@type{boolean}*/this._new = false;
         /**@type{string}*/this._state = "invalid";
         /**@type{Object}*/this._source = null; // The original
         /**@type{Object}*/this._target = null; // Copy of the original
     }
-    /**
-     * @param {*} params
-     * @param {number} index
-     * @return {boolean}
-     */
-    _checkArray(params, index) {
-        if(typeof params === "undefined" || params == null)
-            return false;
-        return Array.isArray(params) && params.length > index;
-    }
+    /**@returns{null|{...}}*/get config() {return this._config;}
     /**
      * @param {Object} source
      * @return {Promise<object>}
@@ -75,7 +70,7 @@ class AbstractTransaction {
      */
     async _construct(id) {throw CelastrinaError.newError("Not Implemented.");}
     /**
-     * @param {*} _object
+     * @param {Object} _object
      * @return {Promise<object>}
      * @abstract
      */
@@ -128,14 +123,15 @@ class AbstractTransaction {
     }
     /**
      * @param {*} id
-     * @param {...} params
+     * @param {Object} [config = null]
      * @return {Promise<*>}
      */
-    async start(id = uuidv4(), ...params) {
+    async start(id = uuidv4(), config = null) {
         return new Promise((resolve, reject) => {
             if(typeof id === "undefined" || id == null)
                 reject(CelastrinaError.newError("Invalid Object Id.", 400));
             else {
+                this._config = config;
                 this._new = false;
                 this._state = "started";
                 this._source = null;
@@ -168,7 +164,7 @@ class AbstractTransaction {
                                                    this._state + "'.");
     }
     /**
-     * @param _object
+     * @param {Object} _object
      * @return {Promise<Object>}
      */
     async update(_object) {
@@ -230,205 +226,277 @@ class AbstractTransaction {
     }
 }
 /**
- * BlobStorageTransaction
+ * @type {{COMMIT_LOCK: number, READ_UPDATE_LOCK: number, NONE: number}}
+ */
+const BLOB_LOCK_STRATEGY = {
+    NONE: 2,
+    READ_UPDATE_LOCK: 1,
+    COMMIT_LOCK: 0
+};
+/**
+ * @typedef Blob
+ * @property {string} storage
+ * @property {string} container
+ * @property {string} path?
+ * @property {number} lockStrategy?
+ * @property {number} lockTimeOut?
+ */
+/**
+ * @typedef BlobTransactionConfig
+ * @property {Blob} blob
+ */
+/**
+ * AbstractBlobStorageTransaction
  * @author Robert R Murrell
  * @abstract
  * @extends AbstractTransaction
  */
-class BlobStorageTransaction extends AbstractTransaction {
+class AbstractBlobStorageTransaction extends AbstractTransaction {
     /**
      * @param {BaseContext} context
-     * @param {string} storage
-     * @param {string} container
-     * @param {number} [defaultLockTimeout=0]
      */
-    constructor(context, storage, container, defaultLockTimeout = 0) {
+    constructor(context) {
         super(context);
         /**@type{BlobSemaphore}*/this._semaphore = null;
         /**@type{null|string}*/this._blob = null;
-        this._storage = storage;
-        this._container = container;
+        this._storage = null;
+        this._container = null;
         /**@type{null|string}*/this._endpoint = null;
         /**@type{ResourceAuthorization}*/this._auth = null;
-        /**@type{number}*/this._lockTimeout = defaultLockTimeout;
+
+        /**@type{number}*/this._lockStrategy = BLOB_LOCK_STRATEGY.COMMIT_LOCK;
+        /**@type{number}*/this._lockTimeout = 0;
     }
     /**@type{null|string}*/get blobName() {return this._blob;}
+    /**@type{number}*/get lockingStrategy() {return this._lockStrategy;}
+    /**@type{number}*/get lockTimeOut() {return this._lockTimeout;}
     /**
-     * @param {*} params
-     * @return {null|*}
+     * @param {Blob} config
+     * @return {null|string}
      * @private
      */
-    _getPath(params) {
-        if(this._checkArray(params, 0) && typeof params[0] === "string")
-            return params[0];
+    _getPath(config) {
+        if(typeof config.path === "string" && config.path.trim().length > 0)
+            return config.path;
         else
             return null;
     }
     /**
-     * @param id
-     * @param {...} [params]
-     * @return {Promise<void>}
-     */
-    async start(id, ...params) {
-        return new Promise((resolve, reject) => {
-            super.start(id)
-                .then((id) => {
-                    this._blob = id + ".json";
-                    this._context.authorizationContext.getAuthorization(ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY)
-                        .then((auth) => {
-                            let path = this._getPath(params);
-                            if(path != null && path.trim().length > 0)
-                                this._blob = path + "/" + this._blob;
-                            this._endpoint = "https://" + this._storage + ".blob.core.windows.net/" + this._container + "/" + this._blob;
-                            this._semaphore = new BlobSemaphore(auth, this._storage, this._container, this._blob);
-                            resolve();
-                        })
-                        .catch((exception) => {
-                            reject(exception);
-                        });
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
-        });
-    }
-    /**
-     * @param {*} _object
-     * @return {Promise<Object>}
-     */
-    async _create(_object) {
-        return new Promise((resolve, reject) => {
-            this._context.log("Create " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "BlobStorageTransaction._create()");
-            this._auth.getToken("https://storage.azure.com/")
-                .then((token) => {
-                    _object = JSON.stringify(this._extract(_object));
-                    return axios.put(this._endpoint, _object,
-                        {headers: {"Authorization": "Bearer " + token, "x-ms-version": "2020-06-12",
-                                         "Content-Type": "application/json", "x-ms-blob-content-type": "application/json",
-                                         "Content-Length": _object.length, "x-ms-blob-type": "BlockBlob"}});
-                })
-                .then((response) => {
-                    return this._semaphore.lock(this._lockTimeout, this._context);
-                })
-                .then(() => {
-                    this._context.log("Create " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
-                        "BlobStorageTransaction._create()");
-                    resolve(_object);
-                })
-                .catch((exception) => {
-                    this._context.log("Create " + this._endpoint + " failed. Exception " + exception, LOG_LEVEL.LEVEL_INFO,
-                        "BlobStorageTransaction._create()");
-                    reject(exception);
-                });
-        });
-    }
-    /**
-     * @return {Promise<Object>}
+     * @param {Blob} config
      * @private
      */
-    async _read() {
-        return new Promise((resolve, reject) => {
-            this._context.log("Read " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "BlobStorageTransaction._read()");
-            this._semaphore.lock(this._lockTimeout, this._context)
-                .then(() => {
-                    return this._auth.getToken("https://storage.azure.com/")
-                })
-                .catch((token) => {
-                    return axios.get(this._endpoint,
-                        {headers: {"Authorization": "Bearer " + token, "x-ms-version": "2020-06-12",
-                                          "x-ms-lease-id": this._semaphore.leaseId, "Accept": "application/json"}});
-                })
-                .then((response) => {
-                    this._context.log("Read " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
-                        "BlobStorageTransaction._read()");
-                    resolve(response.data);
-                })
-                .catch((exception) => {
-                    this._context.log("Read " + this._endpoint + " failed. Exception " + exception, LOG_LEVEL.LEVEL_INFO,
-                        "BlobStorageTransaction._read()");
-                    reject(exception);
-                });
-        });
+    _setLockStrategy(config) {
+        if(typeof config.lockStrategy === "number")
+            this._lockStrategy = config.lockStrategy;
+    }
+    /**
+     * @param {Blob} config
+     * @private
+     */
+    _setLockTimeout(config) {
+        if(typeof config.lockTimeOut === "number")
+            this._lockTimeout = config.lockTimeOut;
+    }
+    /**
+     * @param {*} id
+     * @param {BlobTransactionConfig} config
+     * @return {Promise<void>}
+     */
+    async start(id, config) {
+        this._context.log("Starting transaction.", LOG_LEVEL.LEVEL_INFO,
+                           "AbstractBlobStorageTransaction.start(id, config)");
+
+        if(typeof config.blob === "undefined") {
+            this._context.log("Invalid configuration, missing blob.", LOG_LEVEL.LEVEL_INFO,
+                               "AbstractBlobStorageTransaction.start(id, config)");
+            throw CelastrinaError.newError("Missing blob configuration.");
+        }
+        else {
+            await super.start(id, config);
+            let blob = config.blob;
+            this._setLockStrategy(blob);
+            this._setLockTimeout(blob);
+
+            this._blob = id + ".json";
+            this._storage = blob.storage;
+            this._container = blob.container;
+
+            let path = this._getPath(blob);
+            if(path != null)
+                this._blob = path + "/" + this._blob;
+            this._endpoint = "https://" + this._storage + ".blob.core.windows.net/" +
+                this._container + "/" + this._blob;
+
+            let auth = await this._context.authorizationContext.getAuthorization(
+                ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY);
+            this._semaphore = new BlobSemaphore(auth, this._storage, this._container, this._blob);
+
+            this._context.log("Transaction " + this._endpoint + " started.", LOG_LEVEL.LEVEL_INFO,
+                               "AbstractBlobStorageTransaction.start(id, config)");
+        }
     }
     /**
      * @param {Object} _object
-     * @return {Promise<void>}
-     * @private
+     * @return {Promise<Object>}
+     */
+    async _create(_object) {
+        /**@type{number}*/let _lock = this.lockingStrategy;
+
+        this._context.log("Create using locking strategy " + _lock + ".", LOG_LEVEL.LEVEL_INFO,
+                           "AbstractBlobStorageTransaction._create()");
+
+        if(_lock !== BLOB_LOCK_STRATEGY.NONE) {
+            this._context.log("PUT " + this._endpoint + " using locking strategy " + _lock + ".", LOG_LEVEL.LEVEL_INFO,
+                              "AbstractBlobStorageTransaction._create()");
+
+            let token = await this._auth.getToken("https://storage.azure.com/");
+            let response = await axios.put(this._endpoint, _object,
+            {
+                    headers: {
+                        "Authorization": "Bearer " + token, "x-ms-version": "2020-06-12",
+                        "Content-Type": "application/json", "x-ms-blob-content-type": "application/json",
+                        "Content-Length": _object.length, "x-ms-blob-type": "BlockBlob"
+                    }
+                });
+            if(response.status === 201) {
+                this._context.log("PUT " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
+                                  "BlobStorageTransaction._create()");
+
+                await this._semaphore.lock(this.lockTimeOut, this._context);
+
+                this._context.log("LEASE " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
+                                  "AbstractBlobStorageTransaction._create()");
+                return _object;
+            }
+            else
+                throw CelastrinaError.newError("Unable to create " + this._endpoint + ". Response code " +
+                                                response.status + ", " + response.statusText);
+        }
+        else {
+            this._context.log("Create successful.", LOG_LEVEL.LEVEL_INFO, "AbstractBlobStorageTransaction._create()");
+            return _object;
+        }
+    }
+    /**
+     * @return {Promise<Object>}
+     */
+    async _read() {
+        let _lock = this.lockingStrategy;
+
+        this._context.log("Reading using locking strategy " + _lock + ".", LOG_LEVEL.LEVEL_INFO,
+                           "AbstractBlobStorageTransaction._create()");
+
+        if((_lock === BLOB_LOCK_STRATEGY.READ_UPDATE_LOCK ||
+                _lock === BLOB_LOCK_STRATEGY.COMMIT_LOCK) && !this._semaphore.isLocked) {
+            await this._semaphore.lock(this.lockTimeOut, this._context);
+            this._context.log("LEASE " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
+                               "BlobStorageTransaction._create()");
+        }
+
+        let token = await this._auth.getToken("https://storage.azure.com/");
+        let _headers = {"Authorization": "Bearer " + token, "x-ms-version": "2020-06-12",
+                        "Accept": "application/json"};
+
+        if(this._semaphore.isLocked)
+            _headers["x-ms-lease-id"] = this._semaphore.leaseId;
+
+        let response = await axios.get(this._endpoint, {headers: _headers});
+        if(response.status === 200 || response.status === 206) {
+            this._context.log("Read " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
+                             "AbstractBlobStorageTransaction._read()");
+            if(_lock !== BLOB_LOCK_STRATEGY.COMMIT_LOCK && this._semaphore.isLocked)
+                await this._semaphore.unlock(this._context);
+            return response.data;
+        }
+        else
+            throw CelastrinaError.newError("Unable to create " + this._endpoint + ". Response code " +
+                                           response.status + ", " + response.statusText);
+    }
+    /**
+     * @param {Object} _object
+     * @return {Promise<Object>}
      */
     async _update(_object) {
-        return new Promise((resolve, reject) => {
-            this._context.log("Update " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "BlobStorageTransaction._update()");
-            this._auth.getToken("https://storage.azure.com/")
-                .then((token) => {
-                    let __object = JSON.stringify(_object);
-                    return axios.put(this._endpoint, __object,
-                        {headers: {"Authorization": "Bearer " + token, "x-ms-version": "2020-06-12",
-                                         "Content-Type": "application/json", "x-ms-blob-content-type": "application/json",
-                                         "Content-Length": __object.length, "x-ms-blob-type": "BlockBlob",
-                                         "x-ms-lease-id": this._semaphore.leaseId}});
-                })
-                .then((response) => {
-                    return this._semaphore.unlock(this._context);
-                })
-                .then(() => {
-                    this._context.log("Update " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
-                        "BlobStorageTransaction._update()");
-                    resolve();
-                })
-                .catch((exception) => {
-                    this._context.log("Update " + this._endpoint + " failed. Exception " + exception, LOG_LEVEL.LEVEL_INFO,
-                        "BlobStorageTransaction._update()");
-                    reject(exception);
-                });
-        });
+        let _lock = this.lockingStrategy;
+
+        this._context.log("Updating using locking strategy " + _lock + ".", LOG_LEVEL.LEVEL_INFO,
+                           "AbstractBlobStorageTransaction._update()");
+
+        if((_lock === BLOB_LOCK_STRATEGY.READ_UPDATE_LOCK ||
+                _lock === BLOB_LOCK_STRATEGY.COMMIT_LOCK) && !this._semaphore.isLocked) {
+            await this._semaphore.lock(this.lockTimeOut, this._context);
+            this._context.log("LEASE " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
+                               "AbstractBlobStorageTransaction._update()");
+        }
+
+        let token = await this._auth.getToken("https://storage.azure.com/");
+        let __object = JSON.stringify(_object);
+        let header = {"Authorization": "Bearer " + token, "x-ms-version": "2020-06-12",
+                      "Content-Type": "application/json", "x-ms-blob-content-type": "application/json",
+                       "Content-Length": __object.length, "x-ms-blob-type": "BlockBlob"};
+
+        if(this._semaphore.isLocked)
+            header["x-ms-lease-id"] = this._semaphore.leaseId;
+
+        let response = await axios.put(this._endpoint, __object, {headers: header});
+        if(response.status === 201) {
+            this._context.log("Update " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
+                               "AbstractBlobStorageTransaction._update()");
+            if(this._semaphore.isLocked) {
+                await this._semaphore.unlock();
+                this._context.log("Ulock " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
+                                  "AbstractBlobStorageTransaction._update()");
+            }
+        }
+        else
+            throw CelastrinaError.newError("Unable to update " + this._endpoint + ". Response code " +
+                                            response.status + ", " + response.statusText);
     }
     /**
      * @return {Promise<void>}
      * @private
      */
     async _delete() {
-        return new Promise((resolve, reject) => {
-            this._context.log("Delete " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "BlobStorageTransaction._delete()");
-            this._auth.getToken("https://storage.azure.com/")
-                .then((token) => {
-                    return axios.delete(this._endpoint,
-                        {headers: {"Authorization": "Bearer " + token, "x-ms-version": "2020-06-12",
-                                         "Content-Type": "application/json", "x-ms-blob-content-type": "application/json",
-                                         "x-ms-blob-type": "BlockBlob", "x-ms-lease-id": this._semaphore.leaseId}});
-                })
-                .then((response) => {
-                    this._context.log("Delete " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO, "" +
-                        "BlobStorageTransaction._delete()");
-                    resolve();
-                })
-                .catch((exception) => {
-                    this._context.log("Delete " + this._endpoint + " failed. Exception " + exception, LOG_LEVEL.LEVEL_INFO,
-                        "BlobStorageTransaction._delete()");
-                    reject(exception);
-                });
-        });
+        this._context.log("Delete " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "AbstractBlobStorageTransaction._delete()");
+        let token = await this._auth.getToken("https://storage.azure.com/");
+        let header = {"Authorization": "Bearer " + token, "x-ms-version": "2020-06-12",
+                      "Content-Type": "application/json", "x-ms-blob-content-type": "application/json",
+                       "x-ms-blob-type": "BlockBlob"}
+
+        if(this._semaphore.isLocked)
+            header["x-ms-lease-id"] = this._semaphore.leaseId;
+
+        let response = await axios.delete(this._endpoint, {headers: header});
+        if(response.status === 202) {
+            this._context.log("Delete " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO, "" +
+                                      "AbstractBlobStorageTransaction._delete()");
+        }
+        throw CelastrinaError.newError("Unable to update " + this._endpoint + ". Response code " +
+                                       response.status + ", " + response.statusText);
     }
     /**
      * @return {Promise<Object>}
      * @private
      */
     async _rollback() {
-        this._context.log("Rollback " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "BlobStorageTransaction._rollback()");
+        this._context.log("Rollback " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "AbstractBlobStorageTransaction._rollback()");
         if(!this._new) {
+            this._context.log(this._endpoint + " is not new, updating record.", LOG_LEVEL.LEVEL_INFO,
+                               "AbstractBlobStorageTransaction._rollback()");
             await this._update(this._source);
         }
         else {
-            this._context.log(this._endpoint + " is a new Blob, deleting leased record.", LOG_LEVEL.LEVEL_INFO,
-                "BlobStorageTransaction._rollback()");
+            this._context.log(this._endpoint + " is a new Blob, deleting record.", LOG_LEVEL.LEVEL_INFO,
+                               "AbstractBlobStorageTransaction._rollback()");
             await this._delete();
             this._source = null;
             this._target = null;
-            this._context.log("Rollback of new Blob " + this._endpoint + " successful, leased Blob deleted.", LOG_LEVEL.LEVEL_INFO,
-                "BlobStorageTransaction._rollback()");
+            this._context.log("Rollback of new Blob " + this._endpoint + " successful, Blob deleted.", LOG_LEVEL.LEVEL_INFO,
+                               "AbstractBlobStorageTransaction._rollback()");
         }
     }
 }
 
 module.exports = {
-    AbstractTransaction: AbstractTransaction, BlobStorageTransaction: BlobStorageTransaction
+    BLOB_LOCK_STRATEGY: BLOB_LOCK_STRATEGY, AbstractTransaction: AbstractTransaction, AbstractBlobStorageTransaction: AbstractBlobStorageTransaction
 }

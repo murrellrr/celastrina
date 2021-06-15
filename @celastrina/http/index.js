@@ -23,7 +23,7 @@
  */
 "use strict";
 const {JwtSubject, Issuer, IssuerProperty, JwtValidator, AzureIDPJwtValidator,AzureADJwtValidator, AzureADB2CJwtValidator,
-       JwtConfiguration, HTTPContext, HTTPParameterFetch, HeaderParameterFetch,
+       JwtConfiguration, HTTPContext, HTTPParameterFetch, HeaderParameterFetch, AzureIDPJwtValidatorProperty,
        QueryParameterFetch, BodyParameterFetch, HTTPParameterFetchProperty, JwtSentry, CookieSessionResolver,
        CookieSessionResolverPropertyType, SecureCookieSessionResolver, SecureCookieSessionResolverPropertyType, HTTPFunction,
        JwtHTTPFunction, JSONHTTPContext, JSONHTTPFunction, JwtJSONHTTPFunction} = require("./HTTP");
@@ -32,6 +32,7 @@ module.exports = {
     JwtSubject: JwtSubject, Issuer: Issuer, IssuerProperty: IssuerProperty,
     JwtValidator: JwtValidator, AzureIDPJwtValidator: AzureIDPJwtValidator, AzureADJwtValidator: AzureADJwtValidator,
     AzureADB2CJwtValidator: AzureADB2CJwtValidator, JwtConfiguration: JwtConfiguration,
+    AzureIDPJwtValidatorProperty: AzureIDPJwtValidatorProperty,
     HTTPContext: HTTPContext, HTTPParameterFetch: HTTPParameterFetch, HeaderParameterFetch: HeaderParameterFetch,
     QueryParameterFetch: QueryParameterFetch, BodyParameterFetch: BodyParameterFetch,
     HTTPParameterFetchProperty: HTTPParameterFetchProperty, CookieSessionResolver: CookieSessionResolver,

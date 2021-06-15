@@ -145,10 +145,10 @@ class JwtSubject extends BaseSubject {
 /**Issuer*/
 class Issuer {
     /**
-     * @param {string|StringProperty} name
-     * @param {string|StringProperty} audience
-     * @param {JsonProperty|Array.<string>} [roles=[]]
-     * @param {(null|string|StringProperty)} [nonce=null]
+     * @param {string|StringPropertyType} name
+     * @param {string|StringPropertyType} audience
+     * @param {JsonPropertyType|Array.<string>} [roles=[]]
+     * @param {(null|string|StringPropertyType)} [nonce=null]
      */
     constructor(name, audience, roles = [], nonce = null) {
         this._name = name;
@@ -193,7 +193,6 @@ class Issuer {
 /**
  * IssuerProperty
  * @author Robert R Murrell
- * @extends {JsonPropertyType}
  */
 class IssuerProperty extends JsonPropertyType {
     /**
@@ -201,6 +200,9 @@ class IssuerProperty extends JsonPropertyType {
      * @param {null|string} defaultValue
      */
     constructor(name, defaultValue = null){super(name, defaultValue);}
+
+    /**@returns {string}*/get mime() {return "application/json; celastrinajs.html.property.IssuerProperty";}
+
     /**
      * @param {string} value
      * @returns {Promise<null|Object>}
@@ -327,13 +329,14 @@ class BodyParameterFetch extends HTTPParameterFetch {
         });
     }
 }
-/**@type{JsonProperty}*/
+/**@type{JsonPropertyType}*/
 class HTTPParameterFetchPropertyType extends JsonPropertyType {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
      */
     constructor(name, defaultValue = null){super(name, defaultValue);}
+    /**@returns {string}*/get mime() {return "application/json; celastrinajs.html.property.HTTPParameterFetchPropertyType";}
     /**
      * @param {string} value
      * @returns {Promise<null|Object>}
@@ -424,9 +427,11 @@ class AzureIDPJwtValidator extends JwtValidator {
      */
     async _getKey(subject, context) {
         return new Promise((resolve, reject) => {
+            let _endpoint = null;
             this._generateEndpointUrl(subject, context)
                 .then((endpoint) => {
-                    return axios.get(endpoint);
+                    _endpoint = endpoint;
+                    return axios.get(_endpoint);
                 })
                 .then((response) => {
                     return axios.get(response.data["jwks_uri"])
@@ -442,7 +447,7 @@ class AzureIDPJwtValidator extends JwtValidator {
                     if(_key != null)
                         resolve(_key);
                     else
-                        reject(CelastrinaError.newError("Key not found for configuration '" + endpoint + "' on subject '" +
+                        reject(CelastrinaError.newError("Key not found for configuration '" + _endpoint + "' on subject '" +
                                                                 subject.id + "'."));
                 })
                 .catch((exception) => {
@@ -507,35 +512,34 @@ class AzureIDPJwtValidator extends JwtValidator {
         });
     }
     _rsaPublicKeyPem(modulus_b64, exponent_b64) {
-        let modulus = new Buffer(modulus_b64, 'base64');
-        let exponent = new Buffer(exponent_b64, 'base64');
-        let modulus_hex = modulus.toString('hex')
-        let exponent_hex = exponent.toString('hex')
+        let modulus = new Buffer(modulus_b64, "base64");
+        let exponent = new Buffer(exponent_b64, "base64");
+        let modulus_hex = modulus.toString("hex")
+        let exponent_hex = exponent.toString("hex")
         modulus_hex = this._prepadSigned(modulus_hex)
         exponent_hex = this._prepadSigned(exponent_hex)
         let modlen = modulus_hex.length/2
         let explen = exponent_hex.length/2
         let encoded_modlen = this._encodeLengthHex(modlen)
         let encoded_explen = this._encodeLengthHex(explen)
-        let encoded_pubkey = '30' +
+        let encoded_pubkey = "30" +
             this._encodeLengthHex(
                 modlen +
                 explen +
                 encoded_modlen.length/2 +
                 encoded_explen.length/2 + 2
             ) +
-            '02' + encoded_modlen + modulus_hex +
-            '02' + encoded_explen + exponent_hex;
-        let der_b64 = new Buffer(encoded_pubkey, 'hex').toString('base64');
-        let pem = '-----BEGIN RSA PUBLIC KEY-----\n'
+            "02" + encoded_modlen + modulus_hex +
+            "02" + encoded_explen + exponent_hex;
+        let der_b64 = new Buffer(encoded_pubkey, "hex").toString("base64");
+        return "-----BEGIN RSA PUBLIC KEY-----\n"
             + der_b64.match(/.{1,64}/g).join('\n')
-            + '\n-----END RSA PUBLIC KEY-----\n';
-        return pem
+            + "\n-----END RSA PUBLIC KEY-----\n";
     }
     _prepadSigned(hexStr) {
         let msb = hexStr[0]
         if (msb < '0' || msb > '7') {
-            return '00'+hexStr;
+            return '00' + hexStr;
         } else {
             return hexStr;
         }
@@ -560,7 +564,7 @@ class AzureIDPJwtValidator extends JwtValidator {
     }
 }
 /**
- * AzureADB2CJwtValidator
+ * AzureADJwtValidator
  * @extends {AzureIDPJwtValidator}
  * @author Robert R Murrell
  */
@@ -599,6 +603,32 @@ class AzureADB2CJwtValidator extends AzureIDPJwtValidator {
                 });
         });
     };
+}
+/**
+ * AzureIDPJwtValidatorProperty
+ * @author Robert R Murrell
+ */
+class AzureIDPJwtValidatorProperty extends JsonPropertyType {
+    constructor(name, defaultValue = null) {
+        super(name, defaultValue);
+    }
+    /**@returns{string}*/get mime() {return "application/json; celastrinajs.html.property.AzureIDPJwtValidatorProperty";}
+    async resolve(value) {
+        /**@type{{_type: string}}*/let source = /**@type{{_type: string}}*/await super.resolve(value);
+        if(!source.hasOwnProperty("_type"))
+            throw CelastrinaError.newError("Invalid AzureIDPJwtValidator, _type required.");
+        if(source._type === "AD")
+            return new AzureADJwtValidator();
+        else if(source._type === "ADB2C") {
+            if(!source.hasOwnProperty("_tenant"))
+                throw CelastrinaError.newError("Invalid AzureIDPJwtValidator, _type specified AzureADB2CJwtValidator, " +
+                                                       "but no tenant attribute was provided.");
+            else
+                return new AzureADB2CJwtValidator(source._tenant);
+        }
+        else
+            throw CelastrinaError.newError("Invalid AzureIDPJwtValidator, _type unsupported type '" + source._type + ".");
+    }
 }
 /**
  * JwtConfiguration
@@ -671,7 +701,7 @@ class JwtConfiguration extends ConfigurationItem {
      */
     setValidateNonce(validateNonce = false){this._validateNonce = validateNonce; return this;}
     /**
-     * @param {null|JsonPropertyType|JwtValidator} [validator=null]
+     * @param {JsonPropertyType|JwtValidator} [validator=null]
      * @returns {JwtConfiguration}
      */
     setJwtValidator(validator = null) {if(validator != null) this._validator = validator; return this;}
@@ -1093,7 +1123,7 @@ class SecureCookieSessionResolver extends CookieSessionResolver {
         });
     }
 }
-/**@type{JsonProperty}*/
+/**@type{JsonPropertyType}*/
 class CookieSessionResolverPropertyType extends JsonPropertyType {
     /**
      * @param {string} name
@@ -1122,7 +1152,7 @@ class CookieSessionResolverPropertyType extends JsonPropertyType {
         });
     }
 }
-/**@type{JsonProperty}*/
+/**@type{JsonPropertyType}*/
 class SecureCookieSessionResolverPropertyType extends JsonPropertyType {
     /**
      * @param {string} name
@@ -1305,11 +1335,11 @@ class HTTPFunction extends BaseFunction {
                 context.sendServerError(ex);
             }
             else {
-                ex = CelastrinaError.newError(ex.toString());
+                ex = CelastrinaError.wrapError(ex);
                 context.sendServerError(ex);
             }
 
-            context.log("Request failed to process. (MESSAGE:" + ex.cause.message + ") (STACK:" + ex.cause.stack + ")", LOG_LEVEL.LEVEL_ERROR, "HTTP.exception(context, exception)");
+            context.log("Request failed to process. (MESSAGE:" + ex.message + ") (STACK:" + ex.stack + ")", LOG_LEVEL.LEVEL_ERROR, "HTTP.exception(context, exception)");
             resolve();
         });
     }
@@ -1426,7 +1456,8 @@ class JwtJSONHTTPFunction extends JSONHTTPFunction {
 }
 module.exports = {
     JwtSubject: JwtSubject, Issuer: Issuer, IssuerProperty: IssuerProperty, AzureIDPJwtValidator: AzureIDPJwtValidator,
-    AzureADJwtValidator: AzureADJwtValidator, AzureADB2CJwtValidator: AzureADB2CJwtValidator, JwtValidator: JwtValidator, JwtConfiguration: JwtConfiguration,
+    AzureADJwtValidator: AzureADJwtValidator, AzureADB2CJwtValidator: AzureADB2CJwtValidator, JwtValidator: JwtValidator,
+    AzureIDPJwtValidatorProperty: AzureIDPJwtValidatorProperty, JwtConfiguration: JwtConfiguration,
     HTTPContext: HTTPContext, HTTPParameterFetch: HTTPParameterFetch, HeaderParameterFetch: HeaderParameterFetch,
     QueryParameterFetch: QueryParameterFetch, BodyParameterFetch: BodyParameterFetch,
     HTTPParameterFetchProperty: HTTPParameterFetchPropertyType, CookieSessionResolver: CookieSessionResolver,

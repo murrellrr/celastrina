@@ -101,27 +101,6 @@ class AbstractTransaction {
     /**@returns{Object}*/get source() {return this._source;}
     /**@returns{Object}*/get target() {return this._target;}
     /**
-     * @param {Promise<Object>} promise
-     * @param {boolean} [__new=false]
-     * @return {Promise<Object>}
-     */
-    async _load(promise, __new = false) {
-        return new Promise((resolve, reject) => {
-            promise.then((_object) => {
-                    this._new = __new;
-                    this._source = _object;
-                    return this._objectify(JSON.parse(JSON.stringify(this._source)));
-                })
-                .then((_object) => {
-                    this._target = _object;
-                    resolve(this._target);
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
-        });
-    }
-    /**
      * @param {*} id
      * @param {Object} [config = null]
      * @return {Promise<*>}
@@ -147,7 +126,10 @@ class AbstractTransaction {
     async create() {
         if(this._state === "started") {
             let _object = await this._construct(this._id);
-            return this._load(this._create(_object), true);
+            this._new = true;
+            this._source = _object;
+            this._target = await this._objectify(JSON.parse(JSON.stringify(await this._extract(this._source))));
+            return this._target;
         }
         else
             throw CelastrinaError.newError("Invalid transaction state. Unable to create when '" +
@@ -157,8 +139,13 @@ class AbstractTransaction {
      * @return {Promise<Object>}
      */
     async read() {
-        if(this._state === "started")
-            return this._load(this._read());
+        if(this._state === "started"){
+            let _object = await this._read();
+            this._new = true;
+            this._source = await this._objectify(_object);
+            this._target = await this._objectify(JSON.parse(JSON.stringify(await this._extract(this._source))));
+            return this._target;
+        }
         else
             throw CelastrinaError.newError("Invalid transaction state. Unable to read when '" +
                                                    this._state + "'.");
@@ -331,7 +318,7 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
                 ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY);
             this._semaphore = new BlobSemaphore(this._auth, this._storage, this._container, this._blob);
 
-            this._context.log("Transaction " + this._endpoint + " started.", LOG_LEVEL.LEVEL_INFO,
+            this._context.log("Transaction '" + this._endpoint + "' started.", LOG_LEVEL.LEVEL_INFO,
                                "AbstractBlobStorageTransaction.start(id, config)");
         }
     }
@@ -341,35 +328,38 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
      */
     async _create(_object) {
         /**@type{number}*/let _lock = this.lockingStrategy;
+        this._context.log("Creating '" + this._endpoint + "' using locking strategy " + _lock + ".", LOG_LEVEL.LEVEL_INFO,
+                          "AbstractBlobStorageTransaction._create()");
 
-        this._context.log("Create using locking strategy " + _lock + ".", LOG_LEVEL.LEVEL_INFO,
-                           "AbstractBlobStorageTransaction._create()");
-
-        if(_lock !== BLOB_LOCK_STRATEGY.NONE) {
-            this._context.log("PUT " + this._endpoint + " using locking strategy " + _lock + ".", LOG_LEVEL.LEVEL_INFO,
-                              "AbstractBlobStorageTransaction._create()");
-
+        if(_lock < BLOB_LOCK_STRATEGY.NONE) {
             let token = await this._auth.getToken("https://storage.azure.com/");
             let response = await axios.put(this._endpoint, _object,
-            {
-                    headers: {
+                            {headers: {
+                                "Authorization": "Bearer " + token, "x-ms-version": "2020-06-12",
+                                "Content-Type": "application/json", "x-ms-blob-content-type": "application/json",
+                                "Content-Length": _object.length, "x-ms-blob-type": "BlockBlob"
+                            }});
+            if(response.status === 201) {
+                this._context.log("Create '" + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
+                                  "BlobStorageTransaction._create()");
+                try {
+                    await this._semaphore.lock(this.lockTimeOut, this._context);
+                    this._context.log("Lock of '" + this._endpoint + "' successful.", LOG_LEVEL.LEVEL_INFO,
+                                      "AbstractBlobStorageTransaction._create()");
+                    return _object;
+                }
+                catch(err) {
+                    token = await this._auth.getToken("https://storage.azure.com/");
+                    await axios.delete(this._endpoint, {headers: {
                         "Authorization": "Bearer " + token, "x-ms-version": "2020-06-12",
                         "Content-Type": "application/json", "x-ms-blob-content-type": "application/json",
-                        "Content-Length": _object.length, "x-ms-blob-type": "BlockBlob"
-                    }
-                });
-            if(response.status === 201) {
-                this._context.log("PUT " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
-                                  "BlobStorageTransaction._create()");
-
-                await this._semaphore.lock(this.lockTimeOut, this._context);
-
-                this._context.log("LEASE " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
-                                  "AbstractBlobStorageTransaction._create()");
-                return _object;
+                        "x-ms-blob-type": "BlockBlob"
+                    }});
+                    throw CelastrinaError.newError("Unable to lock '" + this._endpoint + "', blob deleted.");
+                }
             }
             else
-                throw CelastrinaError.newError("Unable to create " + this._endpoint + ". Response code " +
+                throw CelastrinaError.newError("Unable to create '" + this._endpoint + "'. Response code " +
                                                 response.status + ", " + response.statusText);
         }
         else {
@@ -384,13 +374,12 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
         let _lock = this.lockingStrategy;
 
         this._context.log("Reading using locking strategy " + _lock + ".", LOG_LEVEL.LEVEL_INFO,
-                           "AbstractBlobStorageTransaction._create()");
+                           "AbstractBlobStorageTransaction._read()");
 
-        if((_lock === BLOB_LOCK_STRATEGY.READ_UPDATE_LOCK ||
-                _lock === BLOB_LOCK_STRATEGY.COMMIT_LOCK) && !this._semaphore.isLocked) {
+        if((_lock < BLOB_LOCK_STRATEGY.NONE) && !this._semaphore.isLocked) {
             await this._semaphore.lock(this.lockTimeOut, this._context);
-            this._context.log("LEASE " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
-                               "BlobStorageTransaction._create()");
+            this._context.log("Lock of '" + this._endpoint + "' successful.", LOG_LEVEL.LEVEL_INFO,
+                               "BlobStorageTransaction._read()");
         }
 
         let token = await this._auth.getToken("https://storage.azure.com/");
@@ -400,17 +389,36 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
         if(this._semaphore.isLocked)
             _headers["x-ms-lease-id"] = this._semaphore.leaseId;
 
-        let response = await axios.get(this._endpoint, {headers: _headers});
-        if(response.status === 200 || response.status === 206) {
-            this._context.log("Read " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
-                             "AbstractBlobStorageTransaction._read()");
-            if(_lock !== BLOB_LOCK_STRATEGY.COMMIT_LOCK && this._semaphore.isLocked)
-                await this._semaphore.unlock(this._context);
-            return response.data;
+        let exception = null;
+        let response  = null;
+
+        try {
+            try {
+                response = await axios.get(this._endpoint, {headers: _headers});
+            }
+            catch(error) {
+                exception = CelastrinaError.newError("Unable to read '" + this._endpoint + "'. Response code " +
+                                                      error.response.status + ", " + error.response.statusText + ". ",
+                                                      error.response.status, error);
+            }
+
+            if(exception != null)
+                throw exception;
+            else if(response == null)
+                throw CelastrinaError.newError("No response returned from '" + this._endpoint + "'.");
+            else if(response.status === 200) {
+                this._context.log("Read '" + this._endpoint + "' successful.", LOG_LEVEL.LEVEL_INFO,
+                                  "AbstractBlobStorageTransaction._read()");
+                return response.data;
+            }
+            else
+                throw CelastrinaError.newError("Unable to read '" + this._endpoint + "'. Response code " +
+                                                response.status + ", " + response.statusText);
         }
-        else
-            throw CelastrinaError.newError("Unable to create " + this._endpoint + ". Response code " +
-                                           response.status + ", " + response.statusText);
+        finally {
+            if(_lock > BLOB_LOCK_STRATEGY.COMMIT_LOCK && this._semaphore.isLocked)
+                await this._semaphore.unlock();
+        }
     }
     /**
      * @param {Object} _object
@@ -422,10 +430,9 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
         this._context.log("Updating using locking strategy " + _lock + ".", LOG_LEVEL.LEVEL_INFO,
                            "AbstractBlobStorageTransaction._update()");
 
-        if((_lock === BLOB_LOCK_STRATEGY.READ_UPDATE_LOCK ||
-                _lock === BLOB_LOCK_STRATEGY.COMMIT_LOCK) && !this._semaphore.isLocked) {
+        if((_lock < BLOB_LOCK_STRATEGY.NONE) && !this._semaphore.isLocked) {
             await this._semaphore.lock(this.lockTimeOut, this._context);
-            this._context.log("LEASE " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
+            this._context.log("Lock of '" + this._endpoint + "' successful.", LOG_LEVEL.LEVEL_INFO,
                                "AbstractBlobStorageTransaction._update()");
         }
 
@@ -438,18 +445,32 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
         if(this._semaphore.isLocked)
             header["x-ms-lease-id"] = this._semaphore.leaseId;
 
-        let response = await axios.put(this._endpoint, __object, {headers: header});
-        if(response.status === 201) {
-            this._context.log("Update " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
-                               "AbstractBlobStorageTransaction._update()");
+        let exception = null;
+        let response  = null;
+
+        try {
+            response = await axios.put(this._endpoint, __object, {headers: header});
+        }
+        catch(error) {
+            exception = CelastrinaError.newError("Unable to update '" + this._endpoint + "'. Response code " +
+                                                 error.response.status + ", " + error.response.statusText + ". ");
+        }
+
+        if(exception != null)
+            throw exception;
+        else if(response == null)
+            throw CelastrinaError.newError("No response returned from '" + this._endpoint + "'.");
+        else if(response.status === 201) {
+            this._context.log("Update '" + this._endpoint + "' successful.", LOG_LEVEL.LEVEL_INFO,
+                              "AbstractBlobStorageTransaction._update()");
             if(this._semaphore.isLocked) {
                 await this._semaphore.unlock();
-                this._context.log("Ulock " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO,
-                                  "AbstractBlobStorageTransaction._update()");
+                this._context.log("Ulock '" + this._endpoint + "' successful.", LOG_LEVEL.LEVEL_INFO,
+                                   "AbstractBlobStorageTransaction._update()");
             }
         }
         else
-            throw CelastrinaError.newError("Unable to update " + this._endpoint + ". Response code " +
+            throw CelastrinaError.newError("Unable to update '" + this._endpoint + "'. Response code " +
                                             response.status + ", " + response.statusText);
     }
     /**
@@ -468,10 +489,10 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
 
         let response = await axios.delete(this._endpoint, {headers: header});
         if(response.status === 202) {
-            this._context.log("Delete " + this._endpoint + " successful.", LOG_LEVEL.LEVEL_INFO, "" +
+            this._context.log("Delete '" + this._endpoint + "' successful.", LOG_LEVEL.LEVEL_INFO, "" +
                                       "AbstractBlobStorageTransaction._delete()");
         }
-        throw CelastrinaError.newError("Unable to update " + this._endpoint + ". Response code " +
+        throw CelastrinaError.newError("Unable to update '" + this._endpoint + "'. Response code " +
                                        response.status + ", " + response.statusText);
     }
     /**
@@ -481,17 +502,17 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
     async _rollback() {
         this._context.log("Rollback " + this._endpoint, LOG_LEVEL.LEVEL_INFO, "AbstractBlobStorageTransaction._rollback()");
         if(!this._new) {
-            this._context.log(this._endpoint + " is not new, updating record.", LOG_LEVEL.LEVEL_INFO,
+            this._context.log("'" + this._endpoint + "' is not new, updating record.", LOG_LEVEL.LEVEL_INFO,
                                "AbstractBlobStorageTransaction._rollback()");
             await this._update(this._source);
         }
         else {
-            this._context.log(this._endpoint + " is a new Blob, deleting record.", LOG_LEVEL.LEVEL_INFO,
+            this._context.log("'" + this._endpoint + " is a new Blob, deleting record.", LOG_LEVEL.LEVEL_INFO,
                                "AbstractBlobStorageTransaction._rollback()");
             await this._delete();
             this._source = null;
             this._target = null;
-            this._context.log("Rollback of new Blob " + this._endpoint + " successful, Blob deleted.", LOG_LEVEL.LEVEL_INFO,
+            this._context.log("Rollback of new Blob '" + this._endpoint + "' successful, Blob deleted.", LOG_LEVEL.LEVEL_INFO,
                                "AbstractBlobStorageTransaction._rollback()");
         }
     }

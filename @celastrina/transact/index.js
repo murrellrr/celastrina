@@ -27,7 +27,8 @@
  * @license MIT
  */
 "use strict";
-const {BLOB_LOCK_STRATEGY, AbstractTransaction, AbstractBlobStorageTransaction} = require("./Transaction");
+const {TRANSACTION_STATE, BLOB_LOCK_STRATEGY, AbstractTransaction, AbstractBlobStorageTransaction} = require("./Transaction");
 module.exports = {
-    BLOB_LOCK_STRATEGY: BLOB_LOCK_STRATEGY, AbstractTransaction: AbstractTransaction, AbstractBlobStorageTransaction: AbstractBlobStorageTransaction
+    TRANSACTION_STATE: TRANSACTION_STATE, BLOB_LOCK_STRATEGY: BLOB_LOCK_STRATEGY, AbstractTransaction: AbstractTransaction,
+    AbstractBlobStorageTransaction: AbstractBlobStorageTransaction
 }

@@ -33,6 +33,17 @@ const axios = require("axios").default;
 const moment = require("moment");
 const {v4: uuidv4} = require("uuid");
 /**
+ * @type {{STARTED: number, UPDATED: number, COMITTED: number, INVALID: number, DELETED: number, ROLLED_BACK: number}}
+ */
+const TRANSACTION_STATE = {
+    INVALID: 0,
+    STARTED: 1,
+    UPDATED: 2,
+    DELETED: 3,
+    COMITTED: 4,
+    ROLLED_BACK: 5
+}
+/**
  * AbstractTransaction
  * @author Robert R Murrell
  * @abstract
@@ -46,7 +57,7 @@ class AbstractTransaction {
         /**@type{BaseContext}*/this._context = context;
         /**@type{null|{...}}*/this._config = null;
         /**@type{boolean}*/this._new = false;
-        /**@type{string}*/this._state = "invalid";
+        /**@type{number}*/this._state = TRANSACTION_STATE.INVALID;
         /**@type{Object}*/this._source = null; // The original
         /**@type{Object}*/this._target = null; // Copy of the original
     }
@@ -96,6 +107,12 @@ class AbstractTransaction {
      * @abstract
      */
     async _rollback() {throw CelastrinaError.newError("Not Implemented.");}
+    /**@returns{boolean}*/get isStarted() {return this._state === TRANSACTION_STATE.STARTED;}
+    /**@returns{boolean}*/get isUpdated() {return this._state === TRANSACTION_STATE.UPDATED;}
+    /**@returns{boolean}*/get isDeleted() {return this._state === TRANSACTION_STATE.DELETED;}
+    /**@returns{boolean}*/get isCommitted() {return this._state === TRANSACTION_STATE.COMITTED;}
+    /**@returns{boolean}*/get isRolledBack() {return this._state === TRANSACTION_STATE.ROLLED_BACK;}
+    /**@returns{number}*/get state() {return this._state;}
     /**@returns{*}*/get id() {return this._id;}
     /**@returns{boolean}*/get isNew() {return this._new;}
     /**@returns{Object}*/get source() {return this._source;}
@@ -112,7 +129,7 @@ class AbstractTransaction {
             else {
                 this._config = config;
                 this._new = false;
-                this._state = "started";
+                this._state = TRANSACTION_STATE.STARTED;
                 this._source = null;
                 this._target = null;
                 this._id = id;
@@ -124,7 +141,7 @@ class AbstractTransaction {
      * @return {Promise<Object>}
      */
     async create() {
-        if(this._state === "started") {
+        if(this._state === TRANSACTION_STATE.STARTED) {
             let _object = await this._construct(this._id);
             this._new = true;
             this._source = _object;
@@ -139,7 +156,7 @@ class AbstractTransaction {
      * @return {Promise<Object>}
      */
     async read() {
-        if(this._state === "started"){
+        if(this._state === TRANSACTION_STATE.STARTED){
             let _object = await this._read();
             this._new = true;
             this._source = await this._objectify(_object);
@@ -151,13 +168,30 @@ class AbstractTransaction {
                                                    this._state + "'.");
     }
     /**
+     * @return {Promise<Object>}
+     */
+    async readOrCreate() {
+        try {
+            return await this.read();
+        }
+        catch(exception) {
+            if(exception instanceof CelastrinaError) {
+                if(exception.code === 404)
+                    return await this.create();
+                else
+                    throw exception;
+            }
+            else throw exception;
+        }
+    }
+    /**
      * @param {Object} _object
      * @return {Promise<Object>}
      */
     async update(_object) {
         return new Promise((resolve, reject) => {
-            if(this._state === "started" || this._state === "updated") {
-                this._state = "updated";
+            if(this._state === TRANSACTION_STATE.STARTED || this._state === TRANSACTION_STATE.UPDATED) {
+                this._state = TRANSACTION_STATE.UPDATED;
                 this._target = _object;
                 resolve(this._target);
             }
@@ -170,11 +204,11 @@ class AbstractTransaction {
      */
     async delete() {
         return new Promise((resolve, reject) => {
-            if(this._state === "started" || this._state === "updated") {
-                this._state = "deleted";
+            if(this._state === TRANSACTION_STATE.STARTED || this._state === TRANSACTION_STATE.UPDATED) {
+                this._state = TRANSACTION_STATE.DELETED;
                 resolve();
             }
-            else if(this._state === "deleted")
+            else if(this._state === TRANSACTION_STATE.DELETED)
                 resolve();
             else
                 reject(CelastrinaError.newError("Invalid transaction state. Unable to delete when '" +
@@ -185,9 +219,9 @@ class AbstractTransaction {
      * @return {Promise<void>}
      */
     async rollback() {
-        if(this._state === "comitted") {
+        if(this._state === TRANSACTION_STATE.COMITTED) {
             await this._rollback();
-            this._state = "rolled-back";
+            this._state = TRANSACTION_STATE.ROLLED_BACK;
         }
         else
             throw CelastrinaError.newError("Invalid transaction state. Unable to rollback when '" +
@@ -197,15 +231,15 @@ class AbstractTransaction {
      * @return {Promise<void>}
      */
     async commit() {
-        if(this._state === "updated") {
+        if(this._state === TRANSACTION_STATE.UPDATED) {
             let object = await this._extract(this._target);
             await this._update(object);
-            this._state = "comitted";
+            this._state = TRANSACTION_STATE.COMITTED;
         }
-        else if(this._state === "deleted") {
+        else if(this._state === TRANSACTION_STATE.DELETED) {
             await this._delete();
             this._target = null;
-            this._state = "comitted";
+            this._state = TRANSACTION_STATE.COMITTED;
         }
         else
             throw CelastrinaError.newError("Invalid transaction state. Unable to commit when '" +
@@ -519,5 +553,6 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
 }
 
 module.exports = {
-    BLOB_LOCK_STRATEGY: BLOB_LOCK_STRATEGY, AbstractTransaction: AbstractTransaction, AbstractBlobStorageTransaction: AbstractBlobStorageTransaction
+    TRANSACTION_STATE: TRANSACTION_STATE, BLOB_LOCK_STRATEGY: BLOB_LOCK_STRATEGY, AbstractTransaction: AbstractTransaction,
+    AbstractBlobStorageTransaction: AbstractBlobStorageTransaction
 }

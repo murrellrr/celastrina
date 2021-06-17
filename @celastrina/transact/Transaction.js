@@ -258,9 +258,9 @@ const BLOB_LOCK_STRATEGY = {
  * @typedef Blob
  * @property {string} storage
  * @property {string} container
- * @property {string} path?
- * @property {number} lockStrategy?
- * @property {number} lockTimeOut?
+ * @property {string} [path]
+ * @property {number} [lockStrategy]
+ * @property {number} [lockTimeOut]
  */
 /**
  * @typedef BlobTransactionConfig
@@ -292,18 +292,18 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
     /**@type{number}*/get lockingStrategy() {return this._lockStrategy;}
     /**@type{number}*/get lockTimeOut() {return this._lockTimeout;}
     /**
-     * @param {Blob} config
-     * @return {null|string}
+     * @param {{storage:string, container:string, path?:string, [lockStrategy]:number, [lockTimeOut]:number}} config
+     * @return {(null|string)}
      * @private
      */
     _getPath(config) {
-        if(typeof config.path === "string" && config.path.trim().length > 0)
-            return config.path;
-        else
+        if(typeof config.path === "undefined" || config.path == null)
             return null;
+        else
+            return config.path;
     }
     /**
-     * @param {Blob} config
+     * @param {{storage:string, container:string, path?:string, [lockStrategy]:number, [lockTimeOut]:number}} config
      * @private
      */
     _setLockStrategy(config) {
@@ -311,7 +311,7 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
             this._lockStrategy = config.lockStrategy;
     }
     /**
-     * @param {Blob} config
+     * @param {{storage:string, container:string, path?:string, [lockStrategy]:number, [lockTimeOut]:number}} config
      * @private
      */
     _setLockTimeout(config) {
@@ -320,13 +320,13 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
     }
     /**
      * @param {*} id
-     * @param {BlobTransactionConfig} config
+     * @param {{blob:{storage:string, container:string, path?:string, [lockStrategy]:number, [lockTimeOut]:number}}} config
      * @return {Promise<void>}
      */
     async start(id, config) {
         this._context.log("Starting transaction.", LOG_LEVEL.LEVEL_INFO,
                            "AbstractBlobStorageTransaction.start(id, config)");
-
+        this._context.log(JSON.stringify(config), LOG_LEVEL.LEVEL_INFO, "AbstractBlobStorageTransaction.start(id, config)");
         if(typeof config.blob === "undefined") {
             this._context.log("Invalid configuration, missing blob.", LOG_LEVEL.LEVEL_INFO,
                                "AbstractBlobStorageTransaction.start(id, config)");
@@ -338,18 +338,17 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
             this._setLockStrategy(blob);
             this._setLockTimeout(blob);
 
-            this._blob = id + ".json";
+            this._blob = id;
             this._storage = blob.storage;
             this._container = blob.container;
 
             let path = this._getPath(blob);
+            this._context.log("Path set to '" + path + "'.", LOG_LEVEL.LEVEL_INFO, "AbstractBlobStorageTransaction.start(id, config)");
             if(path != null)
                 this._blob = path + "/" + this._blob;
-            this._endpoint = "https://" + this._storage + ".blob.core.windows.net/" +
-                this._container + "/" + this._blob;
-
+            this._endpoint = "https://" + this._storage + ".blob.core.windows.net/" + this._container + "/" + this._blob;
             this._auth = await this._context.authorizationContext.getAuthorization(
-                ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY);
+                                                                    ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY);
             this._semaphore = new BlobSemaphore(this._auth, this._storage, this._container, this._blob);
 
             this._context.log("Transaction '" + this._endpoint + "' started.", LOG_LEVEL.LEVEL_INFO,

@@ -841,6 +841,32 @@ class HTTPContext extends BaseContext {
     }
     /**
      * @param {string} name
+     * @param {string} value
+     * @param {Object} [config=null]
+     */
+    setCookie(name, value, config = null) {
+        this._cookies[name] = value;
+        let _value = name + "=" + value;
+        if(config != null) {
+            if(config.hasOwnProperty("secure") && typeof config.secure === "boolean" && config.secure)
+                _value += "; Secure";
+            if(config.hasOwnProperty("httpOnly") && typeof config.httpOnly === "boolean" && config.httpOnly)
+                _value += "; HttpOnly";
+            if(config.hasOwnProperty("maxAge") && typeof config.maxAge === "number")
+                _value += "; Max-Age=" + config.maxAge;
+            if(config.hasOwnProperty("expires") && typeof config.expires === "string")
+                _value += "; Expires=" + config.expires;
+            if(config.hasOwnProperty("domain") && typeof config.domain === "string")
+                _value += "; Domain=" + config.domain;
+            if(config.hasOwnProperty("path") && typeof config.path === "string")
+                _value += "; Path=" + config.domain;
+            if(config.hasOwnProperty("sameSite") && typeof config.path === "string")
+                _value += "; SameSite=" + config.sameSite;
+        }
+        this.setResponseHeader("Set-Cookie", _value);
+    }
+    /**
+     * @param {string} name
      * @param {null|string} [defaultValue=null]
      * @return {null|string}
      */

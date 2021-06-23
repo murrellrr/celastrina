@@ -33,7 +33,7 @@ const axios = require("axios").default;
 const moment = require("moment");
 const {v4: uuidv4} = require("uuid");
 /**
- * @type {{STARTED: number, UPDATED: number, COMITTED: number, INVALID: number, DELETED: number, ROLLED_BACK: number}}
+ * @type {{STARTED: number, UPDATED: number, COMITTED: number, ABORTED: number, INVALID: number, DELETED: number, ROLLED_BACK: number}}
  */
 const TRANSACTION_STATE = {
     INVALID: 0,
@@ -41,7 +41,8 @@ const TRANSACTION_STATE = {
     UPDATED: 2,
     DELETED: 3,
     COMITTED: 4,
-    ROLLED_BACK: 5
+    ROLLED_BACK: 5,
+    ABORTED: 6
 }
 /**
  * AbstractTransaction
@@ -107,11 +108,17 @@ class AbstractTransaction {
      * @abstract
      */
     async _rollback() {throw CelastrinaError.newError("Not Implemented.");}
+    /**
+     * @return {Promise<void>}
+     * @abstract
+     */
+    async _abort() {throw CelastrinaError.newError("Not Implemented.");}
     /**@returns{boolean}*/get isStarted() {return this._state === TRANSACTION_STATE.STARTED;}
     /**@returns{boolean}*/get isUpdated() {return this._state === TRANSACTION_STATE.UPDATED;}
     /**@returns{boolean}*/get isDeleted() {return this._state === TRANSACTION_STATE.DELETED;}
     /**@returns{boolean}*/get isCommitted() {return this._state === TRANSACTION_STATE.COMITTED;}
     /**@returns{boolean}*/get isRolledBack() {return this._state === TRANSACTION_STATE.ROLLED_BACK;}
+    /**@returns{boolean}*/get isAborted() {return this._state === TRANSACTION_STATE.ABORTED;}
     /**@returns{number}*/get state() {return this._state;}
     /**@returns{*}*/get id() {return this._id;}
     /**@returns{boolean}*/get isNew() {return this._new;}
@@ -145,7 +152,9 @@ class AbstractTransaction {
             let _object = await this._construct(this._id);
             this._new = true;
             this._source = _object;
-            this._target = await this._objectify(JSON.parse(JSON.stringify(await this._extract(this._source))));
+            let _extracted = await this._extract(this._source);
+            _extracted = await this._create(_extracted);
+            this._target = await this._objectify(JSON.parse(JSON.stringify(_extracted)));
             return this._target;
         }
         else
@@ -158,7 +167,7 @@ class AbstractTransaction {
     async read() {
         if(this._state === TRANSACTION_STATE.STARTED){
             let _object = await this._read();
-            this._new = true;
+            this._new = false;
             this._source = await this._objectify(_object);
             this._target = await this._objectify(JSON.parse(JSON.stringify(await this._extract(this._source))));
             return this._target;
@@ -230,6 +239,22 @@ class AbstractTransaction {
     /**
      * @return {Promise<void>}
      */
+    async abort() {
+        await this._abort();
+        this._state = TRANSACTION_STATE.ABORTED;
+    }
+    /**
+     * @return {Promise<void>}
+     */
+    async rollbackOrAbort() {
+        if (this._state === TRANSACTION_STATE.COMITTED)
+            await this.rollback();
+        else
+            await this.abort();
+    }
+    /**
+     * @return {Promise<void>}
+     */
     async commit() {
         if(this._state === TRANSACTION_STATE.UPDATED) {
             let object = await this._extract(this._target);
@@ -244,6 +269,22 @@ class AbstractTransaction {
         else
             throw CelastrinaError.newError("Invalid transaction state. Unable to commit when '" +
                                                    this._state + "'.");
+    }
+    /**
+     * @param {Object} _object
+     * @return {Promise<Object>}
+     */
+    async updateAndCommit(_object) {
+        await this.update(_object);
+        return this.commit();
+    }
+    /**
+     * @param {Object} _object
+     * @return {Promise<Object>}
+     */
+    async deleteAndCommit(_object) {
+        await this.delete();
+        return this.commit();
     }
 }
 /**
@@ -363,7 +404,6 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
         /**@type{number}*/let _lock = this.lockingStrategy;
         this._context.log("Creating '" + this._endpoint + "' using locking strategy " + _lock + ".", LOG_LEVEL.LEVEL_INFO,
                           "AbstractBlobStorageTransaction._create()");
-
         if(_lock < BLOB_LOCK_STRATEGY.NONE) {
             let token = await this._auth.getToken("https://storage.azure.com/");
             let response = await axios.put(this._endpoint, _object,
@@ -548,6 +588,14 @@ class AbstractBlobStorageTransaction extends AbstractTransaction {
             this._context.log("Rollback of new Blob '" + this._endpoint + "' successful, Blob deleted.", LOG_LEVEL.LEVEL_INFO,
                                "AbstractBlobStorageTransaction._rollback()");
         }
+    }
+    /**
+     * @return {Promise<void>}
+     * @private
+     */
+    async _abort() {
+        if(this._semaphore.isLocked)
+            await this._semaphore.unlock(this._context);
     }
 }
 

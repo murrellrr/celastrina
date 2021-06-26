@@ -381,7 +381,7 @@ class ResourceAuthorizationConfiguration extends ConfigurationItem {
         return this;
     }
     /**@returns{Array.<ResourceAuthorization>}*/get authorizations() {return /**@type{Array.<ResourceAuthorization>}*/this._authorizations;}
-    /**@returns{boolean}*/get containesManagedResourceAuthorization() {
+    /**@returns{boolean}*/get hasManagedIdentity() {
         let hasem = false;
         for(const auth of this._authorizations) {
             if(auth instanceof ManagedIdentityAuthorization) {
@@ -506,7 +506,7 @@ class AppSettingsPropertyHandler extends PropertyHandler {
         return new Promise((resolve, reject) => {
             try {
                 let value = process.env[key];
-                if (typeof value === "undefined") value = defaultValue;
+                if(typeof value === "undefined") value = defaultValue;
                 resolve(value);
             }
             catch(exception) {
@@ -535,10 +535,27 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
         this._endpoint = "https://management.azure.com/subscriptions/" + subscriptionId +
                     "/resourceGroups/" + resourceGroupName + "/providers/Microsoft.AppConfiguration/configurationStores/" +
                     configStoreName + "/listKeyValue?api-version=2019-10-01";
-        /** @type {null|ResourceAuthorization} */this._auth = null;
+        /** @type {ManagedIdentityAuthorization} */this._auth = null;
         /** @type{boolean} */this._useVaultSecrets = useVaultSecrets;
         if(this._useVaultSecrets)
             /** @type{Vault} */this._vault = new Vault();
+    }
+    /**@return{ManagedIdentityAuthorization}*/get managedIdentity() {return this._auth}
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param {Object} config
+     * @return {Promise<void>}
+     */
+    async initialize(azcontext, config) {
+        return new Promise((resolve, reject) => {
+            let _identityEndpoint = process.env["IDENTITY_ENDPOINT"];
+            if(typeof _identityEndpoint === "undefined" || _identityEndpoint == null)
+                reject(CelastrinaError.newError("AppConfigPropertyHandler requires User or System Assigned Managed Identy to be enabled."));
+            else {
+                this._identity = new ManagedIdentityAuthorization();
+                resolve();
+            }
+        });
     }
     /**
      * @param {_AzureFunctionContext} azcontext
@@ -548,14 +565,7 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
     async ready(azcontext, config) {
         return new Promise((resolve, reject) => {
             /**@type{ResourceAuthorizationContext}*/let authctx = config[ResourceAuthorizationContext.CONFIG_RESOURCE_AUTH_CONTEXT];
-            authctx.getAuthorization()
-                .then((_auth) => {
-                    this._auth = _auth;
-                    resolve();
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
+            authctx.addAuthorization(this._auth);
         });
     }
     /**
@@ -1726,35 +1736,24 @@ class Configuration extends EventEmitter {
                                 azcontext.log.error("[Configuration.load(context)]: Invalid Configuration. Name cannot be undefined, null, or 0 length.");
                                 reject(CelastrinaValidationError.newValidationError("Name cannot be undefined, null, or 0 length.", Configuration.CONFIG_NAME));
                             }
-                            else {
-                                /**@type{null|undefined|string}*/let endpoint = process.env["IDENTITY_ENDPOINT"];
-                                /**@type{null|undefined|ResourceAuthorizationConfiguration}*/let authconfig = this._config[ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH];
-                                if(typeof endpoint !== "string") {
-                                    if(!(authconfig instanceof ResourceAuthorizationConfiguration)) {
-                                        azcontext.log.info("[Configuration.initialize(azcontext)]: Managed Identity detected, autoconfiguring ResourceAuthorizationConfiguration with ManagedIdentityAuthorization.");
-                                        authconfig = new ResourceAuthorizationConfiguration();
-                                        authconfig.addAuthorization(new ManagedIdentityAuthorization());
-                                        this._config[ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH] = authconfig;
-                                    }
-                                    else if(!authconfig.containesManagedResourceAuthorization)
-                                        authconfig.addAuthorization(new ManagedIdentityAuthorization());
-                                }
-                                /**@type{null|FunctionRoleConfiguration}*/let roleconfig = this.getValue(FunctionRoleConfiguration.CONFIG_ROLES);
-                                /**@type{Array.<Promise<void>>}*/let promises = [];
-                                if(authconfig != null)
-                                    promises.unshift(authconfig.install(this));
-                                if(roleconfig != null)
-                                    promises.unshift(roleconfig.install(this));
-                                return Promise.all(promises);
-                            }
-                        })
-                        .then((results) => {
-                            return handler.ready(azcontext, this._config);
+                            else
+                                return handler.ready(azcontext, this._config);
                         })
                         .then(() => {
                             azcontext.log.info("[Configuration.initialize(azcontext)]: Property Handler Ready, loading dynamic property types.");
                             /**@type{Array.<Promise<void>>}*/let promises = [];
                             this._load(this, promises);
+                            return Promise.all(promises);
+                        })
+                        .then(() => {
+                            azcontext.log.info("[Configuration.initialize(azcontext)]: Installing authorization and role configurations.");
+                            /**@type{null|ResourceAuthorizationConfiguration}*/let authconfig = this.getValue(ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH);
+                            /**@type{null|FunctionRoleConfiguration}*/let roleconfig = this.getValue(FunctionRoleConfiguration.CONFIG_ROLES);
+                            /**@type{Array.<Promise<void>>}*/let promises = [];
+                            if(authconfig != null)
+                                promises.unshift(authconfig.install(this));
+                            if(roleconfig != null)
+                                promises.unshift(roleconfig.install(this));
                             return Promise.all(promises);
                         })
                         .then(() => {

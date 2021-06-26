@@ -1,6 +1,6 @@
 {
   "name": "@celastrina/transact",
-  "version": "2.0.15",
+  "version": "2.0.18",
   "description": "Lightweight CRUD transaction API for loading JSON object from various data stores.",
   "main": "index.js",
   "scripts": {
@@ -27,6 +27,6 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/core": "^2.0.0"
+    "@celastrina/core": "^2.0.3"
   }
 }

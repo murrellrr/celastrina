@@ -461,6 +461,11 @@ class PropertyHandler {
         });
     }
     /**
+     * @abstract
+     * @return {string}
+     */
+    getName() {return "PropertyHandler";}
+    /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
      * @returns {Promise<void>}
@@ -497,6 +502,7 @@ class PropertyHandler {
 /**@type{PropertyHandler}*/
 class AppSettingsPropertyHandler extends PropertyHandler {
     constructor(){super();}
+    /**@return{string}*/getName() {return "AppSettingsPropertyHandler";}
     /**
      * @param {string} key
      * @param {*} [defaultValue=null]
@@ -540,7 +546,7 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
         if(this._useVaultSecrets)
             /** @type{Vault} */this._vault = new Vault();
     }
-    /**@return{ManagedIdentityAuthorization}*/get managedIdentity() {return this._auth}
+    /**@return{string}*/getName() {return "AppConfigPropertyHandler";}
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
@@ -552,7 +558,7 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
             if(typeof _identityEndpoint === "undefined" || _identityEndpoint == null)
                 reject(CelastrinaError.newError("AppConfigPropertyHandler requires User or System Assigned Managed Identy to be enabled."));
             else {
-                this._identity = new ManagedIdentityAuthorization();
+                this._auth = new ManagedIdentityAuthorization();
                 resolve();
             }
         });
@@ -724,7 +730,7 @@ class CachePropertyHandler extends PropertyHandler {
         this._defaultTime = defaultTime;
         /**@type{moment.DurationInputArg2}*/this._defaultUnit = defaultUnit;
     }
-    /**@returns{boolean}*/get loaded(){return this._handler.loaded;}
+    /**@return{string}*/getName() {return "CachePropertyHandler";}
     /**@returns{PropertyHandler}*/get handler(){return this._handler;}
     /**@returns{{Object}}*/get cache(){return this._cache;}
     /**@returns{Promise<void>}*/
@@ -918,11 +924,7 @@ class JsonPropertyType extends PropertyType {
      * @param {null|Object} defaultValue
      */
     constructor(name, defaultValue = null) {super(name, defaultValue);}
-    /**
-     * @returns {string}
-     * @abstract
-     */
-    get mime() {return "application/json; celastrinajs.core.property.JsonPropertyType"}
+    /**@return{string}*/get mime() {return "application/json; celastrinajs.core.property.JsonPropertyType"}
     /**
      * @param {null|string} value
      * @returns {Promise<null|Object>}
@@ -946,11 +948,7 @@ class StringPropertyType extends PropertyType {
      * @param {null|string} defaultValue
      */
     constructor(name, defaultValue = null){super(name, defaultValue);}
-    /**
-     * @returns {string}
-     * @abstract
-     */
-    get mime() {return "text/plain; celastrinajs.core.property.StringPropertyType"}
+    /**@return{string}*/get mime() {return "text/plain; celastrinajs.core.property.StringPropertyType"}
     /**
      * @param {string} value
      * @returns {Promise<null|string>}
@@ -974,11 +972,7 @@ class BooleanPropertyType extends PropertyType {
      * @param {null|boolean} defaultValue
      */
     constructor(name, defaultValue = null){super(name, defaultValue);}
-    /**
-     * @returns {string}
-     * @abstract
-     */
-    get mime() {return "text/plain; celastrinajs.core.property.BooleanPropertyType"}
+    /**@return{string}*/get mime() {return "text/plain; celastrinajs.core.property.BooleanPropertyType"}
     /**
      * @brief
      * @param {string} value
@@ -1002,11 +996,7 @@ class NumericPropertyType extends PropertyType {
      * @param {null|number} defaultValue
      */
     constructor(name, defaultValue = null){super(name, defaultValue);}
-    /**
-     * @returns {string}
-     * @abstract
-     */
-    get mime() {return "text/plain; celastrinajs.core.property.NumericPropertyType"}
+    /**@return{string}*/get mime() {return "text/plain; celastrinajs.core.property.NumericPropertyType"}
     /**
      * @param {string} value
      * @returns {Promise<null|number>}
@@ -1033,7 +1023,12 @@ class HandlerProperty {
      * @returns {PropertyHandler}
      * @private
      */
-    _createPropertyHandler(source) {return null;}
+    _createPropertyHandler(source) {throw CelastrinaError.newError("Not Implemented.");}
+    /**
+     * @abstract
+     * @return {string}
+     */
+    getName() {return "HandlerProperty";}
     /**
      * @param {PropertyHandler} handler
      * @param {Object} source
@@ -1044,7 +1039,7 @@ class HandlerProperty {
         // Checking to see if there is a cache object.
         if(source.hasOwnProperty("cache") && typeof source.cache === "object" && source.cache != null) {
             // Getting the attributes for the cache.
-            /**@type{{ttl:number, unit:moment.DurationInputArg2, overrides:null|undefined|Array.<object>}}*/let cache = source.cache;
+            /**@type{CachedProperty}*/let cache = source.cache;
             if(!cache.hasOwnProperty("ttl") || typeof cache.ttl !== "number")
                 throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.ttl");
             if(!cache.hasOwnProperty("unit") || typeof cache.unit !== "string" || cache.unit.length === 0)
@@ -1084,6 +1079,7 @@ class HandlerProperty {
 /**@type{HandlerProperty}*/
 class AppConfigHandlerProperty extends HandlerProperty {
     constructor(name = "celastrinajs.core.property.appconfig.config"){super(name);}
+    /**@return{string}*/getName() {return "AppConfigHandlerProperty";}
     /**
      * @param {{subscriptionId:string, resourceGroupName:string, configStoreName:string, label:null|undefined|string, useVault:null|undefined|boolean}} source
      * @returns {PropertyHandler}
@@ -1669,16 +1665,21 @@ class Configuration extends EventEmitter {
     /**
      * @param {Object} obj
      * @param {Array.<Promise>} promises
+     * @param azcontext
      * @private
      */
-    _load(obj, promises) {
+    _load(obj, promises, azcontext) {
         if(typeof obj === "object") {
             for(let prop in obj) {
                 let local = obj[prop];
                 if(typeof local !== "undefined" && local != null) {
-                    if(local instanceof PropertyType) promises.unshift(PropertyLoader.load(obj, prop, local,
-                                                                            this._config[Configuration.CONFIG_HANDLER]));
-                    else this._load(local, promises);
+                    if(local instanceof PropertyType) {
+                        azcontext.log.verbose("[Configuration._load(obj, promises, azcontext)] Replacing '" + prop +
+                                               "' with PropertyType '" + local.mime  + "', using key '" + local.name + "'.");
+                        promises.unshift(PropertyLoader.load(obj, prop, local,
+                                         this._config[Configuration.CONFIG_HANDLER]));
+                    }
+                    else this._load(local, promises, azcontext);
                 }
             }
         }
@@ -1689,14 +1690,14 @@ class Configuration extends EventEmitter {
      * @private
      */
     _getPropertyHandler(azcontext) {
-        /**@type{undefined|null|PropertyHandler}*/let _handler = this._config[Configuration.CONFIG_HANDLER];
+        /**@type{(undefined|null|PropertyHandler)}*/let _handler = this._config[Configuration.CONFIG_HANDLER];
         if(typeof _handler === "undefined" || _handler == null) {
             azcontext.log.info("[Configuration._getPropertyHandler(context)]: No property handler specified, defaulting to AppSettingsPropertyHandler.");
             _handler = new AppSettingsPropertyHandler();
             this._config[Configuration.CONFIG_HANDLER] = _handler;
         }
         else
-            azcontext.log.info("[Configuration._getPropertyHandler(context)]: Loading PropertyHandler '" + _handler.constructor.name + "'.");
+            azcontext.log.info("[Configuration._getPropertyHandler(context)]: Loading PropertyHandler '" + _handler.getName() + "'.");
         return _handler;
     }
     /**
@@ -1715,64 +1716,50 @@ class Configuration extends EventEmitter {
      * @returns {Promise<void>}
      */
     async initialize(azcontext) {
-        return new Promise((resolve, reject) => {
-            try {
-                this._config[Configuration.CONFIG_CONTEXT] = azcontext;
-                if(!this._loaded) {
-                    /**@type{PropertyHandler}*/let handler = this._getPropertyHandler(azcontext);
-                    if(this._isPropertyHandlerOverridden()) {
-                        azcontext.log.warn("[Configuration.initialize(azcontext)]: Local development override, using AppSettingsPropertyHandler.");
-                        handler = new AppSettingsPropertyHandler();
-                        this._config[Configuration.CONFIG_HANDLER] = handler;
-                    }
-                    else if(handler instanceof HandlerProperty) {
-                        handler = handler.createPropertyHandler();
-                        this._config[Configuration.CONFIG_HANDLER] = handler;
-                    }
-                    handler.initialize(azcontext, this._config)
-                        .then(() => {
-                            let _name = this._config[Configuration.CONFIG_NAME];
-                            if(typeof _name !== "string" || _name.trim().length === 0) {
-                                azcontext.log.error("[Configuration.load(context)]: Invalid Configuration. Name cannot be undefined, null, or 0 length.");
-                                reject(CelastrinaValidationError.newValidationError("Name cannot be undefined, null, or 0 length.", Configuration.CONFIG_NAME));
-                            }
-                            else
-                                return handler.ready(azcontext, this._config);
-                        })
-                        .then(() => {
-                            azcontext.log.info("[Configuration.initialize(azcontext)]: Property Handler Ready, loading dynamic property types.");
-                            /**@type{Array.<Promise<void>>}*/let promises = [];
-                            this._load(this, promises);
-                            return Promise.all(promises);
-                        })
-                        .then(() => {
-                            azcontext.log.info("[Configuration.initialize(azcontext)]: Installing authorization and role configurations.");
-                            /**@type{null|ResourceAuthorizationConfiguration}*/let authconfig = this.getValue(ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH);
-                            /**@type{null|FunctionRoleConfiguration}*/let roleconfig = this.getValue(FunctionRoleConfiguration.CONFIG_ROLES);
-                            /**@type{Array.<Promise<void>>}*/let promises = [];
-                            if(authconfig != null)
-                                promises.unshift(authconfig.install(this));
-                            if(roleconfig != null)
-                                promises.unshift(roleconfig.install(this));
-                            return Promise.all(promises);
-                        })
-                        .then(() => {
-                            azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration initialized.");
-                            resolve();
-                        })
-                        .catch((exception) => {
-                            azcontext.log.error("[Configuration.initialize(context)]: Exception initializing handler: " + exception);
-                            reject(exception);
-                        });
-                }
-                else
-                    resolve();
+        azcontext.log.info("[Configuration.initialize(azcontext)]: Initializing configuration.");
+        this._config[Configuration.CONFIG_CONTEXT] = azcontext;
+        if(!this._loaded) {
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration not loaded, loading and initializing.");
+            /**@type{PropertyHandler}*/let handler = this._getPropertyHandler(azcontext);
+
+            if(this._isPropertyHandlerOverridden()) {
+                azcontext.log.warn("[Configuration.initialize(azcontext)]: Local development override, using AppSettingsPropertyHandler.");
+                handler = new AppSettingsPropertyHandler();
+                this._config[Configuration.CONFIG_HANDLER] = handler;
             }
-            catch(exception) {
-                azcontext.log.error("[Configuration.load(context)]: Exception initializing configuration: " + exception);
-                reject(exception);
+            else if(handler instanceof HandlerProperty) {
+                azcontext.log.info("[Configuration.initialize(azcontext)]: Found HandlerProperty " + handler.getName() + ", creating PropertyHandler.");
+                handler = handler.createPropertyHandler();
+                azcontext.log.info("[Configuration.initialize(azcontext)]: PropertyHandler " + handler.getName() + " created.");
+                this._config[Configuration.CONFIG_HANDLER] = handler;
             }
-        });
+
+            let _name = this._config[Configuration.CONFIG_NAME];
+            if(typeof _name !== "string" || _name.trim().length === 0) {
+                azcontext.log.error("[Configuration.load(azcontext)]: Invalid Configuration. Name cannot be undefined, null, or 0 length.");
+                throw CelastrinaValidationError.newValidationError("Name cannot be undefined, null, or 0 length.", Configuration.CONFIG_NAME);
+            }
+
+            await handler.initialize(azcontext, this._config);
+            azcontext.log.info("[Configuration.load(azcontext)]: Property Handler Initialization Successful.");
+            await handler.ready(azcontext, this._config);
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Property Handler Ready, loading dynamic property types.");
+            /**@type{Array.<Promise<void>>}*/let promises = [];
+            this._load(this, promises, azcontext);
+            await Promise.all(promises);
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Installing authorization and role configurations.");
+            /**@type{null|ResourceAuthorizationConfiguration}*/let authconfig = this.getValue(ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH);
+            /**@type{null|FunctionRoleConfiguration}*/let roleconfig = this.getValue(FunctionRoleConfiguration.CONFIG_ROLES);
+            promises.length = 0;
+            if(authconfig != null)
+                promises.unshift(authconfig.install(this));
+            if(roleconfig != null)
+                promises.unshift(roleconfig.install(this));
+            await Promise.all(promises);
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration initialized and loaded.");
+        }
+        else
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration loaded, initilization not required.");
     }
 }
 /**@abstract*/

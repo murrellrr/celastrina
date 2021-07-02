@@ -1238,9 +1238,11 @@ class FunctionRoleConfiguration extends ConfigurationItem {
 }
 class FunctionRoleConfigurationProperty extends JsonPropertyType {
     /**
-     * @param {null|string} defaultValue
+     * @param {string} name
+     * @param {null|string} [defaultValue=null]
      */
-    constructor(defaultValue = null){super(FunctionRoleConfiguration.CONFIG_ROLES, defaultValue);}
+    constructor(name, defaultValue = null){super(name, defaultValue);}
+    /**@return{string}*/get key() {return FunctionRoleConfiguration.CONFIG_ROLES;}
     /**
      * @param {null|string} _RoleResolver
      * @return {Promise<RoleResolver>}

@@ -1,6 +1,6 @@
 {
   "name": "@celastrina/timer",
-  "version": "2.0.5",
+  "version": "2.0.51",
   "description": "Timer Function Package for Celastrina",
   "main": "index.js",
   "scripts": {
@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/core": "^2.0.6",
+    "@celastrina/core": "^2.0.61",
     "moment": "^2.29.1"
   }
 }

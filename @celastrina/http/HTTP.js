@@ -898,7 +898,6 @@ class SecureCookieSessionResolver extends CookieSessionResolver {
      * @private
      */
     async _getSession(context, cookie) {
-
         let decrypted = await this._crypto.decrypt(cookie);
         let session = super._getSession(context, decrypted);
         if(session.hasOwnProperty("expires") && session.expires != null) {

@@ -58,7 +58,10 @@ const {TokenResponse, AuthenticationContext} = require("adal-node");
  * @property {string} token_type
  * @property {string} client_id
  */
-/** @author Robert R Murrell */
+/**
+ * CelastrinaError
+ * @author Robert R Murrell
+ */
 class CelastrinaError extends Error {
     /**
      * @param {string} message
@@ -69,24 +72,24 @@ class CelastrinaError extends Error {
     constructor(message, code = 500, drop = false, cause = null) {
         super(message);
         /**@type{Error}*/this.cause = cause;
-        this.code  = code;
-        this.drop  = drop;
+        this.code = code;
+        this.drop = drop;
     }
     /**
-     * @returns {string}
+     * @return {string}
      */
     toString() {
-        let tostring = "[" + this.code + "][" + this.drop + "]: " + this.message;
-        if(this.cause != null)
-            tostring += " Caused by " + this.cause.toString();
-        return tostring;
+        let _tostring = "[" + this.code + "][" + this.drop + "]: " + this.message;
+        if(typeof this.cause !== "undefined" && this.cause != null)
+            _tostring += " Caused by " + this.cause.toString();
+        return _tostring;
     }
     /**
      * @param {string} message
      * @param {int} code
      * @param {boolean} [drop=false]
      * @param {Error} [cause=null]
-     * @returns {CelastrinaError}
+     * @return {CelastrinaError}
      */
     static newError(message, code = 500, drop = false, cause = null) {
         return new CelastrinaError(message, code, drop, cause);
@@ -95,7 +98,7 @@ class CelastrinaError extends Error {
      * @param {*} error
      * @param {int} code
      * @param {boolean} drop
-     * @returns {CelastrinaError}
+     * @return {CelastrinaError}
      */
     static wrapError(error, code = 500, drop = false) {
         let ex = error;
@@ -111,7 +114,10 @@ class CelastrinaError extends Error {
             return new CelastrinaError("Unhandled Exception.",code, drop);
     }
 }
-/**@type{CelastrinaError}*/
+/**
+ * CelastrinaValidationError
+ * @author Robert R Murrell
+ */
 class CelastrinaValidationError extends CelastrinaError {
     /**
      * @param {string} message
@@ -124,14 +130,14 @@ class CelastrinaValidationError extends CelastrinaError {
         super(message, code, drop, cause);
         this.tag = tag;
     }
-    /**@returns{string}*/toString(){return "[" + this.tag + "]" + super.toString();}
+    /**@return{string}*/toString(){return "[" + this.tag + "]" + super.toString();}
     /**
      * @param {string} message
      * @param {int} [code=400]
      * @param {boolean} [drop=false]
      * @param {string} [tag=""]
      * @param {Error} [cause=null]
-     * @returns {CelastrinaValidationError}
+     * @return {CelastrinaValidationError}
      */
     static newValidationError(message, tag = "", drop = false, code = 400, cause = null) {
         return new CelastrinaValidationError(message, code, drop, tag);
@@ -141,7 +147,7 @@ class CelastrinaValidationError extends CelastrinaError {
      * @param {int} [code=400]
      * @param {boolean} [drop=false]
      * @param {string} [tag=""]
-     * @returns {CelastrinaValidationError}
+     * @return {CelastrinaValidationError}
      */
     static wrapValidationError(error, tag = "", drop = false, code = 400) {
         let ex = error;
@@ -157,12 +163,20 @@ class CelastrinaValidationError extends CelastrinaError {
             return new CelastrinaValidationError("Unhandled Exception.",code, drop, tag);
     }
 }
-/**@abstract*/
+/**
+ * ConfigurationItem
+ * @author Robert R Murrell
+ * @abstract
+ */
 class ConfigurationItem {
     constructor(){}
-    /**@type{string}*/get key() {return ""}
+    /**@type{string}*/get key() {throw CelastrinaError.newError("Not Implimented", 501);}
 }
-/**@abstract*/
+/**
+ * ResourceAuthorization
+ * @author Robert R Murrell
+ * @abstract
+ */
 class ResourceAuthorization {
     /**
      * @param {string} id
@@ -173,63 +187,41 @@ class ResourceAuthorization {
         this._tokens = {};
         this._skew = skew;
     }
-    /**@returns{string}*/get id(){return this._id;}
+    /**@return{string}*/get id(){return this._id;}
     /**
      * @param {string} resource
-     * @returns {Promise<_CelastrinaToken>}
+     * @return {Promise<_CelastrinaToken>}
      * @private
      */
-    async _resolve(resource) {
-        return new Promise((resolve, reject) => {
-            reject(CelastrinaError.newError("Not Implemented."));
-        });
-    }
+    async _resolve(resource) { throw CelastrinaError.newError("Not Implemented.");}
     /**
      * @param {string} resource
-     * @returns {Promise<string>}
+     * @return {Promise<string>}
      * @private
      */
     async _refresh(resource) {
-        return new Promise((resolve, reject) => {
-            this._resolve(resource)
-                .then((token) => {
-                    if(this._skew !== 0)
-                        token.expires.add(this._skew, "s");
-                    this._tokens[resource] = token;
-                    resolve(token.token);
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
-        });
+        let token = await this._resolve(resource);
+        if(this._skew !== 0)
+            token.expires.add(this._skew, "seconds");
+        this._tokens[resource] = token;
+        return token.token;
     };
     /**
      * @param {string} resource
-     * @returns {Promise<string>}
+     * @return {Promise<string>}
      */
     async getToken(resource) {
-        return new Promise((resolve, reject) => {
-            try {
-                /** @type{_CelastrinaToken}*/let token = this._tokens[resource];
-                if(typeof token !== "object" || moment().isSameOrAfter(token.expires)) {
-                    this._refresh(resource)
-                        .then((rtoken) => {
-                            resolve(rtoken);
-                        })
-                        .catch((exception) => {
-                            reject(exception);
-                        });
-                }
-                else
-                    resolve(token.token);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        /** @type{_CelastrinaToken}*/let token = this._tokens[resource];
+        if(typeof token !== "object" || moment().isSameOrAfter(token.expires))
+            return await this._refresh(resource)
+        else
+            return token.token;
     }
 }
-/**@type{ResourceAuthorization}*/
+/**
+ * ManagedIdentityAuthorization
+ * @author Robert R Murrell
+ */
 class ManagedIdentityAuthorization extends ResourceAuthorization {
     /**@type{string}*/static SYSTEM_MANAGED_IDENTITY = "celastrinajs.core.system.managed.identity";
     /**@param {number}[skew=0]*/
@@ -238,33 +230,31 @@ class ManagedIdentityAuthorization extends ResourceAuthorization {
     }
     /**
      * @param {string} resource
-     * @returns {Promise<_CelastrinaToken>}
+     * @return {Promise<_CelastrinaToken>}
      * @private
      */
     async _resolve(resource) {
         return new Promise((resolve, reject) => {
-            try {
-                axios.get(process.env["IDENTITY_ENDPOINT"] + "?api-version=2019-08-01&resource=" + resource,
-                    {headers: {"x-identity-header": process.env["IDENTITY_HEADER"]}})
-                    .then((response) => {
-                        let token = {
-                            resource: resource,
-                            token: response.data.access_token,
-                            expires: moment(response.data.expires_on)
-                        };
-                        resolve(token);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
+            axios.get(process.env["IDENTITY_ENDPOINT"] + "?api-version=2019-08-01&resource=" + resource,
+                {headers: {"x-identity-header": process.env["IDENTITY_HEADER"]}})
+                .then((response) => {
+                    let token = {
+                        resource: resource,
+                        token: response.data.access_token,
+                        expires: moment(response.data.expires_on)
+                    };
+                    resolve(token);
+                })
+                .catch((exception) => {
+                    reject(exception);
+                });
         });
     }
 }
-/**@type{ResourceAuthorization}*/
+/**
+ * AppRegistrationAuthorization
+ * @author Robert R Murrell
+ */
 class AppRegistrationAuthorization extends ResourceAuthorization {
     /**
      * @param {StringPropertyType|string} id
@@ -273,19 +263,19 @@ class AppRegistrationAuthorization extends ResourceAuthorization {
      * @param {StringPropertyType|string} secret
      * @param {number} [skew=0]
      */
-    constructor(id, authority, tenant, secret,
-                skew = 0) {
+    constructor(id, authority, tenant,
+                secret, skew = 0) {
         super(id, skew);
         this._authority = authority;
         this._tenant = tenant;
         this._secret = secret;
     }
-    /**@returns{string}*/get authority(){return this._authority;}
-    /**@returns{string}*/get tenant(){return this._tenant;}
-    /**@returns{string}*/get secret(){return this._secret;}
+    /**@return{string}*/get authority(){return this._authority;}
+    /**@return{string}*/get tenant(){return this._tenant;}
+    /**@return{string}*/get secret(){return this._secret;}
     /**
      * @param {string} resource
-     * @returns {Promise<_CelastrinaToken>}
+     * @return {Promise<_CelastrinaToken>}
      * @private
      */
     async _resolve(resource) {
@@ -311,59 +301,41 @@ class AppRegistrationAuthorization extends ResourceAuthorization {
         });
     }
 }
-/** ResourceAuthorizationContext @author Robert R Murrell */
+/**
+ * ResourceAuthorizationContext
+ * @author Robert R Murrell
+ */
 class ResourceAuthorizationContext {
     /**@type{string}*/static CONFIG_RESOURCE_AUTH_CONTEXT = "celastrinajs.core.configuration.authorizations.context";
     constructor() {this._authorizations = {};}
     /**@type{Object}*/get authorizations() {return this._authorizations;}
     /**@param {ResourceAuthorization} authorization*/
-    addAuthorization(authorization) {
-        this._authorizations[authorization.id] = authorization;
-    }
+    addAuthorization(authorization) {this._authorizations[authorization.id] = authorization;}
     /**
      * @param {null|string} [id=ManagedIdentityAuthorization.MANAGED_IDENTITY_ID]
-     * @returns {Promise<ResourceAuthorization>}
+     * @return {Promise<ResourceAuthorization>}
      */
     async getAuthorization(id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY) {
-        return new Promise((resolve, reject) => {
-            try {
-                /**@tye{ResourceAuthorization}*/let authorization = this._authorizations[id];
-                if (typeof authorization === "undefined" || authorization == null)
-                    reject(CelastrinaError.newError("Not authorized.", 401));
-                else
-                    resolve(authorization);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        /**@tye{ResourceAuthorization}*/let authorization = this._authorizations[id];
+        if (typeof authorization === "undefined" || authorization == null)
+            throw CelastrinaError.newError("Not authorized.", 401);
+        else
+            return authorization;
     }
     /**
      * @param {string} resource
      * @param {null|string} [id = ResourceAuthorizationManager.MANAGED_IDENTITY_ID]
-     * @returns {Promise<string>}
+     * @return {Promise<string>}
      */
     async getResourceToken(resource, id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY) {
-        return new Promise((resolve, reject) => {
-            try {
-                this.getAuthorization(id)
-                    .then((authorization) => {
-                        return authorization.getToken(resource);
-                    })
-                    .then((token) => {
-                        resolve(token);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        let authorization = await this.getAuthorization(id);
+        return authorization.getToken(resource);
     }
 }
-/** @author Robert R Murrell */
+/**
+ * ResourceAuthorizationConfiguration
+ * @author Robert R Murrell
+ */
 class ResourceAuthorizationConfiguration extends ConfigurationItem {
     /**@type{string}*/static CONFIG_RESOURCE_AUTH = "celastrinajs.core.confgiuration.authorizations";
     /** */
@@ -374,14 +346,14 @@ class ResourceAuthorizationConfiguration extends ConfigurationItem {
     /**@type{string}*/get key() {return ResourceAuthorizationConfiguration.CONFIG_RESOURCE_AUTH};
     /**
      * @param {JsonPropertyType|ResourceAuthorization} authorization
-     * @returns {ResourceAuthorizationConfiguration}
+     * @return {ResourceAuthorizationConfiguration}
      */
     addAuthorization(authorization) {
         this._authorizations.unshift(authorization);
         return this;
     }
-    /**@returns{Array.<ResourceAuthorization>}*/get authorizations() {return /**@type{Array.<ResourceAuthorization>}*/this._authorizations;}
-    /**@returns{boolean}*/get hasManagedIdentity() {
+    /**@return{Array.<ResourceAuthorization>}*/get authorizations() {return /**@type{Array.<ResourceAuthorization>}*/this._authorizations;}
+    /**@return{boolean}*/get hasManagedIdentity() {
         let hasem = false;
         for(const auth of this._authorizations) {
             if(auth instanceof ManagedIdentityAuthorization) {
@@ -393,21 +365,13 @@ class ResourceAuthorizationConfiguration extends ConfigurationItem {
     }
     /**
      * @param {Configuration} config
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
     async install(config) {
-        return new Promise((resolve, reject) => {
-            try {
-                /**@type{ResourceAuthorizationContext}*/let authcontext = config.getValue(ResourceAuthorizationContext.CONFIG_RESOURCE_AUTH_CONTEXT);
-                for(/**@type{ResourceAuthorization}*/const auth of this._authorizations) {
-                    authcontext.addAuthorization(auth);
-                }
-                resolve();
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        /**@type{ResourceAuthorizationContext}*/let authcontext = config.getValue(ResourceAuthorizationContext.CONFIG_RESOURCE_AUTH_CONTEXT);
+        for(/**@type{ResourceAuthorization}*/const auth of this._authorizations) {
+            authcontext.addAuthorization(auth);
+        }
     }
 }
 /** Vault */
@@ -416,30 +380,25 @@ class Vault {
     /**
      * @param {string} token
      * @param {string} identifier
-     * @returns {Promise<string>}
+     * @return {Promise<string>}
      */
     async getSecret(token, identifier) {
         return new Promise((resolve, reject) => {
-            try {
-                axios.get(identifier + "?api-version=7.1", {headers: {"Authorization": "Bearer " + token}})
-                    .then((response) => {
-                        resolve(response.data.value);
-                    })
-                    .catch((exception) => {
-                        if(typeof exception === "object" && exception.hasOwnProperty("response")) {
-                            if(exception.response.status === 404)
-                                reject(CelastrinaError.newError("Vault secret '" + identifier + "' not found.", 404));
-                            else
-                                reject(CelastrinaError.newError("Exception getting Vault secret '" + identifier + "': " +
-                                                                 exception.response.statusText, exception.response.status));
-                        }
+            axios.get(identifier + "?api-version=7.1", {headers: {"Authorization": "Bearer " + token}})
+                .then((response) => {
+                    resolve(response.data.value);
+                })
+                .catch((exception) => {
+                    if(typeof exception === "object" && exception.hasOwnProperty("response")) {
+                        if(exception.response.status === 404)
+                            reject(CelastrinaError.newError("Vault secret '" + identifier + "' not found.", 404));
                         else
-                            reject(CelastrinaError.newError("Exception getting Vault secret '" + identifier + "'."));
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
+                            reject(CelastrinaError.newError("Exception getting Vault secret '" + identifier + "': " +
+                                                             exception.response.statusText, exception.response.status));
+                    }
+                    else
+                        reject(CelastrinaError.newError("Exception getting Vault secret '" + identifier + "'."));
+                });
         });
     }
 }
@@ -453,13 +412,9 @@ class PropertyHandler {
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
-    async initialize(azcontext, config) {
-        return new Promise((resolve, reject) => {
-            resolve();
-        });
-    }
+    async initialize(azcontext, config) {}
     /**
      * @abstract
      * @return {string}
@@ -468,35 +423,26 @@ class PropertyHandler {
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
-    async ready(azcontext, config) {
-        return new Promise((resolve, reject) => {
-            resolve();
-        });
-    }
+    async ready(azcontext, config) {}
     /**
      * @param {string} key
      * @param {*} [defaultValue = null]
-     * @returns {Promise<*>}
+     * @return {Promise<*>}
      * @abstract
      */
-    async getProperty(key, defaultValue = null) {
-        return new Promise((resolve, reject) => {reject(CelastrinaError.newError("Not Implemented."));});
-    }
+    async getProperty(key, defaultValue = null) {throw CelastrinaError.newError("Not Implemented.");}
     /**
      * @param {PropertyType} type
-     * @returns {Promise<PropertyType>}
+     * @return {Promise<PropertyType>}
      */
     async getPropertyType(type) {
-        return new Promise((resolve, reject) => {
-            if(typeof type === "undefined" || type === null)
-                resolve(null);
-            else {
-                type.load(this);
-                resolve(type);
-            }
-        });
+        if(typeof type === "undefined" || type === null) return null;
+        else {
+            await type.load(this);
+            return type;
+        }
     }
 }
 /**@type{PropertyHandler}*/
@@ -506,19 +452,12 @@ class AppSettingsPropertyHandler extends PropertyHandler {
     /**
      * @param {string} key
      * @param {*} [defaultValue=null]
-     * @returns {Promise<*>}
+     * @return {Promise<*>}
      */
     async getProperty(key, defaultValue = null) {
-        return new Promise((resolve, reject) => {
-            try {
-                let value = process.env[key];
-                if(typeof value === "undefined") value = defaultValue;
-                resolve(value);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        let value = process.env[key];
+        if(typeof value === "undefined") value = defaultValue;
+        return value;
     }
 }
 /**
@@ -553,60 +492,42 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
      * @return {Promise<void>}
      */
     async initialize(azcontext, config) {
-        return new Promise((resolve, reject) => {
-            let _identityEndpoint = process.env["IDENTITY_ENDPOINT"];
-            if(typeof _identityEndpoint === "undefined" || _identityEndpoint == null)
-                reject(CelastrinaError.newError("AppConfigPropertyHandler requires User or System Assigned Managed Identy to be enabled."));
-            else {
-                this._auth = new ManagedIdentityAuthorization();
-                resolve();
-            }
-        });
+        let _identityEndpoint = process.env["IDENTITY_ENDPOINT"];
+        if(typeof _identityEndpoint === "undefined" || _identityEndpoint == null)
+            throw CelastrinaError.newError("AppConfigPropertyHandler requires User or System Assigned Managed Identy to be enabled.");
+        else {
+            azcontext.log.verbose("[AppConfigPropertyHandler.initialize(azcontext, config)]: ManagedIdentityAuthorization created.");
+            this._auth = new ManagedIdentityAuthorization();
+        }
     }
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
     async ready(azcontext, config) {
-        return new Promise((resolve, reject) => {
-            /**@type{ResourceAuthorizationContext}*/let authctx = config[ResourceAuthorizationContext.CONFIG_RESOURCE_AUTH_CONTEXT];
-            authctx.addAuthorization(this._auth);
-        });
+        /**@type{ResourceAuthorizationContext}*/let authctx = config[ResourceAuthorizationContext.CONFIG_RESOURCE_AUTH_CONTEXT];
+        azcontext.log.verbose("[AppConfigPropertyHandler.ready(azcontext, config)]: Added ManagedIdentityAuthorization to authorization context.");
+        authctx.addAuthorization(this._auth);
     }
     /**
      * @param kvp
-     * @returns {Promise<*>}
+     * @return {Promise<*>}
      * @private
      */
     async _resolveVaultReference(kvp) {
-        return new Promise((resolve, reject) => {
-            try {
-                if(kvp.contentType === "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8" &&
-                        this._useVaultSecrets) {
-                    this._auth.getToken("https://vault.azure.net")
-                        .then((token) => {
-                            let vaultRef = JSON.parse(kvp.value);
-                            return this._vault.getSecret(token, vaultRef.uri);
-                        })
-                        .then((value) => {
-                            resolve(value);
-                        })
-                        .catch((exception) => {
-                            reject(exception);
-                        });
-                }
-                else
-                    resolve(kvp.value);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        if(kvp.contentType === "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8" &&
+                this._useVaultSecrets) {
+            let token = await this._auth.getToken("https://vault.azure.net");
+            let vaultRef = JSON.parse(kvp.value);
+            return await this._vault.getSecret(token, vaultRef.uri);
+        }
+        else
+            return kvp.value;
     }
     /**
      * @param {string} key
-     * @returns {Promise<*>}
+     * @return {Promise<*>}
      * @private
      */
     async _getAppConfigProperty(key) {
@@ -644,33 +565,18 @@ class AppConfigPropertyHandler extends AppSettingsPropertyHandler {
     /**
      * @param {string} key
      * @param {*} [defaultValue=null]
-     * @returns {Promise<*>}
+     * @return {Promise<*>}
      */
     async getProperty(key, defaultValue = null) {
-        return new Promise((resolve, reject) => {
-            try {
-                this._getAppConfigProperty(key)
-                    .then((value) => {
-                        resolve(value);
-                    })
-                    .catch((exception) => {
-                        if(exception.code === 404) {
-                            super.getProperty(key, defaultValue)
-                                .then((value) => {
-                                    resolve(value);
-                                })
-                                .catch((exception) => {
-                                    reject(exception);
-                                });
-                        }
-                        else
-                            reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        try {
+            return await this._getAppConfigProperty(key);
+        }
+        catch(exception) {
+            if(exception.code === 404)
+                return await super.getProperty(key, defaultValue);
+            else
+                throw exception;
+        }
     }
 }
 /** @author Robert R Murrell */
@@ -686,9 +592,9 @@ class CachedProperty {
         /**@type{null|moment.Moment}*/this._expires = null;
         /**@type{null|moment.Moment}*/this._lastUpdate = null;
     }
-    /**@returns{*}*/get value(){return this._value;}
-    /**@returns{null|moment.Moment}*/get expires(){return this._expires;}
-    /**@returns{null|moment.Moment}*/get lastUpdated(){return this._lastUpdate;}
+    /**@return{*}*/get value(){return this._value;}
+    /**@return{null|moment.Moment}*/get expires(){return this._expires;}
+    /**@return{null|moment.Moment}*/get lastUpdated(){return this._lastUpdate;}
     /**@param{*}value*/
     set value(value) {
         this._value = value;
@@ -696,23 +602,13 @@ class CachedProperty {
         if(this._time === 0 || value == null) this._expires = null;
         else this._expires = moment().add(this._time, this._unit);
     }
-    /**@returns{boolean}*/
+    /**@return{boolean}*/
     isExpired() {
         if(this._expires == null) return true;
         else return (moment().isSameOrAfter(this._expires));
     }
-    /**@returns{Promise<void>}*/
-    async clear() {
-        return new Promise((resolve, reject) => {
-            try {
-                this.value = null;
-                resolve();
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
+    /**@return{Promise<void>}*/
+    async clear() {this.value = null;}
 }
 /**@type{AppSettingsPropertyHandler}*/
 class CachePropertyHandler extends PropertyHandler {
@@ -730,193 +626,113 @@ class CachePropertyHandler extends PropertyHandler {
         this._defaultTime = defaultTime;
         /**@type{moment.DurationInputArg2}*/this._defaultUnit = defaultUnit;
     }
-    /**@return{string}*/getName() {return "CachePropertyHandler";}
-    /**@returns{PropertyHandler}*/get handler(){return this._handler;}
-    /**@returns{{Object}}*/get cache(){return this._cache;}
-    /**@returns{Promise<void>}*/
+    /**@return{string}*/getName() {return "CachePropertyHandler(" + this._handler.getName() + ")";}
+    /**@return{PropertyHandler}*/get handler(){return this._handler;}
+    /**@return{{Object}}*/get cache(){return this._cache;}
+    /**@return{Promise<void>}*/
     async clear() {
-        return new Promise((resolve, reject) => {
-            try {
-                /**@type{Array.<Promise<void>>}*/let promises = [];
-                for (let prop in this._cache) {
-                    let cached = this._cache[prop];
-                    if (cached instanceof CachedProperty) promises.unshift(cached.clear());
-                }
-                Promise.all(promises)
-                    .then(() => {
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        /**@type{Array.<Promise<void>>}*/let promises = [];
+        for(let prop in this._cache) {
+            let cached = this._cache[prop];
+            if(cached instanceof CachedProperty) promises.unshift(cached.clear());
+        }
+        await Promise.all(promises);
     }
     /**
      * @param azcontext
      * @param config
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
     async ready(azcontext, config) {
-        return new Promise((resolve, reject) => {
-            try {
-                this._handler.ready(azcontext, config)
-                    .then(() => {
-                        azcontext.log.verbose("[CachePropertyHandler.ready(context, config, force)]: Caching ready.");
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        await this._handler.ready(azcontext, config);
+        azcontext.log.verbose("[CachePropertyHandler.ready(context, config, force)]: Caching ready.");
     }
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
     async initialize(azcontext, config) {
-        return new Promise((resolve, reject) => {
-            try {
-                this._handler.initialize(azcontext, config)
-                    .then(() => {
-                        azcontext.log.verbose("[CachePropertyHandler.initialize(context, config)]: Caching initialized.");
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        await this._handler.initialize(azcontext, config);
+        azcontext.log.verbose("[CachePropertyHandler.initialize(context, config)]: Caching initialized.");
     }
     /**
      * @param {string} key
-     * @returns {Promise<CachedProperty>}
+     * @return {Promise<CachedProperty>}
      */
     async getCacheInfo(key) {
-        return new Promise((resolve, reject) => {
-            try {
-                let cached = this._cache[key];
-                if (!(cached instanceof CachedProperty)) resolve(null);
-                else resolve(cached);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        let cached = this._cache[key];
+        if (!(cached instanceof CachedProperty)) return null;
+        else return cached;
     }
     /**
      * @param {string} key
      * @param {*} [defaultValue=null]
-     * @returns {Promise<*>}
+     * @return {Promise<*>}
      */
     async getProperty(key, defaultValue = null) {
-        return new Promise(async (resolve, reject) => {
-            try {
-                /**@type{undefined|CachedProperty}*/
-                let cached  = this._cache[key];
-                let value;
-                if(!(cached instanceof CachedProperty)) {
-                    value = await this._handler.getProperty(key, null);
-                    if(value == null) value = defaultValue;
-                    else {
-                        cached = new CachedProperty(this._defaultTime, this._defaultUnit);
-                        cached.value = value;
-                        this._cache[key] = cached;
-                    }
-                }
-                else if(cached.isExpired()) {
-                    value = await this._handler.getProperty(key, null);
-                    cached.value = value;
-                    if(value == null) value = defaultValue;
-                }
-                else value = cached.value;
-                resolve(value);
+        /**@type{undefined|CachedProperty}*/
+        let cached  = this._cache[key];
+        let value;
+        if(!(cached instanceof CachedProperty)) {
+            value = await this._handler.getProperty(key, null);
+            if(value == null) value = defaultValue;
+            else {
+                cached = new CachedProperty(this._defaultTime, this._defaultUnit);
+                cached.value = value;
+                this._cache[key] = cached;
             }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        }
+        else if(cached.isExpired()) {
+            value = await this._handler.getProperty(key, null);
+            cached.value = value;
+            if(value == null) value = defaultValue;
+        }
+        else value = cached.value;
+        return value;
     }
 }
 /**@abstract*/
-class PropertyType {
+class PropertyType extends ConfigurationItem {
     /**
      * @param {string} key
      * @param {*} [defaultValue = null]
      */
     constructor(key, defaultValue = null) {
+        super();
         this._key = key;
         this._defaultValue = defaultValue;
     }
+    /**@type{string}*/get key() {return this._key}
     /**
-     * @returns {string}
+     * @return {string}
      * @abstract
      */
     get mime() {return "text/plain; celastrinajs.core.property.PropertyType"}
-    /**@returns{string}*/get name(){return this._key;}
-    /**@returns{*}*/get defaultValue(){return this._defaultValue;}
+    /**@return{string}*/get name(){return this._key;}
+    /**@return{*}*/get defaultValue(){return this._defaultValue;}
     /**
      * @param {PropertyHandler} handler
-     * @returns {Promise<null|Object|string|boolean|number>}
+     * @return {Promise<null|Object|string|boolean|number>}
      */
     async lookup(handler) {
-        return new Promise((resolve, reject) => {
-            try {
-                handler.getProperty(this._key, this._defaultValue)
-                    .then((value) => {
-                        resolve(value);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        return await handler.getProperty(this._key, this._defaultValue);
     }
     /**
      * @param {null|string} value
-     * @returns {Promise<null|Object|string|boolean|number>}
+     * @return {Promise<null|Object|string|boolean|number>}
      */
-    async resolve(value) {
-        return new Promise((resolve, reject) => {reject(CelastrinaError.newError("PropertyType not supported."));});
-    }
+    async resolve(value) {throw CelastrinaError.newError("PropertyType not supported.");}
     /**
      * @param {PropertyHandler} handler
-     * @returns {Promise<null|Object|string|boolean|number>}
+     * @return {Promise<null|Object|string|boolean|number>}
      */
-    load(handler) {
-        return new Promise((resolve, reject) => {
-            try {
-                this.lookup(handler)
-                    .then((local) => {
-                        return this.resolve(local);
-                    })
-                    .then((value) => {
-                        resolve(value);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+    async load(handler) {
+        let local = await this.lookup(handler);
+        return await this.resolve(local);
     }
 }
+
 /**@type{PropertyType}*/
 class JsonPropertyType extends PropertyType {
     /**
@@ -927,18 +743,11 @@ class JsonPropertyType extends PropertyType {
     /**@return{string}*/get mime() {return "application/json; celastrinajs.core.property.JsonPropertyType"}
     /**
      * @param {null|string} value
-     * @returns {Promise<null|Object>}
+     * @return {Promise<null|Object>}
      */
     async resolve(value) {
-        return new Promise((resolve, reject) => {
-            try {
-                if(value == null) resolve(null);
-                else resolve(JSON.parse(value));
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        if(value == null) return null;
+        else return JSON.parse(value);
     }
 }
 /**@type{PropertyType}*/
@@ -951,18 +760,9 @@ class StringPropertyType extends PropertyType {
     /**@return{string}*/get mime() {return "text/plain; celastrinajs.core.property.StringPropertyType"}
     /**
      * @param {string} value
-     * @returns {Promise<null|string>}
+     * @return {Promise<null|string>}
      */
-    async resolve(value) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(value);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
+    async resolve(value) {return value;}
 }
 /**@type{PropertyType}*/
 class BooleanPropertyType extends PropertyType {
@@ -972,22 +772,13 @@ class BooleanPropertyType extends PropertyType {
      * @param {null|boolean} defaultValue
      */
     constructor(name, defaultValue = null){super(name, defaultValue);}
-    /**@return{string}*/get mime() {return "text/plain; celastrinajs.core.property.BooleanPropertyType"}
+    /**@return{string}*/get mime() {return "text/plain; celastrinajs.core.property.BooleanPropertyType";}
     /**
      * @brief
      * @param {string} value
-     * @returns {Promise<null|boolean>}
+     * @return {Promise<null|boolean>}
      */
-    async resolve(value) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve((value.trim().toLowerCase() === "true"));
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
+    async resolve(value) {return (value.trim().toLowerCase() === "true");}
 }
 /**@type{PropertyType}*/
 class NumericPropertyType extends PropertyType {
@@ -999,28 +790,19 @@ class NumericPropertyType extends PropertyType {
     /**@return{string}*/get mime() {return "text/plain; celastrinajs.core.property.NumericPropertyType"}
     /**
      * @param {string} value
-     * @returns {Promise<null|number>}
+     * @return {Promise<null|number>}
      */
-    async resolve(value) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(Number(value));
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
+    async resolve(value) {return Number(value);}
 }
 /**@abstract*/
 class HandlerProperty {
     /**@type{string}*/static PROP_PROPERTY = "celastrinajs.core.property.handler";
     /**@param{null|string}[name=null]*/
     constructor(name = null){this._name = name;}
-    /**@returns{string}*/get name(){return this._name}
+    /**@return{string}*/get name(){return this._name}
     /**
      * @abstract
-     * @returns {PropertyHandler}
+     * @return {PropertyHandler}
      * @private
      */
     _createPropertyHandler(source) {throw CelastrinaError.newError("Not Implemented.");}
@@ -1032,7 +814,7 @@ class HandlerProperty {
     /**
      * @param {PropertyHandler} handler
      * @param {Object} source
-     * @returns {PropertyHandler}
+     * @return {PropertyHandler}
      * @private
      */
     _createCache(handler, source) {
@@ -1062,7 +844,7 @@ class HandlerProperty {
         else
             return handler;
     }
-    /**@returns{PropertyHandler}*/
+    /**@return{PropertyHandler}*/
     createPropertyHandler() {
         let lname = this._name;
         if(typeof lname === "undefined" || lname == null)
@@ -1082,7 +864,7 @@ class AppConfigHandlerProperty extends HandlerProperty {
     /**@return{string}*/getName() {return "AppConfigHandlerProperty";}
     /**
      * @param {{subscriptionId:string, resourceGroupName:string, configStoreName:string, label:null|undefined|string, useVault:null|undefined|boolean}} source
-     * @returns {PropertyHandler}
+     * @return {PropertyHandler}
      */
     _createPropertyHandler(source) {
         if(!source.hasOwnProperty("subscriptionId") || typeof source.subscriptionId !== "string" ||
@@ -1094,8 +876,7 @@ class AppConfigHandlerProperty extends HandlerProperty {
         if(!source.hasOwnProperty("configStoreName") || typeof source.configStoreName !== "string" ||
                 source.configStoreName.trim().length === 0)
             throw CelastrinaValidationError.newValidationError("Invalid AppConfigHandlerProperty, missing 'configStoreName'.", "configStoreName");
-        // Defaulting label and vault.
-        let _label    = "development";
+        let _label = "development";
         let _useVault = false;
         if(source.hasOwnProperty("label") && typeof source.label === "string" && source.label.trim().length > 0)
             _label = source.label;
@@ -1104,8 +885,11 @@ class AppConfigHandlerProperty extends HandlerProperty {
         return new AppConfigPropertyHandler(source.subscriptionId, source.resourceGroupName, source.configStoreName, _label, _useVault);
     }
 }
-/**@type{JsonPropertyType}*/
-class AppRegistrationAuthorizationPropertyType extends JsonPropertyType {
+/**
+ * AppRegistrationAuthorizationProperty
+ * @author Robert R Murrell
+ */
+class AppRegistrationAuthorizationProperty extends JsonPropertyType {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
@@ -1115,36 +899,24 @@ class AppRegistrationAuthorizationPropertyType extends JsonPropertyType {
         this._type = "ApplicationAuthorization";
     }
     /**
-     * @returns {string}
+     * @return {string}
      * @abstract
      */
-    get mime() {return "application/json; celastrinajs.core.property.AppRegistrationAuthorizationPropertyType"}
+    get mime() {return "application/json; celastrinajs.core.property.AppRegistrationAuthorizationProperty"}
     /**
      * @param {string} value
-     * @returns {Promise<null|Object>}
+     * @return {Promise<null|Object>}
      */
     async resolve(value) {
-        return new Promise((resolve, reject) => {
-            try {
-                super.resolve(value)
-                    .then((source) => {
-                        if(source != null) {
-                            if(!source.hasOwnProperty("_authority")) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _authority required."));
-                            else if(!source.hasOwnProperty("_tenant")) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _tenant required."));
-                            else if(!source.hasOwnProperty("_id")) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _id required."));
-                            else if(!source.hasOwnProperty("_secret")) reject(CelastrinaError.newError("Invalid ApplicationAuthorization, _secret required."));
-                            else source = new AppRegistrationAuthorization(source._authority, source._tenant, source._id, source._secret);
-                        }
-                        resolve(source);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        let source = await super.resolve(value);
+        if(source != null) {
+            if(!source.hasOwnProperty("_authority")) throw CelastrinaError.newError("Invalid ApplicationAuthorization, _authority required.");
+            if(!source.hasOwnProperty("_tenant")) throw CelastrinaError.newError("Invalid ApplicationAuthorization, _tenant required.");
+            if(!source.hasOwnProperty("_id")) throw CelastrinaError.newError("Invalid ApplicationAuthorization, _id required.");
+            if(!source.hasOwnProperty("_secret")) throw CelastrinaError.newError("Invalid ApplicationAuthorization, _secret required.");
+            source = new AppRegistrationAuthorization(source._authority, source._tenant, source._id, source._secret);
+        }
+        return source;
     }
 }
 /** PropertyLoader */
@@ -1154,24 +926,10 @@ class PropertyLoader {
      * @param {string} attribute
      * @param {PropertyType} property
      * @param {PropertyHandler} handler
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
     static async load(object, attribute, property, handler) {
-        return new Promise((resolve, reject) => {
-            try {
-                property.load(handler)
-                    .then((value) => {
-                        object[attribute] = value;
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        object[attribute] = await property.load(handler);
     }
 }
 /**@abstract*/
@@ -1180,17 +938,13 @@ class Module {
     constructor(name) {
         this._name = name;
     }
-    /**@returns{string}*/get name(){return this._name;}
+    /**@return{string}*/get name(){return this._name;}
     /**
      * @param {Configuration} config
-     * @returns{Promise<void>}
+     * @return{Promise<void>}
      * @abstract
      */
-    async install(config) {
-        return new Promise((resolve, reject) => {
-            reject(CelastrinaError.newError("Not Implemented."));
-        });
-    }
+    async install(config) {throw CelastrinaError.newError("Not Implemented.");}
 }
 /**@type{ConfigurationItem}*/
 class ModuleConfiguration extends ConfigurationItem {
@@ -1202,7 +956,7 @@ class ModuleConfiguration extends ConfigurationItem {
     /**@type{string}*/get key() {return ModuleConfiguration.CONFIG_MODULES}
     /**
      * @param {JsonPropertyType|Module} module
-     * @returns {ModuleConfiguration}
+     * @return {ModuleConfiguration}
      */
     addModule(module){
         if(!(module instanceof Module) || !(module instanceof JsonPropertyType))
@@ -1212,31 +966,18 @@ class ModuleConfiguration extends ConfigurationItem {
     }
     /**
      * @param {Configuration} config
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
     async install(config) {
-        return new Promise((resolve, reject) => {
-            try {
-                /**@type{Array.<Promise<void>>}*/let promises = [];
-                for (/**@type{Module}*/const module of this._modules) {
-                    promises.unshift(module.install(config));
-                }
-                Promise.all(promises)
-                    .then(() => {
-                        /**@type{ModuleContext}*/let modcontext = config.getValue(ModuleContext.CONFIG_MODULE_CONTEXT);
-                        for (/**@type{Module}*/const module of this._modules) {
-                            modcontext.addModule(module);
-                        }
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        /**@type{Array.<Promise<void>>}*/let promises = [];
+        for (/**@type{Module}*/const module of this._modules) {
+            promises.unshift(module.install(config));
+        }
+        await Promise.all(promises);
+        /**@type{ModuleContext}*/let modcontext = config.getValue(ModuleContext.CONFIG_MODULE_CONTEXT);
+        for(/**@type{Module}*/const module of this._modules) {
+            modcontext.addModule(module);
+        }
     }
 }
 /** ModuleContext */
@@ -1247,7 +988,7 @@ class ModuleContext {
     }
     /**
      * @param {string} name
-     * @returns {Module}
+     * @return {Module}
      */
     getModule(name) {
         let module = this._modules[name];
@@ -1274,26 +1015,17 @@ class BaseSubject {
         this._id = id;
         this._roles = roles;
     }
-    /**@returns{string}*/get id(){return this._id;}
-    /**@returns{Array.<string>}*/get roles(){return this._roles;}
+    /**@return{string}*/get id(){return this._id;}
+    /**@return{Array.<string>}*/get roles(){return this._roles;}
     /**@param{string}role*/
     addRole(role){this._roles.unshift(role);}
     /**@param{Array.<string>}roles*/
     addRoles(roles){this._roles = roles.concat(this._roles);}
     /**
      * @param {string} role
-     * @returns {Promise<boolean>}
+     * @return {Promise<boolean>}
      */
-    async isInRole(role) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(this._roles.includes(role));
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
+    async isInRole(role) {return this._roles.includes(role);}
 }
 /**@abstract*/
 class ValueMatch {
@@ -1302,17 +1034,13 @@ class ValueMatch {
      * @param {string} [type]
      */
     constructor(type = "ValueMatch"){this._type = type}
-    /** @returns {string} */get type(){return this._type;}
+    /** @return {string} */get type(){return this._type;}
     /**
      * @param {Array.<string>} assertion
      * @param {Array.<string>} values
-     * @returns {Promise<boolean>}
+     * @return {Promise<boolean>}
      */
-    async isMatch(assertion, values) {
-        return new Promise((resolve, reject) => {
-            resolve(true);
-        });
-    }
+    async isMatch(assertion, values) {throw CelastrinaError.newError("Not Implemented.")}
 }
 /**@type{ValueMatch}*/
 class MatchAny extends ValueMatch {
@@ -1321,21 +1049,14 @@ class MatchAny extends ValueMatch {
      * @brief A role in assertion can match a role in values and pass.
      * @param {Array.<string>} assertion
      * @param {Array.<string>} values
-     * @returns {Promise<boolean>}
+     * @return {Promise<boolean>}
      */
     async isMatch(assertion, values) {
-        return new Promise((resolve, reject) => {
-            try {
-                let match = false;
-                for(const role of assertion) {
-                    if((match = values.includes(role))) break;
-                }
-                resolve(match);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        let match = false;
+        for(const role of assertion) {
+            if((match = values.includes(role))) break;
+        }
+        return match;
     }
 }
 /**@type{ValueMatch}*/
@@ -1345,21 +1066,14 @@ class MatchAll extends ValueMatch {
      * @brief All roles in assertion must match all roles in values.
      * @param {Array.<string>} assertion
      * @param {Array.<string>} values
-     * @returns {Promise<boolean>}
+     * @return {Promise<boolean>}
      */
     async isMatch(assertion, values) {
-        return new Promise((resolve, reject) => {
-            try {
-                let match = false;
-                for(const role of values) {
-                    if(!(match = assertion.includes(role))) break;
-                }
-                resolve(match);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        let match = false;
+        for(const role of values) {
+            if(!(match = assertion.includes(role))) break;
+        }
+        return match;
     }
 }
 /**@type{ValueMatch}*/
@@ -1368,21 +1082,14 @@ class MatchNone extends ValueMatch {
     /**
      * @param {Array.<string>} assertion
      * @param {Array.<string>} values
-     * @returns {Promise<boolean>}
+     * @return {Promise<boolean>}
      */
     async isMatch(assertion, values) {
-        return new Promise((resolve, reject) => {
-            try {
-                let match = false;
-                for(const role of values) {
-                    if((match = assertion.includes(role))) break;
-                }
-                resolve(!match);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        let match = false;
+        for(const role of values) {
+            if((match = assertion.includes(role))) break;
+        }
+        return !match;
     }
 }
 /** FunctionRole */
@@ -1397,103 +1104,74 @@ class FunctionRole {
         this._action = action.toLowerCase();
         this._match = match;
     }
-    /**@returns{string}*/get action(){return this._action;}
-    /**@returns{Array<string>}*/get roles(){return this._roles;}
+    /**@return{string}*/get action(){return this._action;}
+    /**@return{Array<string>}*/get roles(){return this._roles;}
     /**
      * @param {string} role
-     * @returns {FunctionRole}
+     * @return {FunctionRole}
      */
     addRole(role){this._roles.unshift(role); return this;}
     /**
      * @param {string} action
      * @param {BaseContext} context
-     * @returns {Promise<boolean>}
+     * @return {Promise<boolean>}
      */
     async authorize(action, context) {
-        return new Promise((resolve, reject) => {
-            try {
-                if (action === this._action) {
-                    this._match.isMatch(context.subject.roles, this._roles)
-                        .then((inrole) => {
-                            resolve(inrole);
-                        })
-                        .catch((exception) => {
-                            reject(exception);
-                        });
-                } else resolve(false);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        if (action === this._action)
+            return await this._match.isMatch(context.subject.roles, this._roles)
+        else
+            return false;
     }
 }
-/**@type{JsonPropertyType}*/
-class FunctionRolePropertyType extends JsonPropertyType {
+
+/**
+ * FunctionRoleProperty
+ * @author Robert R Murrell
+ */
+class FunctionRoleProperty extends JsonPropertyType {
     /**
      * @param {string} name
      * @param {null|string} defaultValue
      */
     constructor(name, defaultValue = null){super(name, defaultValue);}
     /**
-     * @returns {string}
+     * @return {string}
      * @abstract
      */
-    get mime() {return "application/json; celastrinajs.core.property.FunctionRolePropertyType"}
+    get mime() {return "application/json; celastrinajs.core.property.FunctionRoleProperty"}
     /**
      * @param type
-     * @returns {Promise<ValueMatch>}
+     * @return {Promise<ValueMatch>}
      * @private
      */
     static async _getMatchType(type) {
-        return new Promise((resolve, reject) => {
-            try {
-                switch (type) {
-                    case "MatchAny": resolve(new MatchAny()); break;
-                    case "MatchAll": resolve(new MatchAll()); break;
-                    case "MatchNone": resolve(new MatchNone()); break;
-                    default: reject(CelastrinaError.newError("Invalid Match Type."));
-                }
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        switch (type) {
+            case "MatchAny": return new MatchAny();
+            case "MatchAll": return new MatchAll();
+            case "MatchNone": return new MatchNone();
+            default: throw CelastrinaError.newError("Invalid Match Type.");
+        }
+    }
+
+    static async _getFunctionRole(source) {
+        if(!source.hasOwnProperty("_roles")) throw CelastrinaError.newError("Invalid FunctionRole, _roles required.");
+        if(!Array.isArray(source._roles)) throw CelastrinaError.newError("Invalid FunctionRole, _roles must be an array.");
+        if(!source.hasOwnProperty("_action")) throw CelastrinaError.newError("Invalid FunctionRole, _action required.");
+        if(!source.hasOwnProperty("_match")) throw CelastrinaError.newError("Invalid FunctionRole, _match required.");
+        if(!source._match.hasOwnProperty("_type")) throw CelastrinaError.newError("Invalid FunctionRole._match._type, _type required.");
+        return new FunctionRole(source._action, source._roles,
+                                await FunctionRoleProperty._getMatchType(source._match._type));
     }
     /**
      * @param {string} value
-     * @returns {Promise<null|Object>}
+     * @return {Promise<null|Object>}
      */
     async resolve(value) {
-        return new Promise((resolve, reject) => {
-            try {
-                super.resolve(value)
-                    .then((source) => {
-                        if(source != null) {
-                            if(!source.hasOwnProperty("_roles")) reject(CelastrinaError.newError("Invalid FunctionRole, _roles required."));
-                            else if(!Array.isArray(source._roles)) reject(CelastrinaError.newError("Invalid FunctionRole, _roles must be an array."));
-                            else if(!source.hasOwnProperty("_action")) reject(CelastrinaError.newError("Invalid FunctionRole, _action required."));
-                            else if(!source.hasOwnProperty("_match")) reject(CelastrinaError.newError("Invalid FunctionRole, _match required."));
-                            else if(!source._match.hasOwnProperty("_type")) reject(CelastrinaError.newError("Invalid FunctionRole._match._type, _type required."));
-                            else {
-                                FunctionRolePropertyType._getMatchType(source._match._type)
-                                    .then((match) => {
-                                        resolve(new FunctionRole(source._action, source._roles, match));
-                                    })
-                                    .catch((exception) => {
-                                        reject(exception);
-                                    });
-                            }
-                        }
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        let source = await super.resolve(value)
+        if(source != null)
+            return await FunctionRoleProperty._getFunctionRole(source);
+        else
+            return source;
     }
 }
 /**
@@ -1513,23 +1191,16 @@ class FunctionRoleContext {
         this._roles[role.action] = role;
     }
     /**@param{RoleResolver}resolver*/set resolver(resolver) {this._resolver = resolver;}
-    /**@returns{RoleResolver}*/get resolver() {return this._resolver;}
+    /**@return{RoleResolver}*/get resolver() {return this._resolver;}
     /**
      * @param {string} action
-     * @returns {Promise<null|FunctionRole>}
+     * @return {Promise<null|FunctionRole>}
      */
     async getFunctionRole(action) {
-        return new Promise((resolve, reject) => {
-            try {
-                let role = this._roles[action];
-                if (typeof role === "undefined" || role == null)
-                    role = null;
-                resolve(role);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        let role = this._roles[action];
+        if (typeof role === "undefined" || role == null)
+            role = null;
+        return role;
     }
 }
 /**@type{ConfigurationItem}*/
@@ -1543,34 +1214,67 @@ class FunctionRoleConfiguration extends ConfigurationItem {
     /**@type{string}*/get key() {return FunctionRoleConfiguration.CONFIG_ROLES};
     /**
      * @param {JsonPropertyType|FunctionRole} role
-     * @returns {FunctionRoleConfiguration}
+     * @return {FunctionRoleConfiguration}
      */
     addFunctionRole(role){this._roles.unshift(role); return this;}
     /**
      * @param {JsonPropertyType|RoleResolver} resolver
-     * @returns {FunctionRoleConfiguration}
+     * @return {FunctionRoleConfiguration}
      */
     setResolver(resolver) {this._resolver = resolver; return this;}
     /**
      * @param {Configuration} config
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
     async install(config) {
-        return new Promise((resolve, reject) => {
-            try {
-                /**@type{FunctionRoleContext}*/let rolecontext = config.getValue(FunctionRoleContext.CONFIG_ROLE_CONTEXT);
-                for(/**@type{FunctionRole}*/const role of this._roles) {
-                    rolecontext.addFunctionRole(role);
-                }
-                if(this._resolver == null)
-                    this._resolver = new DefaultRoleResolver();
-                rolecontext.resolver = this._resolver;
-                resolve();
+        /**@type{FunctionRoleContext}*/let rolecontext = config.getValue(FunctionRoleContext.CONFIG_ROLE_CONTEXT);
+        for(/**@type{FunctionRole}*/const role of this._roles) {
+            rolecontext.addFunctionRole(role);
+        }
+        if(this._resolver == null)
+            this._resolver = new DefaultRoleResolver();
+        rolecontext.resolver = this._resolver;
+    }
+}
+class FunctionRoleConfigurationProperty extends JsonPropertyType {
+    /**
+     * @param {null|string} defaultValue
+     */
+    constructor(defaultValue = null){super(FunctionRoleConfiguration.CONFIG_ROLES, defaultValue);}
+    /**
+     * @param {null|string} _RoleResolver
+     * @return {Promise<RoleResolver>}
+     * @private
+     */
+    static async _getRoleResolver(_RoleResolver) {
+        switch(_RoleResolver) {
+            case null: return new DefaultRoleResolver();
+            case "DefaultRoleResolver": return new DefaultRoleResolver();
+            case "SessionRoleResolver": return new SessionRoleResolver();
+            default: throw CelastrinaError.newError("Unrecognized RoleResolver type '" + _RoleResolver + "'.");
+        }
+    }
+    /**
+     * @param value
+     * @return {Promise<null|Object>}
+     */
+    async resolve(value) {
+        let _object = await super.resolve(value);
+        let _config = new FunctionRoleConfiguration();
+        if(_object != null) {
+            if(!_object.hasOwnProperty("_roles") || !Array.isArray(_object._roles)) throw CelastrinaError.newError("Invalid FunctionRoleConfiguration, _roles is required and must be an array.");
+            if(!_object.hasOwnProperty("_resolver") || typeof _object._resolver !== "string" || _object._resolver.trim().length === 0) throw CelastrinaError.newError("Invalid FunctionRoleConfiguration, _resolver must is required.");
+            let promises = [];
+            for(let _FunctionRole of _object._roles) {
+                promises.unshift(FunctionRoleProperty._getFunctionRole(_FunctionRole));
             }
-            catch(exception) {
-                reject(exception);
+            let _roles = await Promise.all(promises);
+            for(let _FunctionRole of _roles) {
+                _config.addFunctionRole(_FunctionRole);
             }
-        });
+            _config.setResolver(await FunctionRoleConfigurationProperty._getRoleResolver(_object._resolver));
+        }
+        return _config;
     }
 }
 /**
@@ -1598,48 +1302,32 @@ class Configuration extends EventEmitter {
         this._config[ResourceAuthorizationContext.CONFIG_RESOURCE_AUTH_CONTEXT] = new ResourceAuthorizationContext();
         this._config[FunctionRoleContext.CONFIG_ROLE_CONTEXT] = new FunctionRoleContext();
     }
-    /**@returns{string}*/get name(){return this._config[Configuration.CONFIG_NAME];}
-    /**@returns{PropertyHandler}*/get properties() {return this._config[Configuration.CONFIG_HANDLER];}
-    /**@returns{object}*/get values(){return this._config;}
-    /**@returns{_AzureFunctionContext}*/get context(){return this._config[Configuration.CONFIG_CONTEXT];}
-    /**@returns{boolean}*/get loaded(){return this._loaded;}
-    /**@returns{Promise<void>}*/
+    /**@return{string}*/get name(){return this._config[Configuration.CONFIG_NAME];}
+    /**@return{PropertyHandler}*/get properties() {return this._config[Configuration.CONFIG_HANDLER];}
+    /**@return{object}*/get values(){return this._config;}
+    /**@return{_AzureFunctionContext}*/get context(){return this._config[Configuration.CONFIG_CONTEXT];}
+    /**@return{boolean}*/get loaded(){return this._loaded;}
+    /**@return{Promise<void>}*/
     async bootstrapped() {
-        return new Promise((resolve, reject) => {
-            try {
-                if(!this._loaded) {
-                    /**@type{null|ModuleConfiguration}*/let modconfig = this.getValue(ModuleConfiguration.CONFIG_MODULES);
-                    if(modconfig != null) {
-                        modconfig.install(this)
-                            .then(() => {
-                                this._loaded = true;
-                                resolve();
-                            })
-                            .catch((exception) => {
-                                reject(exception);
-                            });
-                    }
-                    else {
-                        this._loaded = true;
-                        resolve();
-                    }
-                }
-                else resolve();
+        if(!this._loaded) {
+            /**@type{null|ModuleConfiguration}*/let modconfig = this.getValue(ModuleConfiguration.CONFIG_MODULES);
+            if(modconfig != null) {
+                await modconfig.install(this);
+                this._loaded = true;
             }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+            else
+                this._loaded = true;
+        }
     }
     /**
      * @param {null|undefined|HandlerProperty|PropertyHandler} handler
-     * @returns {Configuration}
+     * @return {Configuration}
      */
     setPropertyHandler(handler){this._config[Configuration.CONFIG_HANDLER] = handler; return this;}
     /**
      * @param {string} key
      * @param {*} value
-     * @returns {Configuration}
+     * @return {Configuration}
      */
     setValue(key , value) {
         if(typeof key !== "string" || key.trim().length === 0)
@@ -1649,13 +1337,13 @@ class Configuration extends EventEmitter {
     }
     /**
      * @param {ConfigurationItem} config
-     * @returns {Configuration}
+     * @return {Configuration}
      */
     setConfigurationItem(config) {this.setValue(config.key, config); return this;};
     /**
      * @param {string} key
      * @param {*} [defaultValue=null]
-     * @returns {*}
+     * @return {*}
      */
     getValue(key, defaultValue = null) {
         let value = this._config[key];
@@ -1686,7 +1374,7 @@ class Configuration extends EventEmitter {
     }
     /**
      * @param {_AzureFunctionContext} azcontext
-     * @returns {PropertyHandler}
+     * @return {PropertyHandler}
      * @private
      */
     _getPropertyHandler(azcontext) {
@@ -1701,7 +1389,7 @@ class Configuration extends EventEmitter {
         return _handler;
     }
     /**
-     * @returns {boolean}
+     * @return {boolean}
      * @private
      */
     _isPropertyHandlerOverridden() {
@@ -1713,7 +1401,7 @@ class Configuration extends EventEmitter {
     }
     /**
      * @param {_AzureFunctionContext} azcontext
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
     async initialize(azcontext) {
         azcontext.log.info("[Configuration.initialize(azcontext)]: Initializing configuration.");
@@ -1765,13 +1453,13 @@ class Configuration extends EventEmitter {
 /**@abstract*/
 class Algorithm {
     constructor(name){this._name = name;}
-    /**@returns{string}*/get name(){return this._name;}
-    /**@returns{Promise<void>}*/
-    async initialize() {return new Promise((resolve, reject) => {resolve();});}
-    /**@returns{Promise<Cipher>}*/
-    async createCipher(){return new Promise((resolve, reject) => {reject(CelastrinaError.newError("Not supported."));});}
-    /**@returns{Promise<Decipher>}*/
-    async createDecipher(){return new Promise((resolve, reject) => {reject(CelastrinaError.newError("Not supported."));});}
+    /**@return{string}*/get name(){return this._name;}
+    /**@return{Promise<void>}*/
+    async initialize() {}
+    /**@return{Promise<Cipher>}*/
+    async createCipher(){throw CelastrinaError.newError("Not supported.");}
+    /**@return{Promise<Decipher>}*/
+    async createDecipher(){throw CelastrinaError.newError("Not supported.");}
 }
 /**@type{Algorithm}*/
 class AES256Algorithm extends Algorithm {
@@ -1784,7 +1472,7 @@ class AES256Algorithm extends Algorithm {
         this._key = key;
         this._iv  = iv;
     }
-    /**@returns{Promise<Cipher>}*/
+    /**@return{Promise<Cipher>}*/
     async createCipher() {
         return new Promise((resolve, reject) => {
             try {
@@ -1795,7 +1483,7 @@ class AES256Algorithm extends Algorithm {
             }
         });
     }
-    /**@returns{Promise<Decipher>}*/
+    /**@return{Promise<Decipher>}*/
     async createDecipher() {
         return new Promise((resolve, reject) => {
             try {
@@ -1808,7 +1496,7 @@ class AES256Algorithm extends Algorithm {
     }
     /**
      * @param {{key:string,iv:string}} options
-     * @returns{AES256Algorithm}
+     * @return{AES256Algorithm}
      */
     static create(options) {
         return new AES256Algorithm(options.key, options.iv);
@@ -1818,68 +1506,31 @@ class AES256Algorithm extends Algorithm {
 class Cryptography {
     /**@param{Algorithm}algorithm*/
     constructor(algorithm){this._algorithm = algorithm;}
-    /**@returns{Promise<void>}*/
+    /**@return{Promise<void>}*/
     async initialize() {
-        return new Promise((resolve, reject) => {
-            try {
-                this._algorithm.initialize()
-                    .then(() => {
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        return this._algorithm.initialize();
     }
     /**
      * @param {string} value
-     * @returns {Promise<string>}
+     * @return {Promise<string>}
      */
     async encrypt(value) {
-        return new Promise((resolve, reject) => {
-            try {
-                this._algorithm.createCipher()
-                    .then((cryp) => {
-                        let encrypted = cryp.update(value, "utf8", "hex");
-                        encrypted += cryp.final("hex");
-                        encrypted  = Buffer.from(encrypted, "hex").toString("base64");
-                        resolve(encrypted);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        let cryp = await this._algorithm.createCipher();
+        let encrypted = cryp.update(value, "utf8", "hex");
+        encrypted += cryp.final("hex");
+        encrypted  = Buffer.from(encrypted, "hex").toString("base64");
+        return encrypted;
     }
     /**
      * @param {string} value Base64 encded HEX string.
-     * @returns {Promise<string>}
+     * @return {Promise<string>}
      */
     async decrypt(value) {
-        return new Promise((resolve, reject) => {
-            try {
-                this._algorithm.createDecipher()
-                    .then((cryp) => {
-                        let encrypted = Buffer.from(value, "base64").toString("hex");
-                        let decrypted = cryp.update(encrypted, "hex", "utf8");
-                        decrypted += cryp.final("utf8");
-                        resolve(decrypted);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        let cryp = await this._algorithm.createDecipher();
+        let encrypted = Buffer.from(value, "base64").toString("hex");
+        let decrypted = cryp.update(encrypted, "hex", "utf8");
+        decrypted += cryp.final("utf8");
+        return decrypted;
     }
 }
 /**@type{{LEVEL_TRACE: number, LEVEL_INFO: number, LEVEL_VERBOSE: number, LEVEL_WARN: number, LEVEL_ERROR: number}}*/
@@ -1891,8 +1542,8 @@ class MonitorResponse {
         this._failed = {};
         this._passedCheck = false;
     }
-    /**@returns{Object}*/get passed(){return this._passed;}
-    /**@returns{Object}*/get failed(){return this._failed;}
+    /**@return{Object}*/get passed(){return this._passed;}
+    /**@return{Object}*/get failed(){return this._failed;}
     /**
      * @param {string} probe
      * @param {string} message
@@ -1906,7 +1557,7 @@ class MonitorResponse {
         if(!this._passedCheck) this._passedCheck = !this._passedCheck;
         this._failed[probe] = message;
     }
-    /**@returns{string}*/
+    /**@return{string}*/
     get result() {
         if(this._passedCheck) return "FAILED";
         else return "PASSED";
@@ -1917,7 +1568,7 @@ class RoleResolver {
     constructor(){}
     /**
      * @param {BaseContext} context
-     * @returns {Promise<BaseSubject>}
+     * @return {Promise<BaseSubject>}
      */
     async resolve(context) {
         return new Promise((resolve, reject) => {reject(CelastrinaError.newError("Not Implemented."));});
@@ -1928,19 +1579,12 @@ class SessionRoleResolver extends RoleResolver {
     constructor(){super();}
     /**
      * @param {BaseContext} context
-     * @returns {Promise<BaseSubject>}
+     * @return {Promise<BaseSubject>}
      */
     async resolve(context) {
-        return new Promise((resolve, reject) => {
-            try {
-                let roles = context.getSessionProperty("roles", []);
-                context.subject.addRoles(roles);
-                resolve(context.subject);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        let roles = context.getSessionProperty("roles", []);
+        context.subject.addRoles(roles);
+        return context.subject;
     }
 }
 /**@type{RoleResolver}*/
@@ -1948,18 +1592,9 @@ class DefaultRoleResolver extends RoleResolver {
     constructor(){super();}
     /**
      * @param {BaseContext} context
-     * @returns {Promise<BaseSubject>}
+     * @return {Promise<BaseSubject>}
      */
-    async resolve(context) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(context.subject);
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
+    async resolve(context) {return context.subject;}
 }
 /** BaseSentry */
 class BaseSentry {
@@ -1968,76 +1603,31 @@ class BaseSentry {
     }
     /**
      * @param {BaseContext} context
-     * @returns {Promise<BaseSubject>}
+     * @return {Promise<BaseSubject>}
      */
-    async authenticate(context) {
-        return new Promise((resolve, reject) => {resolve(new BaseSubject(
-            ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY));});
-    }
+    async authenticate(context) {return new BaseSubject(ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY);}
     /**
      * @param {BaseContext} context
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
     async authorize(context) {
-        return new Promise((resolve, reject) => {
-            try {
-                this._roleContext.getFunctionRole(context.action)
-                    .then((role) => {
-                        if(role == null)
-                            resolve();
-                        else {
-                            role.authorize(context.action, context)
-                                .then((auth) => {
-                                    if(auth)
-                                        resolve();
-                                    else
-                                        reject(CelastrinaError.newError("Forbidden.", 403));
-                                })
-                                .catch((exception) => {
-                                    context.log("Exception authorizing role '" + role + "' for action '" + context.action + "', exception: " + exception, LOG_LEVEL.LEVEL_ERROR,"BaseSentry.authorize(context)");
-                                    reject(CelastrinaError.newError("Forbidden.", 403));
-                                });
-                        }
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        let role = await this._roleContext.getFunctionRole(context.action);
+        if(role != null) {
+            let auth = await role.authorize(context.action, context);
+            if(!await role.authorize(context.action, context))
+                throw CelastrinaError.newError("Forbidden.", 403);
+        }
     }
     /**
      * @param {BaseContext} context
-     * @returns {Promise<BaseSubject>}
+     * @return {Promise<BaseSubject>}
      */
-    async setRoles(context) {
-        return new Promise((resolve, reject) => {
-            this._roleContext.resolver.resolve(context)
-                .then((subject) => {
-                    resolve(subject);
-                })
-                .catch((exception) => {
-                    reject(exception);
-                });
-        });
-    }
+    async setRoles(context) {return this._roleContext.resolver.resolve(context);}
     /**
      * @param {Configuration} config
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
-    async initialize(config) {
-        return new Promise((resolve, reject) => {
-            try {
-                this._roleContext = config.getValue(FunctionRoleContext.CONFIG_ROLE_CONTEXT);
-                resolve();
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
+    async initialize(config) {this._roleContext = config.getValue(FunctionRoleContext.CONFIG_ROLE_CONTEXT);}
 }
 class BaseContext {
     /**
@@ -2055,41 +1645,35 @@ class BaseContext {
         /**@type{string}*/this._action = "process";
         /**@type{null|BaseSentry}*/this._sentry = null;
         /**@type{object}*/this._session = {};
+        /**@type{*}*/this._result = null;
     }
     /**
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
     async initialize() {
-        return new Promise((resolve, reject) => {
-            try {
-                if(this._monitor)
-                    this._monitorResponse = new MonitorResponse();
-                /** @type {{traceparent: string}} */
-                let _traceContext = this._funccontext.traceContext;
-                if(typeof _traceContext !== "undefined")
-                    this._traceId = _traceContext.traceparent;
-                resolve();
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        if(this._monitor)
+            this._monitorResponse = new MonitorResponse();
+        /** @type {{traceparent: string}} */
+        let _traceContext = this._funccontext.traceContext;
+        if(typeof _traceContext !== "undefined")
+            this._traceId = _traceContext.traceparent;
     }
-    /**@returns{string}*/get name() {return this._config.name;}
-    /**@returns{Configuration}*/get config(){return this._config;}
-    /**@returns{boolean}*/get isMonitorInvocation(){return this._monitor;}
-    /**@returns{null|MonitorResponse}*/get monitorResponse(){return this._monitorResponse;}
-    /**@returns{string}*/get invocationId(){return this._funccontext.bindingData.invocationId;}
-    /**@returns{string}*/get requestId(){return this._requestId;}
-    /**@returns{BaseSentry}*/get sentry(){return this._sentry;}
+    /**@return{string}*/get name() {return this._config.name;}
+    /**@return{Configuration}*/get config(){return this._config;}
+    /**@return{*}*/get result() {return this._result;}
+    /**@return{boolean}*/get isMonitorInvocation(){return this._monitor;}
+    /**@return{null|MonitorResponse}*/get monitorResponse(){return this._monitorResponse;}
+    /**@return{string}*/get invocationId(){return this._funccontext.bindingData.invocationId;}
+    /**@return{string}*/get requestId(){return this._requestId;}
+    /**@return{BaseSentry}*/get sentry(){return this._sentry;}
     /**@param{BaseSentry} sentry*/set sentry(sentry){this._sentry = sentry;}
-    /**@returns{BaseSubject}*/get subject(){return this._subject;}
+    /**@return{BaseSubject}*/get subject(){return this._subject;}
     /**@param{BaseSubject} subject*/set subject(subject){this._subject = subject;}
-    /**@returns{string}*/get action(){return this._action;}
-    /**@returns{object}*/get session(){return this._session;}
-    /**@returns{PropertyHandler}*/get properties(){return this._config.properties;}
-    /**@returns{_AzureFunctionContext}*/get functionContext(){return this._funccontext;}
-    /**@returns{ModuleContext}*/get moduleContext() {return this._config.getValue(ModuleContext.CONFIG_MODULE_CONTEXT);}
+    /**@return{string}*/get action(){return this._action;}
+    /**@return{object}*/get session(){return this._session;}
+    /**@return{PropertyHandler}*/get properties(){return this._config.properties;}
+    /**@return{_AzureFunctionContext}*/get functionContext(){return this._funccontext;}
+    /**@return{ModuleContext}*/get moduleContext() {return this._config.getValue(ModuleContext.CONFIG_MODULE_CONTEXT);}
     /**@return{ResourceAuthorizationContext}*/get authorizationContext() {return this._config.getValue(ResourceAuthorizationContext.CONFIG_RESOURCE_AUTH_CONTEXT);}
     /**@return{FunctionRoleContext}*/get roleContext() {return this._config.getValue(FunctionRoleContext.CONFIG_ROLE_CONTEXT);}
     /**@param{string}name*/getBinding(name){return this._funccontext.bindings[name];}
@@ -2101,7 +1685,7 @@ class BaseContext {
     /**
      * @param {string} name
      * @param {*} [defaultValue=null]
-     * @returns {null|*}
+     * @return {null|*}
      */
     getSessionProperty(name, defaultValue = null) {
         let prop = this._session[name];
@@ -2111,18 +1695,14 @@ class BaseContext {
     /**
      * @param {string} name
      * @param {*} value
-     * @returns {BaseContext}
+     * @return {BaseContext}
      */
-    setSessionProperty(name, value) {
-        this._session[name] = value; return this;
-    }
+    setSessionProperty(name, value) {this._session[name] = value; return this;}
     /**
      * @param {object} source
-     * @returns {BaseContext}
+     * @return {BaseContext}
      */
-    loadSessionProperties(source) {
-        Object.assign(this._session, source); return this;
-    }
+    loadSessionProperties(source) {Object.assign(this._session, source); return this;}
     /**
      * @param {string} key
      * @param {null|string} [defaultValue=null]
@@ -2154,11 +1734,8 @@ class BaseContext {
     logObjectAsJSON(object, level = LOG_LEVEL.LEVEL_VERBOSE, subject = null) {
         this.log(JSON.stringify(object), level, subject);
     }
-    /**@param{null|Object}[value=null]*/
-    done(value = null) {
-        if(value === null) this._funccontext.done();
-        else this._funccontext.done(value);
-    }
+    /**@param{*}[value=null]*/
+    done(value = null) {this._result = value;}
 }
 /**@abstract*/
 class BaseFunction {
@@ -2170,227 +1747,142 @@ class BaseFunction {
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Configuration} config
-     * @returns {Promise<BaseSentry>}
+     * @return {Promise<BaseSentry>}
      * @throws {CelastrinaError}
      */
-    async createSentry(azcontext, config) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(new BaseSentry());
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
+    async createSentry(azcontext, config) {return new BaseSentry();}
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Configuration} config
-     * @returns {Promise<BaseContext>}
+     * @return {Promise<BaseContext>}
      */
-    async createContext(azcontext, config) {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(new BaseContext(azcontext, config));
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
+    async createContext(azcontext, config) {return new BaseContext(azcontext, config);}
     /**
-     * @param {_AzureFunctionContext} azcontext
-     * @returns {Promise<void>}
-     * @throws {CelastrinaError}
-     */
+      * @param {_AzureFunctionContext} azcontext
+      * @return {Promise<void>}
+      * @throws {CelastrinaError}
+      */
     async bootstrap(azcontext) {
-        return new Promise((resolve, reject) => {
-            try {
-                /**@type{null|BaseSentry}*/let _sentry = null;
-                /**@type{null|BaseContext}*/let _context = null;
-                this._configuration.initialize(azcontext)
-                    .then(() => {
-                        return this.createSentry(azcontext, this._configuration);
-                    })
-                    .then((_basesentry) => {
-                        _sentry = _basesentry;
-                        return this.createContext(azcontext, this._configuration);
-                    })
-                    .then((_basecontext) => {
-                        _context = _basecontext;
-                        return _context.initialize();
-                    })
-                    .then(() => {
-                        return _sentry.initialize(this._configuration);
-                    })
-                    .then(() => {
-                        this._context = _context;
-                        this._context.sentry = _sentry;
-                        return this._configuration.bootstrapped();
-                    })
-                    .then(() => {
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        await this._configuration.initialize(azcontext);
+        /**@type{null|BaseSentry}*/let _sentry = await this.createSentry(azcontext, this._configuration);
+        /**@type{null|BaseContext}*/let _context = await this.createContext(azcontext, this._configuration);
+        await _context.initialize();
+        await _sentry.initialize(this._configuration);
+        await this._configuration.bootstrapped();
     }
     /**
      * @param {BaseContext} context
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
-    async initialize(context) {return new Promise((resolve, reject) => {resolve();});}
+    async initialize(context) {}
     /**
      * @param {BaseContext} context
-     * @returns {Promise<BaseSubject>}
+     * @return {Promise<BaseSubject>}
      */
     async authenticate(context) {
-        return new Promise((resolve, reject) => {
-            try {
-                context.sentry.authenticate(context)
-                    .then((subject) => {
-                        context.subject = subject;
-                        return context.sentry.setRoles(context);
-                    })
-                    .then((subject) => {
-                        resolve(subject);
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        context.subject = await context.sentry.authenticate(context);
+        return await context.sentry.setRoles(context);
     }
     /**
      * @param {BaseContext} context
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
-    async authorize(context) {
-        return new Promise((resolve, reject) => {
-            try {
-                context.sentry.authorize(context)
-                    .then(() => {
-                        resolve();
-                    })
-                    .catch((exception) => {
-                        reject(exception);
-                    });
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
-    }
+    async authorize(context) {await context.sentry.authorize(context);}
     /**
      * @param {BaseContext} context
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
-    async validate(context) {return new Promise((resolve, reject) => {resolve();});}
+    async validate(context) {}
     /**
      * @param {BaseContext} context
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
     async monitor(context) {
-        return new Promise((resolve, reject) => {
-            try {
-                context.monitorResponse.addPassedDiagnostic("default", "Monitor not implemented.");
-                resolve();
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        context.monitorResponse.addPassedDiagnostic("default", "Monitor not implemented.");
     }
     /**
      * @param {BaseContext} context
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
-    async load(context) {return new Promise((resolve, reject) => {resolve();});}
+    async load(context) {}
     /**
      * @param {BaseContext} context
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
-    async process(context) {return new Promise((resolve, reject) => {resolve();});}
+    async process(context) {}
     /**
      * @param {BaseContext} context
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
-    async save(context) {return new Promise((resolve, reject) => {resolve();});}
+    async save(context) {}
     /**
      * @param {BaseContext} context
      * @param {*} exception
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
-    async exception(context, exception) {return new Promise((resolve, reject) => {resolve();});}
+    async exception(context, exception) {}
     /**
      * @param {BaseContext} context
-     * @returns {Promise<void>}
+     * @return {Promise<void>}
      */
-    async terminate(context) {return new Promise((resolve, reject) => {resolve();});}
+    async terminate(context) {}
     /**
-     * @brief Method called by the Azure Function to execute the lifecycle.
-     * @param {_AzureFunctionContext} context The context of the function.
-     */
-    execute(context) {
+      * @brief Method called by the Azure Function to execute the lifecycle.
+      * @param {_AzureFunctionContext} context The context of the function.
+      */
+    async execute(context) {
+        context.log.info("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Lifecycle started.");
         try {
-            context.log.verbose("[BaseFunction.execute(context)]: Configuring Celastrina.");
-            this.bootstrap(context)
-                .then(() => {
-                    // Execute the rest of the lifecycle.
-                    this.initialize(this._context)
-                        .then(() => {
-                            return this.authenticate(this._context);
-                        })
-                        .then((subject) => {
-                            this._context.subject = subject;
-                            return this.authorize(this._context);
-                        })
-                        .then(() => {
-                            return this.validate(this._context);
-                        })
-                        .then(() => {
-                            return this.load(this._context);
-                        })
-                        .then(() => {
-                            if(this._context.isMonitorInvocation)
-                                return this.monitor(this._context);
-                            else
-                                return this.process(this._context);
-                        })
-                        .then(() => {
-                            return this.save(this._context);
-                        })
-                        .catch((exception) => {
-                            this._context.log("Exception Lifecycle invoked from Monitor or Process lifecycle: " + exception, LOG_LEVEL.LEVEL_ERROR,"BaseFunction.execute(context)");
-                            return this.exception(this._context, exception);
-                        })
-                        .then(() => {
-                            return this.terminate(this._context);
-                        })
-                        .then(() => {
-                            this._context.done();
-                        })
-                        .catch((exception) => {
-                            this._context.log("Critical Exception Lifecycle invoked from Exception or Terminate Lifecycle: " + exception, LOG_LEVEL.LEVEL_ERROR, "BaseFunction.execute(context)");
-                            this._unhandled(context, exception);
-                        });
-                })
-                .catch((exception) => {
-                    context.log.error("[BaseFunction.execute(context)]: Critical unhandled exception during Bootstrap, done. Exception: " + exception);
-                    this._unhandled(context, exception);
-                });
+            context.log.info("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Bootstrapping Celastrina.");
+            await this.bootstrap(context);
+            context.log.verbose("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Initialization Lifecycle.");
+            await this.initialize(this._context);
+            context.log.verbose("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Authentication Lifecycle.");
+            this._context.subject = await this.authenticate(this._context);
+            context.log.verbose("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Authorization Lifecycle.");
+            await this.authorize(this._context);
+            context.log.verbose("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Validation Lifecycle.");
+            await this.validate(this._context);
+            context.log.verbose("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Load Lifecycle.");
+            await this.load(this._context);
+            if(this._context.isMonitorInvocation) {
+                context.log.info("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Monitor Lifecycle.");
+                await this.monitor(this._context);
+            }
+            else {
+                context.log.info("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Process Lifecycle.");
+                await this.process(this._context);
+            }
+            context.log.verbose("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Save Lifecycle.");
+            await this.save(this._context);
         }
         catch(exception) {
-            context.log.error("[BaseFunction.execute(context)]: Critical unhandled exception, done. Exception: " + exception);
-            this._unhandled(context, exception);
+            try {
+                context.log.warn("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Exception Lifecycle.");
+                await this.exception(this._context, exception);
+            }
+            catch(_exception) {
+                let _ex = this._unhandled(context, _exception);
+                context.log.error("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Exception thrown from Exception lifecycle: " +
+                                  _ex  + ", caused by " + exception + ". ");
+            }
+        }
+        finally {
+            try {
+                context.log.verbose("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Terminate Lifecycle.");
+                await this.terminate(this._context);
+                context.log.info("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Lifecycle completed.");
+                if(this._context.result == null)
+                    context.done();
+                else
+                    context.done(this._context.result);
+            }
+            catch(exception) {
+                let _ex = this._unhandled(context, exception);
+                context.log.error("[" + context.bindingData.invocationId + "][BaseFunction.execute(context)]: Exception thrown from Terminate lifecycle: " +
+                                _ex  + ". ");
+                _ex.drop? context.done() :  context.done(_ex);
+            }
         }
     }
     /**
@@ -2406,22 +1898,53 @@ class BaseFunction {
             else ex = CelastrinaError.newError(ex);
         }
         context.log.error("[BaseFunction._unhandled(context, exception)][exception](MESSAGE:" + ex.message + ") \r\n (STACK:" + ex.stack + ") \r\n (CAUSE:" + ex.cause + ")");
-        if(ex.drop) context.done();
-        else context.done(ex);
+        return ex;
     }
 }
 module.exports = {
-    CelastrinaError: CelastrinaError, CelastrinaValidationError: CelastrinaValidationError, ConfigurationItem: ConfigurationItem, ResourceAuthorization: ResourceAuthorization,
-    ResourceAuthorizationContext: ResourceAuthorizationContext, ResourceAuthorizationConfiguration: ResourceAuthorizationConfiguration,
-    ManagedIdentityAuthorization: ManagedIdentityAuthorization, AppRegistrationAuthorization: AppRegistrationAuthorization,
-    Vault: Vault, PropertyHandler: PropertyHandler,
+    CelastrinaError: CelastrinaError,
+    CelastrinaValidationError: CelastrinaValidationError,
+    ConfigurationItem: ConfigurationItem,
+    ResourceAuthorization: ResourceAuthorization,
+    ManagedIdentityAuthorization: ManagedIdentityAuthorization,
+    AppRegistrationAuthorization: AppRegistrationAuthorization,
+    ResourceAuthorizationContext: ResourceAuthorizationContext,
+    ResourceAuthorizationConfiguration: ResourceAuthorizationConfiguration,
+    Vault: Vault,
+    PropertyHandler: PropertyHandler,
     AppSettingsPropertyHandler: AppSettingsPropertyHandler,
-    AppConfigPropertyHandler: AppConfigPropertyHandler, CachedProperty: CachedProperty, CachePropertyHandler: CachePropertyHandler,
-    AppConfigHandlerProperty: AppConfigHandlerProperty, PropertyType: PropertyType, StringPropertyType: StringPropertyType,
-    BooleanPropertyType: BooleanPropertyType, NumericPropertyType: NumericPropertyType, JsonPropertyType: JsonPropertyType, ModuleConfiguration: ModuleConfiguration, ModuleContext: ModuleContext,
-    Module: Module, ApplicationAuthorization: AppRegistrationAuthorization, AppRegistrationAuthorizationProperty: AppRegistrationAuthorizationPropertyType,
-    ValueMatch: ValueMatch, MatchAny: MatchAny, MatchAll: MatchAll, MatchNone: MatchNone, FunctionRole: FunctionRole,
-    FunctionRoleProperty: FunctionRolePropertyType, FunctionRoleConfiguration: FunctionRoleConfiguration, FunctionRoleContext: FunctionRoleContext, Configuration: Configuration, Algorithm: Algorithm, AES256Algorithm: AES256Algorithm,
-    Cryptography: Cryptography, LOG_LEVEL: LOG_LEVEL, BaseSubject: BaseSubject, MonitorResponse: MonitorResponse, RoleResolver: RoleResolver,
-    BaseSentry: BaseSentry, BaseContext: BaseContext, BaseFunction: BaseFunction
+    AppConfigPropertyHandler: AppConfigPropertyHandler,
+    CachedProperty: CachedProperty,
+    CachePropertyHandler: CachePropertyHandler,
+    AppConfigHandlerProperty: AppConfigHandlerProperty,
+    PropertyType: PropertyType,
+    StringPropertyType: StringPropertyType,
+    BooleanPropertyType: BooleanPropertyType,
+    NumericPropertyType: NumericPropertyType,
+    JsonPropertyType: JsonPropertyType,
+    ModuleConfiguration: ModuleConfiguration,
+    ModuleContext: ModuleContext,
+    Module: Module,
+    ApplicationAuthorization: AppRegistrationAuthorization,
+    AppRegistrationAuthorizationProperty: AppRegistrationAuthorizationProperty,
+    ValueMatch: ValueMatch,
+    MatchAny: MatchAny,
+    MatchAll: MatchAll,
+    MatchNone: MatchNone,
+    FunctionRole: FunctionRole,
+    FunctionRoleProperty: FunctionRoleProperty,
+    FunctionRoleConfiguration: FunctionRoleConfiguration,
+    FunctionRoleContext: FunctionRoleContext,
+    FunctionRoleConfigurationProperty: FunctionRoleConfigurationProperty,
+    Configuration: Configuration,
+    Algorithm: Algorithm,
+    AES256Algorithm: AES256Algorithm,
+    Cryptography: Cryptography,
+    LOG_LEVEL: LOG_LEVEL,
+    BaseSubject: BaseSubject,
+    MonitorResponse: MonitorResponse,
+    RoleResolver: RoleResolver,
+    BaseSentry: BaseSentry,
+    BaseContext: BaseContext,
+    BaseFunction: BaseFunction
 };

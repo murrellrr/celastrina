@@ -325,6 +325,53 @@ class AppRegistrationAuthorization extends ResourceAuthorization {
     }
 }
 /**
+ * AuthorizationManager
+ */
+class AuthorizationManager {
+    constructor() {
+        this._authorizations = {};
+    }
+    /**@return{Object}*/get authorizations() {return this._authorizations;}
+    /**
+     * @param {ResourceAuthorization} auth
+     * @return {AuthorizationManager}
+     */
+    addAuthorization(auth) {
+        this._authorizations[auth.id] = auth;
+        return this;
+    }
+    /**
+     * @param {string} id
+     * @return {Promise<ResourceAuthorization>}
+     */
+    async getAuthorization(id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY) {
+        let _auth = this._authorizations[id];
+        if(typeof _auth === "undefined" || _auth == null)
+            throw CelastrinaError.newError("Not authorized.", 401);
+    }
+    /**
+     * @param {string} resource
+     * @param {string} id
+     * @return {Promise<string>}
+     */
+    async getToken(resource, id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY) {
+        /**@type{ResourceAuthorization}*/let _auth = await this.getAuthorization(id);
+        return await _auth.getToken(resource);
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param {Object} config
+     * @return {Promise<void>}
+     */
+    async initialize(azcontext, config) {}
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param {Object} config
+     * @return {Promise<void>}
+     */
+    async ready(azcontext, config) {}
+}
+/**
  * Vault
  * @author Robert R Murrell
  */
@@ -371,7 +418,7 @@ class PropertyManager {
      * @abstract
      * @return {string}
      */
-    getName() {return "PropertyManager";}
+    get name() {return "PropertyManager";}
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
@@ -380,11 +427,67 @@ class PropertyManager {
     async ready(azcontext, config) {}
     /**
      * @param {string} key
-     * @param {*} [defaultValue = null]
      * @return {Promise<*>}
      * @abstract
      */
-    async getProperty(key, defaultValue = null) {throw CelastrinaError.newError("Not Implemented.", 501);}
+    async _getProperty(key) {throw CelastrinaError.newError("Not Implemented.", 501);}
+    /**
+     * @param {string} key
+     * @param {*} [defaultValue = null]
+     * @param {(StringConstructor|BooleanConstructor|NumberConstructor|ObjectConstructor|DateConstructor|
+     *          RegExpConstructor|ErrorConstructor|ArrayConstructor|ArrayBufferConstructor|DataViewConstructor|
+     *          Int8ArrayConstructor|Uint8ArrayConstructor|Uint8ClampedArrayConstructor|Int16ArrayConstructor|
+     *          Uint16ArrayConstructor|Int32ArrayConstructor|Uint32ArrayConstructor|Float32ArrayConstructor|
+     *          Float64ArrayConstructor|FunctionConstructor)} [type = String]
+     * @return {Promise<*>}
+     */
+    async getProperty(key, defaultValue = null, type = String) {
+        let value = await this._getProperty(key);
+        if(typeof value === "undefined" || value == null) return defaultValue;
+        else return type(value);
+    }
+    /**
+     * @param {string} key
+     * @param {string} [defaultValue = ""]
+     * @return {Promise<string>}
+     */
+    async getStringProperty(key, defaultValue = "") {
+        return this.getProperty(key, defaultValue, String);
+    }
+    /**
+     * @param {string} key
+     * @param {boolean} [defaultValue = false]
+     * @return {Promise<boolean>}
+     */
+    async getBooleanProperty(key, defaultValue = false) {
+        return this.getProperty(key, defaultValue, Boolean);
+    }
+    /**
+     * @param {string} key
+     * @param {number} [defaultValue = Number.NaN]
+     * @return {Promise<number>}
+     */
+    async getNumberProperty(key, defaultValue = Number.NaN) {
+        return this.getProperty(key, defaultValue, Number);
+    }
+    /**
+     * @param {string} key
+     * @param {Date} [defaultValue = null]
+     * @return {Promise<Date>}
+     */
+    async getDateProperty(key, defaultValue = null) {
+        return this.getProperty(key, defaultValue, Date);
+    }
+    /**
+     * @param {string} key
+     * @param {Object} [defaultValue = null]
+     * @return {Promise<Object>}
+     */
+    async getObjectFromJSONProperty(key, defaultValue = null) {
+        let _object = await this.getStringProperty(key);
+        if(_object.trim().length >= 2) return JSON.parse(_object);
+        else return defaultValue;
+    }
 }
 /**
  * AppSettingsPropertyManager
@@ -392,16 +495,13 @@ class PropertyManager {
  */
 class AppSettingsPropertyManager extends PropertyManager {
     constructor(){super();}
-    /**@return{string}*/getName() {return "AppSettingsPropertyManager";}
+    /**@return{string}*/get name() {return "AppSettingsPropertyManager";}
     /**
      * @param {string} key
-     * @param {*} [defaultValue=null]
      * @return {Promise<*>}
      */
-    async getProperty(key, defaultValue = null) {
-        let value = process.env[key];
-        if(typeof value === "undefined") value = defaultValue;
-        return value;
+    async _getProperty(key) {
+        return process.env[key];
     }
 }
 /**
@@ -428,7 +528,7 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
         if(this._useVaultSecrets)
             /** @type{Vault} */this._vault = new Vault();
     }
-    /**@return{string}*/getName() {return "AppConfigPropertyManager";}
+    /**@return{string}*/name() {return "AppConfigPropertyManager";}
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
@@ -450,7 +550,7 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
      */
     async ready(azcontext, config) {
         azcontext.log.info("[AppConfigPropertyManager.ready(azcontext, config)]: Added ManagedIdentityAuthorization to authorization context.");
-        config[Configuration.CONFIG_AUTHORIATION][this._auth.id] = this._auth;
+        config[Configuration.CONFIG_AUTHORIATION].addAuthorization(this._auth);
     }
     /**
      * @param kvp
@@ -497,16 +597,15 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
     }
     /**
      * @param {string} key
-     * @param {*} [defaultValue=null]
      * @return {Promise<*>}
      */
-    async getProperty(key, defaultValue = null) {
+    async _getProperty(key) {
         try {
             return await this._getAppConfigProperty(key);
         }
         catch(exception) {
             if(exception.code === 404)
-                return await super.getProperty(key, defaultValue);
+                return await super._getProperty(key);
             else
                 throw exception;
         }
@@ -565,7 +664,7 @@ class CachePropertyManager extends PropertyManager {
         this._defaultTime = defaultTime;
         /**@type{moment.DurationInputArg2}*/this._defaultUnit = defaultUnit;
     }
-    /**@return{string}*/getName() {return "CachePropertyManager(" + this._manager.getName() + ")";}
+    /**@return{string}*/get name() {return "CachePropertyManager(" + this._manager.name + ")";}
     /**@return{PropertyManager}*/get manager(){return this._manager;}
     /**@return{{Object}}*/get cache(){return this._cache;}
     /**@return{Promise<void>}*/
@@ -606,26 +705,23 @@ class CachePropertyManager extends PropertyManager {
     }
     /**
      * @param {string} key
-     * @param {*} [defaultValue=null]
      * @return {Promise<*>}
      */
-    async getProperty(key, defaultValue = null) {
+    async _getProperty(key) {
         /**@type{(undefined|CachedProperty)}*/
         let cached  = this._cache[key];
         let value;
         if(!(cached instanceof CachedProperty)) {
-            value = await this._manager.getProperty(key, null);
-            if(value == null) value = defaultValue;
-            else {
+            value = await this._manager._getProperty(key);
+            if(typeof value !== "undefined") {
                 cached = new CachedProperty(this._defaultTime, this._defaultUnit);
                 cached.value = value;
                 this._cache[key] = cached;
             }
         }
         else if(cached.isExpired()) {
-            value = await this._manager.getProperty(key, null);
+            value = await this._manager._getProperty(key);
             cached.value = value;
-            if(value == null) value = defaultValue;
         }
         else value = cached.value;
         return value;
@@ -638,13 +734,13 @@ class CachePropertyManager extends PropertyManager {
  * @author Robert R Murrell
  */
 class PropertyManagerFactory extends ConfigurationItem {
-    /**@type{string}*/static CONFIG_PROPERTY = "celastrinajs.core.property.manager";
+
     /**@param{(null|string)}[name=null]*/
     constructor(name = null) {
         super();
         this._name = name;
     }
-    /**@type{string}*/get key() {return PropertyManagerFactory.CONFIG_PROPERTY};
+    /**@type{string}*/get key() {return Configuration.CONFIG_PROPERTY};
     /**@return{string}*/get name(){return this._name}
     /**
      * @abstract
@@ -741,6 +837,7 @@ class AppConfigPropertyManagerFactory extends PropertyManagerFactory {
 class Configuration {
     /**@type{string}*/static CONFIG_NAME    = "celastrinajs.core.configuration.name";
     /**@type{string}*/static CONFIG_CONTEXT = "celastrinajs.core.configuration.context";
+    /**@type{string}*/static CONFIG_PROPERTY = "celastrinajs.core.property.manager";
     /**@type{string}*/static PROP_LOCAL_DEV = "celastringjs.core.property.deployment.local.development";
     /**@type{string}*/static CONFIG_PERMISSION = "celastrinajs.core.permission";
     /**@type{string}*/static CONFIG_AUTHORIATION = "celastrinajs.core.authorization";
@@ -756,7 +853,7 @@ class Configuration {
         /**@type{Object}*/this._config = {};
         /**@type{boolean}*/this._loaded = false;
         this._config[Configuration.CONFIG_CONTEXT] = null;
-        this._config[PropertyManagerFactory.CONFIG_PROPERTY] = null;
+        this._config[Configuration.CONFIG_PROPERTY] = null;
         this._config[Configuration.CONFIG_NAME] = name;
         this._config[Configuration.CONFIG_AUTHORIATION] = {};
         this._config[Configuration.CONFIG_PERMISSION] = {};
@@ -764,13 +861,13 @@ class Configuration {
         this._config[Configuration.CONFIG_AUTHORIATION_ROLE_RESOLVER] = new BaseRoleResolver();
     }
     /**@return{string}*/get name(){return this._config[Configuration.CONFIG_NAME];}
-    /**@return{PropertyManager}*/get properties() {return this._config[PropertyManagerFactory.CONFIG_PROPERTY];}
+    /**@return{PropertyManager}*/get properties() {return this._config[Configuration.CONFIG_PROPERTY];}
     /**@return{Object}*/get values(){return this._config;}
     /**@return{_AzureFunctionContext}*/get context(){return this._config[Configuration.CONFIG_CONTEXT];}
     /**@return{boolean}*/get loaded(){return this._loaded;}
     /**@return{Array.<Permission>}*/get permissions() {return this._config[Configuration.CONFIG_PERMISSION];}
     /**@return{RoleResolver}*/get roleResolver() {return this._config[Configuration.CONFIG_AUTHORIATION_ROLE_RESOLVER];}
-    /**@return{Object}*/get authorizations() {return this._config[Configuration.CONFIG_AUTHORIATION];}
+    /**@return{AuthorizationManager}*/get authorizations() {return this._config[Configuration.CONFIG_AUTHORIATION];}
     /**@return{boolean}*/get authorizationOptimistic() {return this._config[Configuration.CONFIG_AUTHORIATION_OPTIMISTIC];};
     /**
      * @param {Permission} permission
@@ -778,13 +875,6 @@ class Configuration {
      */
     addPermission(permission) {
         this._config[Configuration.CONFIG_PERMISSION][permission.action] = permission;
-        return this;
-    }
-    /**
-     * @param {ResourceAuthorization} authorization
-     */
-    addAuthorization(authorization) {
-        this._config[Configuration.CONFIG_AUTHORIATION][authorization.id] = authorization;
         return this;
     }
     /**
@@ -842,22 +932,41 @@ class Configuration {
     }
     /**
      * @param {_AzureFunctionContext} azcontext
+     * @return {AuthorizationManager}
+     * @private
+     */
+    _getAuthorizationManager(azcontext) {
+        /**@type{(undefined|null|AuthorizationManager)}*/let _manager = this._config[Configuration.CONFIG_AUTHORIATION];
+        if(typeof _manager === "undefined" || _manager == null) {
+            azcontext.log.info("[Configuration._getAuthorizationManager(azcontext)]: No authorization manager specified, defaulting to AuthorizationManager.");
+            _manager = new AuthorizationManager();
+            this._config[Configuration.CONFIG_AUTHORIATION] = _manager;
+        }
+        return _manager;
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
      * @return {PropertyManager}
      * @private
      */
     _getPropertyManager(azcontext) {
         if(this._OverridePropertyManager()) {
-            azcontext.log.warn("[Configuration.initialize(azcontext)]: Local development override, using AppSettingsPropertyManager.");
+            azcontext.log.warn("[Configuration._getPropertyManager(azcontext)]: Local development override, using AppSettingsPropertyManager.");
             return new AppSettingsPropertyManager();
         }
         else {
-            /**@type{(undefined|null|PropertyManager)}*/let _manager = this._config[PropertyManagerFactory.CONFIG_PROPERTY];
-            if (typeof _manager === "undefined" || _manager == null) {
-                azcontext.log.info("[Configuration._getPropertyManager(context)]: No property manager specified, defaulting to AppSettingsPropertyManager.");
+            /**@type{(undefined|null|PropertyManager)}*/let _manager = this._config[Configuration.CONFIG_PROPERTY];
+            if(typeof _manager === "undefined" || _manager == null) {
+                azcontext.log.info("[Configuration._getPropertyManager(azcontext)]: No property manager specified, defaulting to AppSettingsPropertyManager.");
                 _manager = new AppSettingsPropertyManager();
+                this._config[Configuration.CONFIG_PROPERTY] = _manager;
+            }
+            else if(_manager instanceof PropertyManagerFactory) {
+                azcontext.log.info("[Configuration._getPropertyManager(azcontext)]: Found PropertyManagerFactory " + _manager.name + ", creating PropertyManager.");
+                _manager = _manager.createPropertyManager();
+                azcontext.log.info("[Configuration._getPropertyManager(azcontext)]: PropertyManager " + _manager.name + " created.");
                 this._config[PropertyManagerFactory.CONFIG_PROPERTY] = _manager;
-            } else
-                azcontext.log.info("[Configuration._getPropertyManager(context)]: Loading PropertyManagerFactory '" + _manager.getName() + "'.");
+            }
             return _manager;
         }
     }
@@ -870,22 +979,21 @@ class Configuration {
         this._config[Configuration.CONFIG_CONTEXT] = azcontext;
         if(!this._loaded) {
             azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration not loaded, loading and initializing.");
-            /**@type{PropertyManager}*/let _manager = this._getPropertyManager(azcontext);
-            if(_manager instanceof PropertyManagerFactory) {
-                azcontext.log.info("[Configuration.initialize(azcontext)]: Found PropertyManagerFactory " + _manager.getName() + ", creating PropertyManager.");
-                _manager = _manager.createPropertyManager();
-                azcontext.log.info("[Configuration.initialize(azcontext)]: PropertyManager " + _manager.getName() + " created.");
-                this._config[PropertyManagerFactory.CONFIG_PROPERTY] = _manager;
-            }
+            /**@type{PropertyManager}*/let _pm = this._getPropertyManager(azcontext);
+            /**@type{AuthorizationManager}*/let _am = this._getAuthorizationManager(azcontext);
             let _name = this._config[Configuration.CONFIG_NAME];
             if(typeof _name !== "string" || _name.trim().length === 0) {
                 azcontext.log.error("[Configuration.load(azcontext)]: Invalid Configuration. Name cannot be undefined, null, or 0 length.");
                 throw CelastrinaValidationError.newValidationError("Name cannot be undefined, null, or 0 length.", Configuration.CONFIG_NAME);
             }
-            await _manager.initialize(azcontext, this._config);
-            azcontext.log.info("[Configuration.load(azcontext)]: PropertyManager Initialization Successful.");
-            await _manager.ready(azcontext, this._config);
-            azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration initialized and loaded.");
+            await _pm.initialize(azcontext, this._config);
+            azcontext.log.info("[Configuration.load(azcontext)]: PropertyManager Initialized.");
+            await _pm.ready(azcontext, this._config);
+            azcontext.log.info("[Configuration.initialize(azcontext)]: PropertyManager Ready.");
+            await _am.initialize(azcontext, this._config);
+            azcontext.log.info("[Configuration.load(azcontext)]: AuthorizationManager Initialized.");
+            await _am.ready(azcontext, this._config);
+            azcontext.log.info("[Configuration.initialize(azcontext)]: AuthorizationManager Ready.");
         }
         else
             azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration loaded, initilization not required.");
@@ -917,6 +1025,9 @@ class VaultReferenceConfigurationProperty extends JsonConfigurationProperty {
 class ConfigurationLoader extends ConfigurationItem {
     constructor() {
         super();
+    }
+    get key() {
+        return "";
     }
 }
 
@@ -1320,19 +1431,24 @@ class BaseContext {
     /**@return{(null|MonitorResponse)}*/get monitorResponse(){return this._monitorResponse;}
     /**@return{string}*/get invocationId(){return this._azfunccontext.bindingData.invocationId;}
     /**@return{string}*/get requestId(){return this._requestId;}
+    /**@return{string}*/get traceId(){return this._traceId;}
     /**@return{BaseSentry}*/get sentry(){return this._sentry;}
     /**@param{BaseSentry} sentry*/set sentry(sentry){this._sentry = sentry;}
     /**@return{BaseSubject}*/get subject(){return this._subject;}
     /**@param{BaseSubject} subject*/set subject(subject){this._subject = subject;}
     /**@return{string}*/get action(){return this._action;}
     /**@return{PropertyManager}*/get properties(){return this._config.properties;}
+    /**@return{AuthorizationManager}*/get authorizations(){return this._config.authorizations;}
     /**@return{_AzureFunctionContext}*/get azureFunctionContext(){return this._azfunccontext;}
     /**
      * @param{string} name
      * @param {*} [defaultValue=null]
      */
-    getBinding(name, defaultValue = null){
-        return this._azfunccontext.bindings[name];
+    getBinding(name, defaultValue = null) {
+        let _value = this._azfunccontext.bindings[name];
+        if(typeof _value === "undefined" || _value == null)
+            _value = defaultValue;
+        return _value;
     }
     /**
      * @param {string} name
@@ -1340,34 +1456,6 @@ class BaseContext {
      */
     setBinding(name, value = null) {
         this._azfunccontext.bindings[name] = value;
-    }
-    /**
-     * @param {string} key
-     * @param {*} [defaultValue=null]
-     * @return {Promise<*>}
-     */
-    async getProperty(key, defaultValue = null){
-        return this._config.properties.getProperty(key, defaultValue);
-    }
-    /**
-     * @param {(null|string)} [id=ManagedIdentityAuthorization.MANAGED_IDENTITY_ID]
-     * @return {Promise<ResourceAuthorization>}
-     */
-    async getAuthorization(id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY) {
-        /**@tye{ResourceAuthorization}*/let authorization = this._config.authorizations[id];
-        if (typeof authorization === "undefined" || authorization == null)
-            throw CelastrinaError.newError("Not authorized.", 401);
-        else
-            return authorization;
-    }
-    /**
-     * @param {string} resource
-     * @param {(null|string)} [id = ResourceAuthorizationManager.MANAGED_IDENTITY_ID]
-     * @return {Promise<string>}
-     */
-    async getAuthorzationToken(resource, id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY) {
-        let authorization = await this.getAuthorization(id);
-        return authorization.getToken(resource);
     }
     /**
      * @param {string} message
@@ -1562,14 +1650,15 @@ module.exports = {
     ResourceAuthorization: ResourceAuthorization,
     ManagedIdentityAuthorization: ManagedIdentityAuthorization,
     AppRegistrationAuthorization: AppRegistrationAuthorization,
+    AuthorizationManager: AuthorizationManager,
     Vault: Vault,
     PropertyManager: PropertyManager,
     AppSettingsPropertyManager: AppSettingsPropertyManager,
     AppConfigPropertyManager: AppConfigPropertyManager,
     CachedProperty: CachedProperty,
     CachePropertyManager: CachePropertyManager,
-    PropertyManagerConfig: PropertyManagerFactory,
-    AppConfigPropertyManagerConfig: AppConfigPropertyManagerFactory,
+    PropertyManagerFactory: PropertyManagerFactory,
+    AppConfigPropertyManagerFactory: AppConfigPropertyManagerFactory,
     Configuration: Configuration,
     ConfigurationLoader: ConfigurationLoader,
     Algorithm: Algorithm,

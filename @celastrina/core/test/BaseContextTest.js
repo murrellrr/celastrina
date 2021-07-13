@@ -1,6 +1,7 @@
 const {CelastrinaError, LOG_LEVEL, Configuration, BaseSentry, BaseSubject, BaseContext} = require("../Core");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockResourceAuthorization} = require("./ResourceAuthorizationTest");
+const {MockPropertyManager} = require("./PropertyManagerTest");
 const assert = require("assert");
 
 describe("BaseContext", () => {
@@ -129,14 +130,78 @@ describe("BaseContext", () => {
         });
     });
     describe("bindings", () => {
+        let _config = new Configuration("mock_configuration");
+        let _azcontext = new MockAzureFunctionContext();
+        let _context = new BaseContext(_azcontext, _config);
         describe("#setBinding(name, value = null)", () => {
-            it("Sets binding by name using default value null.", () => {assert.fail("Not Implemented.");});
-            it("Sets binding by name.", () => {assert.fail("Not Implemented.");});
+            it("Sets binding by name using default value null.", () => {
+                _context.setBinding("mock_bindning-one");
+                assert.strictEqual(_azcontext.bindings["mock_bindning-one"], null);
+            });
+            it("Sets binding by name.", () => {
+                _context.setBinding("mock_bindning-one", 42);
+                assert.strictEqual(_azcontext.bindings["mock_bindning-one"], 42);
+            });
         });
         describe("#getBinding(name, defaultValue = null)", () => {
-            it("Gets binding set by Azure Function.", () => {assert.fail("Not Implemented.");});
-            it("Gets binding set by setter.", () => {assert.fail("Not Implemented.");});
-            it("Returns binding if null or not defined.", () => {assert.fail("Not Implemented.");});
+            it("Gets binding set by Azure Function.", () => {
+                assert.deepStrictEqual(_context.getBinding("mockBindingTwo"), {key: "mock_key", value: "mock_value"});
+            });
+            it("Gets binding set by setter.", () => {
+                assert.deepStrictEqual(_context.getBinding("mock_bindning-one"), 42);
+            });
+            it("Returns binding if null or not defined.", () => {
+                assert.deepStrictEqual(_context.getBinding("mock_bindning-two", 42), 42);
+            });
+        });
+        describe("#get properties()", () => {
+            let _config = new Configuration("mock_configuration");
+            let _azcontext = new MockAzureFunctionContext();
+            let _context = new BaseContext(_azcontext, _config);
+            let _pm = new MockPropertyManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            it("Has properties from configuration.", () => {
+                assert.strictEqual(_context.properties, _pm);
+            });
+        });
+        describe("#done(value = null)", () => {
+            let _config = new Configuration("mock_configuration");
+            let _azcontext = new MockAzureFunctionContext();
+            let _context = new BaseContext(_azcontext, _config);
+            it("Defaults done to null.", () => {
+                _context.done();
+                assert.strictEqual(_context._result, null);
+            });
+            it("Sets results to done.", () => {
+                _context.done({test: "value"});
+                assert.deepStrictEqual(_context._result, {test: "value"});
+            });
+            it("Results returns value from done.", () => {
+                _context.done({test: "value"});
+                assert.deepStrictEqual(_context.result, {test: "value"});
+            });
+        });
+        describe("#initialize()", () => {
+            describe("Initializing trace ID if present.", () => {
+                let _config = new Configuration("mock_configuration");
+                let _azcontext = new MockAzureFunctionContext();
+                let _context = new BaseContext(_azcontext, _config);
+                it("has trace ID.", () => {
+                    _context.initialize();
+                    assert.strictEqual(_context.traceId, _azcontext.traceContext.traceparent);
+                });
+            });
+            describe("Initializing in monitor mode..", () => {
+                let _config = new Configuration("mock_configuration");
+                let _azcontext = new MockAzureFunctionContext();
+                let _context = new BaseContext(_azcontext, _config);
+                it("has trace ID.", () => {
+                    _context._monitor = true;
+                    _context.initialize();
+                    assert.strictEqual(_context.isMonitorInvocation, true);
+                    assert.notStrictEqual(_context.monitorResponse, null);
+                });
+            });
         });
     });
 });

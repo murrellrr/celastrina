@@ -53,7 +53,8 @@ class MockAzureFunctionContext {
                                  },
                                  body: {},
                                  rawBody: {}
-                             }};
+                             },
+                             mockBindingTwo: {key: "mock_key", value: "mock_value"}};
         this.bindingData  = {invocationId: "mock_invocation_id"};
         this.invocationId = this.bindingData.invocationId;
         this.traceContext = {traceparent: "mock_trace_id"};
@@ -61,7 +62,7 @@ class MockAzureFunctionContext {
             message: null,
             invoked: null,
             reset() {this.message = null; this.invoked = null;},
-            error(message) {this.message = message; this.invoked = "error";},
+            error(message) {this.message = message; this.invoked = "error";console.log("++++++++[Celastrinajs]");},
             warn(message) {this.message = message; this.invoked = "warn";},
             info(message) {this.message = message; this.invoked = "info";},
             verbose(message) {this.message = message; this.invoked = "verbose";},

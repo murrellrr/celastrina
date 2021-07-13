@@ -1,6 +1,20 @@
-const {CelastrinaError, ResourceAuthorization} = require("../Core");
+const {CelastrinaError, ResourceAuthorization, AuthorizationManager} = require("../Core");
 const assert = require("assert");
 const moment = require("moment");
+
+class MockAuthorizationManager extends AuthorizationManager {
+    constructor() {
+        super();
+        this.initialized = false;
+        this.readied = false;
+    }
+    async initialize(azcontext, config) {
+        this.initialized = true;
+    }
+    async ready(azcontext, config) {
+        this.readied = true;
+    }
+}
 
 class MockResourceAuthorization extends ResourceAuthorization {
     constructor(id, skew = 0) {
@@ -18,7 +32,7 @@ class MockResourceAuthorization extends ResourceAuthorization {
             throw new Error("Token " + resource + " was undefined or null, test was silly and failed.");
         _token.expires.subtract(1, "hour");
     }
-    primeToken(resource, expired = false) {
+    mockToken(resource, expired = false) {
         let now = moment();
         (!expired)? now.add(1, "hour") : now.subtract(1, "hour");
         this._tokens[resource] = {resource: resource, token: "mock-token-" + resource, expires: now};
@@ -47,7 +61,7 @@ describe("ResourceAuthorization", () => {
     });
     describe("#getToken(resource), expired.", () => {
         let _rac = new MockResourceAuthorization("mock-authorization");
-        _rac.primeToken("mock-token-resource-two", true);
+        _rac.mockToken("mock-token-resource-two", true);
         it("should return token mock-token-resource-two.", async () => {
             assert.strictEqual(await _rac.getToken("resource-two"), "mock-token-resource-two");
             assert.strictEqual(_rac.resolved, true, "_resolve was invoked.");
@@ -55,7 +69,7 @@ describe("ResourceAuthorization", () => {
     });
     describe("#getToken(resource), from cache.", () => {
         let _rac = new MockResourceAuthorization("mock-authorization");
-        _rac.primeToken("resource-two");
+        _rac.mockToken("resource-two");
         it("should return token mock-token-resource-two.", async () => {
             assert.strictEqual(await _rac.getToken("resource-two"), "mock-token-resource-two");
             assert.strictEqual(_rac.resolved, false, "_resolve was not invoked.");
@@ -64,5 +78,6 @@ describe("ResourceAuthorization", () => {
 });
 
 module.exports = {
-    MockResourceAuthorization: MockResourceAuthorization
+    MockResourceAuthorization: MockResourceAuthorization,
+    MockAuthorizationManager: MockAuthorizationManager
 };

@@ -1,4 +1,7 @@
-const {CelastrinaError, ConfigurationItem, Configuration} = require("../Core");
+const {CelastrinaError, ConfigurationItem, Configuration, AppSettingsPropertyManager} = require("../Core");
+const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
+const {MockPropertyManager} = require("./PropertyManagerTest");
+const {MockAuthorizationManager} = require("./ResourceAuthorizationTest");
 const assert = require("assert");
 
 class MockConfigurationItem extends ConfigurationItem {
@@ -107,11 +110,37 @@ describe("Configuration", () => {
     describe("#setConfigurationItem(config)", () => {
         it("must set configiration value.", () => {
             let _config = new Configuration("test");
-            let _mock = new MockConfigurationItem()
+            let _mock = new MockConfigurationItem();
             _config.setConfigurationItem(_mock);
-            let _result = _config.getValue("mock-key")
+            let _result = _config.getValue("mock-key");
             assert.strictEqual(_result, _mock);
             assert.strictEqual(_result.value, "mock-value");
+        });
+    });
+    describe("#initialize(azcontext)", () => {
+        let _azcontext = new MockAzureFunctionContext();
+        it("Should initialize specified property and authorization managers.", async () => {
+            let _config = new Configuration("mock_configuration");
+            let _pm = new MockPropertyManager();
+            let _am = new MockAuthorizationManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.setValue(Configuration.CONFIG_AUTHORIATION, _am);
+            await _config.initialize(_azcontext);
+            assert.strictEqual(_config.properties, _pm);
+            assert.strictEqual(_config.authorizations, _am);
+            assert.strictEqual(_config.loaded, false);
+            assert.strictEqual(_pm.initialized, true, "PropertyManager Initialized.");
+            assert.strictEqual(_pm.readied, true, "PropertyManager Readied.");
+            assert.strictEqual(_am.initialized, true, "AuthorizationManager Initialized.");
+            assert.strictEqual(_am.readied, true, "AuthorizationManager Readied.");
+        });
+        it("Should initialize default property and authorization managers.", async () => {
+            let _config = new Configuration("mock_configuration");
+            await _config.initialize(_azcontext);
+            assert.notStrictEqual(_config.properties, null);
+            assert.notStrictEqual(_config.properties instanceof AppSettingsPropertyManager, true);
+            assert.notStrictEqual(_config.authorizations, null);
+            assert.strictEqual(_config.loaded, false);
         });
     });
 });

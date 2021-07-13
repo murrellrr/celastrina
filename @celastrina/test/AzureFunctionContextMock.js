@@ -38,6 +38,7 @@ class MockAzureFunctionContext {
                                 method: "GET",
                                 query: {},
                                 headers: {
+                                    "authorization": "Bearer mock_bearer_token",
                                     "connection": "Keep-Alive",
                                     "accept": "application/json",
                                     "host": "original-azure-function-url",
@@ -47,46 +48,31 @@ class MockAzureFunctionContext {
                                 rawBody: {}
                              },
                              res: {
-                                //
+                                 headers: {
+                                     "content-type": "application/json"
+                                 },
+                                 body: {},
+                                 rawBody: {}
                              }};
-        this.bindingData  = {invocationId: "TEST_INVOCATION_ID"};
+        this.bindingData  = {invocationId: "mock_invocation_id"};
         this.invocationId = this.bindingData.invocationId;
-        this.traceContext = {};
-
-        this.log = function(message) {
-            this.message = message;
-            console.log(this.message);
-        }
-        this.log.error = function(message) {
-            this.message = message;
-            console.log(this.message);
-        }
-        this.log.warn = function(message) {
-            this.message = message;
-            console.log(this.message);
-        }
-        this.log.info = function(message) {
-            this.message = message;
-            console.log(this.message);
-        }
-        this.log.trace = function(message) {
-            this.message = message;
-            console.log(this.message);
-        }
-        this.log.verbose = function(message) {
-            this.message = message;
-            console.log(this.message);
+        this.traceContext = {traceparent: "mock_trace_id"};
+        this.log = {
+            message: null,
+            invoked: null,
+            reset() {this.message = null; this.invoked = null;},
+            error(message) {this.message = message; this.invoked = "error";},
+            warn(message) {this.message = message; this.invoked = "warn";},
+            info(message) {this.message = message; this.invoked = "info";},
+            verbose(message) {this.message = message; this.invoked = "verbose";},
         }
     }
-
     get req() {
         return this.bindings.req;
     }
-
     get res() {
         return this.bindings.res;
     }
-
     done(something) {
         this.donecontents = something;
     }

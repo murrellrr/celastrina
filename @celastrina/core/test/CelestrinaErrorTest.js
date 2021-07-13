@@ -1,5 +1,5 @@
 const {CelastrinaError} = require("../Core");
-const assert = require('assert');
+const assert = require("assert");
 
 describe("CelastrinaError", () => {
     describe("#constructor(message, code, drop, cause)", () => {

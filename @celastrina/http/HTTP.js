@@ -33,7 +33,7 @@ const jwt = require("jsonwebtoken");
 const cookie = require("cookie");
 const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL, JsonPropertyType, Configuration,
        BaseSubject, BaseSentry, Algorithm, AES256Algorithm, Cryptography, RoleResolver, BaseContext,
-       BaseFunction} = require("@celastrina/core");
+       BaseFunction, MatchAll, MatchNone} = require("@celastrina/core");
 /**
  * @typedef _jwtpayload
  * @property {string} aud
@@ -591,150 +591,81 @@ class HTTPParameterFetchProperty extends JsonPropertyType {
             throw CelastrinaError.newError("Parameter Fetch Property cannot be null.");
     }
 }
-/**
- * ValueMatch
- * @abstract
- * @author Robert R Murrell
- */
-class ValueMatch {
-    /**
-     * @brief
-     * @param {string} [type]
-     */
-    constructor(type = "ValueMatch"){this._type = type}
-    /** @return {string} */get type(){return this._type;}
-    /**
-     * @param {Array.<string>} assertion
-     * @param {Array.<string>} values
-     * @return {Promise<boolean>}
-     */
-    async isMatch(assertion, values) {throw CelastrinaError.newError("Not Implemented.", 501)}
-}
-/**
- * MatchAny
- * @author Robert R Murrell
- */
-class MatchAny extends ValueMatch {
-    constructor(){super("MatchAny");}
-    /**
-     * @brief A role in assertion can match a role in values and pass.
-     * @param {Array.<string>} assertion
-     * @param {Array.<string>} values
-     * @return {Promise<boolean>}
-     */
-    async isMatch(assertion, values) {
-        let match = false;
-        for(const role of assertion) {
-            if((match = values.includes(role))) break;
-        }
-        return match;
-    }
-}
-/**
- * MatchAll
- * @author Robert R Murrell
- */
-class MatchAll extends ValueMatch {
-    constructor(){super("MatchAll");}
-    /**
-     * @brief All roles in assertion must match all roles in values.
-     * @param {Array.<string>} assertion
-     * @param {Array.<string>} values
-     * @return {Promise<boolean>}
-     */
-    async isMatch(assertion, values) {
-        let match = false;
-        for(const role of values) {
-            if(!(match = assertion.includes(role))) break;
-        }
-        return match;
-    }
-}
-/**
- * MatchNone
- * @author Robert R Murrell
- */
-class MatchNone extends ValueMatch {
-    constructor(){super("MatchNone");}
-    /**
-     * @param {Array.<string>} assertion
-     * @param {Array.<string>} values
-     * @return {Promise<boolean>}
-     */
-    async isMatch(assertion, values) {
-        let match = false;
-        for(const role of values) {
-            if((match = assertion.includes(role))) break;
-        }
-        return !match;
-    }
-}
-/**
- * HTTPPermission
- * @author Robert R Murrell
- */
-class HTTPPermission {
-    /**
-     * @param {string} method
-     * @param {Array.<string>} roles
-     * @param {ValueMatch} [match]
-     */
-    constructor(method, roles = [], match = new MatchAny()) {
-        this._roles = roles;
-        this._action = method.toLowerCase();
-        this._match = match;
-    }
-    /**@return{string}*/get action(){return this._action;}
-    /**@return{Array<string>}*/get roles(){return this._roles;}
-    /**
-     * @param {string} role
-     * @return {HTTPPermission}
-     */
-    addRole(role){this._roles.unshift(role); return this;}
-    /**
-     * @param {BaseContext} context
-     * @return {Promise<boolean>}
-     */
-    async authorize(context) {
-        if(context.action === this._action)
-            return await this._match.isMatch(context.subject.roles, this._roles)
-        else
-            return false;
-    }
-}
 
+
+/**
+ * Session
+ * @author Robert R Murrell
+ */
 class Session {
     constructor() {
+        this._values = {};
         /**@type{boolean}*/this._dirty = false;
     }
+    /**
+     * @param name
+     * @param defaultValue
+     * @return {Promise<*>}
+     */
+    async getProperty(name, defaultValue = null) {
+        let _value = this._values[name];
+        if(typeof _value === "undefined" || _value == null)
+            return defaultValue;
+        else
+            return _value;
+    }
+    /**
+     * @param {string} name
+     * @param {*} value
+     * @return {Promise<void>}
+     */
+    async setProperty(name, value) {
+        this._values[name] = value;
+        this._dirty = true;
+    }
+    /**
+     * @param {string} name
+     * @return {Promise<void>}
+     */
+    async deleteProperty(name) {delete this._values[name]; this._dirty = true;}
     /**@type{boolean}*/get doWriteSession() {return this._dirty;}
 }
-
+/**
+ * SessionManager
+ * @author Robert R Murrell
+ */
 class SessionManager {
     constructor() {}
-
+    /**
+     * @return {Promise<Session>}
+     */
     async getSession() {
         return new Session();
     }
-
+    /**
+     * @param {Session} session
+     * @return {Promise<void>}
+     */
     async setSession(session) {
         //
     }
 }
-
+/**
+ * HTTPConfiguration
+ * @author Robert R Murrell
+ */
 class HTTPConfiguration extends Configuration {
     static CONFIG_HTTP_SESSION_MANAGER = "celastrinajs.http.session";
-    static CONFIG_HTTP_PERMISSIONS = "celastrinajs.http.permissions";
     static CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS = "celastrinajs.http.permissions.anonymous";
     /**@param{string} name*/
     constructor(name) {
         super(name);
         this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER] = null;
-        this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS] = [];
+
         this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS] = true;
     }
     /**@return{SessionManager}*/get sessionManager() {return this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER];}
-    /**@return{Array.<HTTPPermission>}*/get permissions() {return this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS];}
+
     /**@return{boolean}*/get allowAnonymous() {return this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS];}
     /**
      * @param {JsonPropertyType|SessionManager} sm
@@ -745,21 +676,11 @@ class HTTPConfiguration extends Configuration {
         return this;
     }
     /**
-     * @param {(JsonPropertyType|HTTPPermission)} permission
-     * @return {HTTPConfiguration}
-     */
-    addPermission(permission) {
-        this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS].unshift(permission);
-        return this;
-    }
-    /**
      * @param {(BooleanPropertyType|boolean)} anon
      * @return {HTTPConfiguration}
      */
     setAllowAnonymous(anon) {this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS] = anon; return this;}
 }
-
-
 /**
  * JwtToken
  * @author Robert R Murrell
@@ -940,11 +861,6 @@ class HTTPContext extends BaseContext {
      * @return {BaseContext}
      */
     setSessionProperty(name, value) {this._session[name] = value; return this;}
-    /**
-     * @param {object} source
-     * @return {BaseContext}
-     */
-    loadSessionProperties(source) {Object.assign(this._session, source); return this;}
     /**
      * @return {Promise<void>}
      * @private
@@ -1135,12 +1051,30 @@ class JSONHTTPContext extends HTTPContext {
     }
 }
 /**
- * JwtSentry
+ * HTTPSentry
  * @author Robert R Murrell
  */
 class HTTPSentry extends BaseSentry {
     constructor() {
         super();
+        /**@type{Array.<Permission>}*/this._permissions = [];
+    }
+    /**
+     * @param {Configuration | HTTPConfiguration} config
+     * @return {Promise<void>}
+     */
+    async initialize(config) {
+        this._permissions = config.permissions;
+    }
+    /**
+     * @param {BaseContext} context
+     * @param {BaseSubject} subject
+     * @return {Promise<void>}
+     */
+    async authorize(context, subject) {
+        for(/**@type{Permission}*/let _permission of this._permissions) {
+            await _permission.authorize(subject);
+        }
     }
 }
 /**
@@ -1184,7 +1118,8 @@ class JwtSentry extends HTTPSentry {
         if(_token != null) {
             let _subject = await JwtSubject.decode(_token);
             if (_subject.isExpired()) {
-                context.log(_subject.id + " token expired.", LOG_LEVEL.WARN, "JwtSentry.authenticate(context)");
+                context.log(_subject.id + " token expired.", LOG_LEVEL.WARN,
+                             "JwtSentry.authenticate(context)");
                 throw CelastrinaError.newError("Not Authorized.", 401);
             }
             /**@type{Array.<Promise<boolean>>}*/let promises = [];
@@ -1195,13 +1130,14 @@ class JwtSentry extends HTTPSentry {
             /**type{Array.<boolean>}*/let results = await Promise.all(promises);
             if(!results.includes(true)) {
                 if(!_config.allowAnonymous) {
-                    context.log(_subject.id + " not verified by any issuers and anonymous access is disabled.", LOG_LEVEL.WARN,
-                                 "JwtSentry.authenticate(context)");
+                    context.log(_subject.id + " not verified by any issuers and anonymous access is disabled.",
+                                        LOG_LEVEL.WARN, "JwtSentry.authenticate(context)");
                     throw CelastrinaError.newError("Not Authorized.", 401);
                 }
                 else {
-                    context.log(_subject.id + " issuer " + _subject.issuer + " could not be verified, de-escalating privillages to 'anonymous'.", LOG_LEVEL.WARN,
-                                  "JwtSentry.authenticate(context)");
+                    context.log(_subject.id + " issuer " + _subject.issuer +
+                                        " could not be verified, de-escalating privillages to 'anonymous'.",
+                                        LOG_LEVEL.WARN, "JwtSentry.authenticate(context)");
                     return this._createAnonymousSubject(_config);
                 }
             }
@@ -1209,12 +1145,12 @@ class JwtSentry extends HTTPSentry {
                 return _subject;
         }
         else if(_config.allowAnonymous) {
-            context.log("No token found. de-escalating request to 'anonymous'.", LOG_LEVEL.WARN,
+            context.log("No token found. De-escalating request to 'anonymous'.", LOG_LEVEL.WARN,
                          "JwtSentry.authenticate(context)");
             return this._createAnonymousSubject(_config);
         }
         else {
-            context.log("No JWT token found and anonymous access is disabled.", LOG_LEVEL.WARN,
+            context.log("No token found and anonymous access is disabled.", LOG_LEVEL.WARN,
                          "JwtSentry.authenticate(context)");
             throw CelastrinaError.newError("Not Authorized.", 401);
         }
@@ -1224,7 +1160,7 @@ class JwtSentry extends HTTPSentry {
      * @return {Promise<JwtSubject>}
      * @private
      */
-    _createAnonymousSubject(_config) {
+    async _createAnonymousSubject(_config) {
         let _now = moment().utc();
         let _exp = moment(_now).utc();
         let _anon = _config.anonymousConfig;
@@ -1316,8 +1252,12 @@ class HTTPFunction extends BaseFunction {
      * @return {Promise<void>}
      */
     async terminate(context) {
-        // Re-write session
-
+        // Re-write session if we need to.
+        if(context.session.doWriteSession) {
+            /**@type{HTTPConfiguration}*/let _config = /**@type{HTTPConfiguration}*/context.config;
+            /**@type{SessionManager}*/let _sm = _config.sessionManager;
+            await _sm.setSession(context.session);
+        }
 
         // Set any cookies that have changed.
         let _cookies = context.cookies;
@@ -1347,18 +1287,24 @@ class JSONHTTPFunction extends HTTPFunction {
 module.exports = {
     Cookie: Cookie,
     Session: Session,
+    HTTPParameterFetch: HTTPParameterFetch,
     HeaderParameterFetch: HeaderParameterFetch,
     QueryParameterFetch: QueryParameterFetch,
     BodyParameterFetch: BodyParameterFetch,
     SessionManager: SessionManager,
     HTTPConfiguration: HTTPConfiguration,
+    JwtToken: JwtToken,
+    JwtHeaderToken: JwtHeaderToken,
+    JwtQueryToken: JwtQueryToken,
+    JwtBodyToken: JwtBodyToken,
+    JwtAnonymousTokenConfig: JwtAnonymousTokenConfig,
     JwtConfiguration: JwtConfiguration,
     JwtSubject: JwtSubject,
     HTTPSentry: HTTPSentry,
     JwtSentry: JwtSentry,
     HTTPContext: HTTPContext,
     JSONHTTPContext: JSONHTTPContext,
-    // HTTPParameterFetchProperty: HTTPParameterFetchProperty,
+
     // CookieSessionResolver: CookieSessionResolver,
     // CookieSessionResolverProperty: CookieSessionResolverProperty,
     // SecureCookieSessionResolver: SecureCookieSessionResolver,

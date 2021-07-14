@@ -3,30 +3,30 @@ const assert = require("assert");
 
 describe("Permission", () => {
     describe("#constructor(action, roles = [], match = new MatchAny())", () => {
-        it("Sets action, and lower case.", () => {
+        it("Sets action, and lower case", () => {
             let _permission = new Permission("MOCK_ACTION");
             assert.strictEqual(_permission.action, "mock_action");
         });
-        it("Sets roles.", () => {
+        it("Sets roles", () => {
             let _permission = new Permission("mock_action", ["role1"]);
             assert.strictEqual(_permission._roles.includes("role1"), true);
         });
-        it("Sets ValueMatch.", () => {
+        it("Sets ValueMatch", () => {
             let _permission = new Permission("mock_action", ["role1"], new MatchNone());
             assert.strictEqual(_permission._match instanceof MatchNone, true);
         });
-        it("Defaults ValueMatch to MatchAny.", () => {
+        it("Defaults ValueMatch to MatchAny", () => {
             let _permission = new Permission("mock_action");
             assert.strictEqual(_permission._match instanceof MatchAny, true);
         });
-        it("Defaults roles to empty array.", () => {
+        it("Defaults roles to empty array", () => {
             let _permission = new Permission("mock_action");
             assert.strictEqual(_permission._roles.length, 0);
         });
     });
     describe("roles", () => {
         describe("#get roles()", () => {
-            it("returns roles set in constructor.", () => {
+            it("returns roles set in constructor", () => {
                 let _roles = ["role1, role2"];
                 let _permission = new Permission("mock_action", _roles);
                 assert.deepStrictEqual(_permission.roles, _roles);
@@ -34,7 +34,7 @@ describe("Permission", () => {
         });
         describe("#addRole(role)", () => {
             let _permission = new Permission("mock_action");
-            it("returns Permission to allow role chaining.", () => {
+            it("returns Permission to allow role chaining", () => {
                 assert.strictEqual(_permission.addRole("role2") instanceof Permission, true);
             });
             it("Adds role to permission", () => {
@@ -44,7 +44,7 @@ describe("Permission", () => {
         });
         describe("#addRoles(roles)", () => {
             let _permission = new Permission("mock_action");
-            it("returns Permission to allow role chaining.", () => {
+            it("returns Permission to allow role chaining", () => {
                 assert.strictEqual(_permission.addRoles(["role1","role2"]) instanceof Permission, true);
             });
             it("Adds role to permission", () => {

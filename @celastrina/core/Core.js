@@ -336,7 +336,7 @@ class AuthorizationManager {
      * @param {ResourceAuthorization} auth
      * @return {AuthorizationManager}
      */
-    addAuthorization(auth) {
+    async addAuthorization(auth) {
         this._authorizations[auth.id] = auth;
         return this;
     }
@@ -348,6 +348,7 @@ class AuthorizationManager {
         let _auth = this._authorizations[id];
         if(typeof _auth === "undefined" || _auth == null)
             throw CelastrinaError.newError("Not authorized.", 401);
+        return _auth;
     }
     /**
      * @param {string} resource
@@ -855,7 +856,7 @@ class Configuration {
         this._config[Configuration.CONFIG_CONTEXT] = null;
         this._config[Configuration.CONFIG_PROPERTY] = null;
         this._config[Configuration.CONFIG_NAME] = name;
-        this._config[Configuration.CONFIG_AUTHORIATION] = {};
+        this._config[Configuration.CONFIG_AUTHORIATION] = null;
         this._config[Configuration.CONFIG_PERMISSION] = {};
         this._config[Configuration.CONFIG_AUTHORIATION_OPTIMISTIC] = false;
         this._config[Configuration.CONFIG_AUTHORIATION_ROLE_RESOLVER] = new BaseRoleResolver();
@@ -978,7 +979,7 @@ class Configuration {
         azcontext.log.info("[Configuration.initialize(azcontext)]: Initializing configuration.");
         this._config[Configuration.CONFIG_CONTEXT] = azcontext;
         if(!this._loaded) {
-            azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration not loaded, loading and initializing.");
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration not loaded, initializing.");
             /**@type{PropertyManager}*/let _pm = this._getPropertyManager(azcontext);
             /**@type{AuthorizationManager}*/let _am = this._getAuthorizationManager(azcontext);
             let _name = this._config[Configuration.CONFIG_NAME];
@@ -994,6 +995,7 @@ class Configuration {
             azcontext.log.info("[Configuration.load(azcontext)]: AuthorizationManager Initialized.");
             await _am.ready(azcontext, this._config);
             azcontext.log.info("[Configuration.initialize(azcontext)]: AuthorizationManager Ready.");
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Initialization successful.");
         }
         else
             azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration loaded, initilization not required.");
@@ -1354,8 +1356,15 @@ class BaseSentry {
      * @param {BaseContext} context
      * @return {Promise<BaseSubject>}
      */
+    async createSubject(context) {
+        return new BaseSubject(context.requestId);
+    }
+    /**
+     * @param {BaseContext} context
+     * @return {Promise<BaseSubject>}
+     */
     async authenticate(context) {
-        let _subject = new BaseSubject(context.requestId);
+        let _subject = await this.createSubject(context)
         _subject.addRoles(await this._roleResolver.getSubjectRoles(context, _subject));
         return _subject;
     }
@@ -1367,17 +1376,17 @@ class BaseSentry {
     async authorize(context, subject) {
         /**@type{Permission}*/let _permission = this._permissions[context.action];
         if(typeof _permission === "undefined" || _permission == null) {
-            if(this._optimistic) {
+            if(!this._optimistic) {
                 context.log("No permission found for action '" + context.action +
                                     "' and authorization was set to pessimistic, subject '" + subject.id + "' forbidden.",
-                                    LOG_LEVEL.WARN, "BaseSentry.authorize(context, subject)");
+                                    LOG_LEVEL.THREAT, "BaseSentry.authorize(context, subject)");
                 throw CelastrinaError.newError("Forbidden.", 403);
             }
         }
         else {
             if(!(await _permission.authorize(subject))) {
-                context.log(subject.id + "' not enrolled in permission '" + context.action + "', forbidden.",
-                                    LOG_LEVEL.WARN, "BaseSentry.authorize(context, subject)");
+                context.log(subject.id + "' does not satisfy any permission for action '" + context.action + "', forbidden.",
+                                    LOG_LEVEL.THREAT, "BaseSentry.authorize(context, subject)");
                 throw CelastrinaError.newError("Forbidden.", 403);
             }
         }
@@ -1495,9 +1504,11 @@ class BaseContext {
 class BaseFunction {
     /**@param{Configuration}configuration*/
     constructor(configuration) {
-        this._configuration = configuration;
+        /**@type{Configuration}*/this._configuration = configuration;
         /**@type{BaseContext}*/this._context = null;
     }
+    /**@return{BaseContext}*/get context() {return this._context;}
+    /**@return{Configuration}*/get configuration() {return this._configuration;}
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Configuration} config

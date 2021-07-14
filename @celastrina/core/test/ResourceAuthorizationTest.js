@@ -48,13 +48,13 @@ class MockResourceAuthorization extends ResourceAuthorization {
 describe("ResourceAuthorization", () => {
     describe("#constructor(id, skew = 0)", () => {
         let _rac = new MockResourceAuthorization("mock-authorization");
-        it("should return ID.", () => {
+        it("should return ID", () => {
             assert.strictEqual(_rac.id, "mock-authorization");
         });
     });
     describe("#getToken(resource)", () => {
         let _rac = new MockResourceAuthorization("mock-authorization");
-        it("should return token mock-token-resource-one.", async () => {
+        it("should return token mock-token-resource-one", async () => {
             assert.strictEqual(await _rac.getToken("resource-one"), "mock-token-resource-one");
             assert.strictEqual(_rac.resolved, true, "_resolve was invoked.");
         });
@@ -62,17 +62,41 @@ describe("ResourceAuthorization", () => {
     describe("#getToken(resource), expired.", () => {
         let _rac = new MockResourceAuthorization("mock-authorization");
         _rac.mockToken("mock-token-resource-two", true);
-        it("should return token mock-token-resource-two.", async () => {
+        it("should return token mock-token-resource-two", async () => {
             assert.strictEqual(await _rac.getToken("resource-two"), "mock-token-resource-two");
             assert.strictEqual(_rac.resolved, true, "_resolve was invoked.");
         });
     });
-    describe("#getToken(resource), from cache.", () => {
+    describe("#getToken(resource), from cache", () => {
         let _rac = new MockResourceAuthorization("mock-authorization");
         _rac.mockToken("resource-two");
-        it("should return token mock-token-resource-two.", async () => {
+        it("should return token mock-token-resource-two", async () => {
             assert.strictEqual(await _rac.getToken("resource-two"), "mock-token-resource-two");
             assert.strictEqual(_rac.resolved, false, "_resolve was not invoked.");
+        });
+    });
+});
+describe("AuthorizationManager", () => {
+    describe("#addAuthorization(auth)", () => {
+        let _am = new AuthorizationManager();
+        it("Should set and return itself for chaining", async () => {
+            let _auth = new MockResourceAuthorization("mock_authorization");
+            let result = await _am.addAuthorization(_auth);
+            assert.strictEqual(result, _am, "Result instance of AuthorizationManager.");
+            assert.strictEqual(_am._authorizations[_auth.id], _auth, "Added auth.");
+        });
+    });
+    describe("#getAuthorization(id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY)", () => {
+        let _am = new AuthorizationManager();
+        it("Should get an added authorization", async () => {
+            let _auth = new MockResourceAuthorization("mock_authorization");
+            await _am.addAuthorization(_auth);
+            let _newauth = await _am.getAuthorization(_auth.id);
+            assert.strictEqual(_newauth, _auth, "Response passed in ResourceAuthorization.");
+        });
+        it("Should reject with 401 on not found", () => {
+            let _err = new CelastrinaError("Not Authorized.", 401);
+            assert.rejects(_am.getAuthorization("does_not_exist"), _err, "Expected exception..");
         });
     });
 });

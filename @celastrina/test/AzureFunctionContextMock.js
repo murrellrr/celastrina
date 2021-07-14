@@ -32,6 +32,7 @@
 
 class MockAzureFunctionContext {
     constructor() {
+        this.doneInvoked = false;
         this.donecontents = null;
         this.bindings     = {req: {
                                 originalUrl: "http://original-azure-function-url",
@@ -62,10 +63,10 @@ class MockAzureFunctionContext {
             message: null,
             invoked: null,
             reset() {this.message = null; this.invoked = null;},
-            error(message) {this.message = message; this.invoked = "error";console.log("++++++++[Celastrinajs]");},
-            warn(message) {this.message = message; this.invoked = "warn";},
-            info(message) {this.message = message; this.invoked = "info";},
-            verbose(message) {this.message = message; this.invoked = "verbose";},
+            error(message) {this.message = message; this.invoked = "error";console.log("+++++[celastrinajs.mocha.azcontext.mock.logging]" + message);},
+            warn(message) {this.message = message; this.invoked = "warn";console.log("+++++[celastrinajs.mocha.azcontext.mock.logging]" + message);},
+            info(message) {this.message = message; this.invoked = "info";console.log("+++++[celastrinajs.mocha.azcontext.mock.logging]" + message);},
+            verbose(message) {this.message = message; this.invoked = "verbose";console.log("+++++[celastrinajs.mocha.azcontext.mock.logging]" + message);},
         }
     }
     get req() {
@@ -75,6 +76,7 @@ class MockAzureFunctionContext {
         return this.bindings.res;
     }
     done(something) {
+        this.doneInvoked = true;
         this.donecontents = something;
     }
 }

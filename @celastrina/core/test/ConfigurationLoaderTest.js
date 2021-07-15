@@ -1,8 +1,8 @@
 const {CelastrinaError, LOG_LEVEL, ContentLoader, ConfigurationLoader} = require("../Core");
+const {MockPropertyManager} = require("./PropertyManagerTest");
+const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const assert = require("assert");
 const fs = require("fs");
-
-
 
 describe("ConfigurationLoader", () => {
     describe("#constructor(property)", () => {
@@ -33,7 +33,14 @@ describe("ConfigurationLoader", () => {
         });
     });
     describe("#load(pm, config)", () => {
-        let _co = JSON.parse(fs.readFileSync("./test/configuration.json", "utf8"));
-
+        let _loader = new ConfigurationLoader("mock_property");
+        let _pm = new MockPropertyManager();
+        _pm.mockProperty("mock_property", fs.readFileSync("./test/configuration.json", "utf8"));
+        let _config = {};
+        let _azcontext = new MockAzureFunctionContext();
+        it("Loads config file to config object", async () => {
+            let _err = new CelastrinaError("[ConfigurationLoader]: Invalid property 'mock_property'.", 400);
+            await assert.doesNotReject(_loader.load(_pm, _azcontext, _config));
+        });
     });
 });

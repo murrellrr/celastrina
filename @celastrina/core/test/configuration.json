@@ -2,7 +2,7 @@
   "properties": [
 
   ],
-  "configuration": [
+  "configurations": [
     {
       "_content": {
         "type": "application/com.celastrinajs.core+json;utf-8",
@@ -19,29 +19,6 @@
       "_content": {
         "type": "application/com.celastrinajs.http+json;utf-8",
         "version": "1.0.0"
-      },
-      "authentication": {
-        "anonymous": true,
-        "jwt": {
-          "issuers": [],
-          "token": {
-            "header": "authorization",
-            "scheme": "Bearer ",
-            "remove": true
-          }
-        }
-      },
-      "session": {
-        "type": {
-          "cookie": {
-            "name": "mock_cookie_name",
-            "secure": true,
-            "domain": "celastrinajs.com",
-            "path": "/",
-            "httpOnly": false,
-            "sameSite": "strict"
-          }
-        }
       }
     }
   ]

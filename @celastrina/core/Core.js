@@ -434,60 +434,83 @@ class PropertyManager {
     async _getProperty(key) {throw CelastrinaError.newError("Not Implemented.", 501);}
     /**
      * @param {string} key
+     * @param {null|string} [defaultValue = null]
+     * @return {Promise<string>}
+     */
+    async getProperty(key, defaultValue = null) {
+        let value = await this._getProperty(key);
+        if(typeof value === "undefined" || value == null) return defaultValue;
+        else return value;
+    }
+    /**
+     * @param {string} key
      * @param {*} [defaultValue = null]
-     * @param {(StringConstructor|BooleanConstructor|NumberConstructor|ObjectConstructor|DateConstructor|
+     * @param {(null|StringConstructor|BooleanConstructor|NumberConstructor|ObjectConstructor|DateConstructor|
      *          RegExpConstructor|ErrorConstructor|ArrayConstructor|ArrayBufferConstructor|DataViewConstructor|
      *          Int8ArrayConstructor|Uint8ArrayConstructor|Uint8ClampedArrayConstructor|Int16ArrayConstructor|
      *          Uint16ArrayConstructor|Int32ArrayConstructor|Uint32ArrayConstructor|Float32ArrayConstructor|
-     *          Float64ArrayConstructor|FunctionConstructor)} [type = String]
+     *          Float64ArrayConstructor|FunctionConstructor|function(...*))} [type = String]
      * @return {Promise<*>}
      */
-    async getProperty(key, defaultValue = null, type = String) {
-        let value = await this._getProperty(key);
-        if(typeof value === "undefined" || value == null) return defaultValue;
-        else return type(value);
+    async _getConvertProperty(key, defaultValue = null, type = null) {
+        let _value = await this.getProperty(key);
+        if(_value == null) return defaultValue;
+        if(type == null) return _value;
+        return type(_value);
     }
     /**
      * @param {string} key
-     * @param {string} [defaultValue = ""]
-     * @return {Promise<string>}
+     * @param {null|string|RegExp} [defaultValue = false]
+     * @return {Promise<null|RegExp>}
      */
-    async getStringProperty(key, defaultValue = "") {
-        return this.getProperty(key, defaultValue, String);
+    async getRegExp(key, defaultValue = /.*/g) {
+        return this._getConvertProperty(key, defaultValue, RegExp);
     }
     /**
      * @param {string} key
-     * @param {boolean} [defaultValue = false]
-     * @return {Promise<boolean>}
+     * @param {null|boolean} [defaultValue = false]
+     * @return {Promise<null|boolean>}
      */
-    async getBooleanProperty(key, defaultValue = false) {
-        return this.getProperty(key, defaultValue, Boolean);
+    async getBoolean(key, defaultValue = false) {
+        return this._getConvertProperty(key, defaultValue, Boolean);
     }
     /**
      * @param {string} key
-     * @param {number} [defaultValue = Number.NaN]
-     * @return {Promise<number>}
+     * @param {null|number} [defaultValue = Number.NaN]
+     * @return {Promise<null|number>}
      */
-    async getNumberProperty(key, defaultValue = Number.NaN) {
-        return this.getProperty(key, defaultValue, Number);
+    async getNumber(key, defaultValue = Number.NaN) {
+        return this._getConvertProperty(key, defaultValue, Number);
     }
     /**
      * @param {string} key
-     * @param {Date} [defaultValue = null]
-     * @return {Promise<Date>}
+     * @param {null|Date} [defaultValue = new Date()]
+     * @return {Promise<null|Date>}
      */
-    async getDateProperty(key, defaultValue = null) {
-        return this.getProperty(key, defaultValue, Date);
+    async getDate(key, defaultValue = new Date()) {
+        return this._getConvertProperty(key, defaultValue, PropertyManager._createDateFromString);
     }
     /**
      * @param {string} key
      * @param {Object} [defaultValue = null]
+     * @param {function(*)} [construct]
      * @return {Promise<Object>}
      */
-    async getObjectFromJSONProperty(key, defaultValue = null) {
-        let _object = await this.getStringProperty(key);
-        if(_object.trim().length >= 2) return JSON.parse(_object);
-        else return defaultValue;
+    async getObject(key, defaultValue = null, construct = null) {
+        let _object = await this._getConvertProperty(key, defaultValue, JSON.parse);
+        if(_object != null && construct != null) {
+            if(Array.isArray(construct)) _object = construct[0](_object);
+            else _object = construct(_object);
+        }
+        return _object;
+    }
+    /**
+     * @param {string} dateTimeString
+     * @private
+     * @return {Date}
+     */
+    static _createDateFromString(dateTimeString) {
+        return new Date(dateTimeString);
     }
 }
 /**
@@ -618,19 +641,20 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
  */
 class CachedProperty {
     /**
+     * @param {*} value
      * @param {number} [time=300]
      * @param {moment.DurationInputArg2} [unit="s"]
      */
-    constructor(time = 300, unit = "s") {
-        /** @type {*} */this._value = null;
+    constructor(value, time = 300, unit = "s") {
+        /**@type{*}*/this._value = value;
         this._time = time;
         /**@type{moment.DurationInputArg2} */this._unit = unit;
-        /**@type{(null|moment.Moment)}*/this._expires = null;
-        /**@type{(null|moment.Moment)}*/this._lastUpdate = null;
+        /**@type{(null|moment.Moment)}*/this._expires = moment().add(this._time, this._unit);
+        /**@type{(null|moment.Moment)}*/this._lastUpdate = moment();
     }
-    /**@return{*}*/get value(){return this._value;}
     /**@return{(null|moment.Moment)}*/get expires(){return this._expires;}
     /**@return{(null|moment.Moment)}*/get lastUpdated(){return this._lastUpdate;}
+    /**@return{*}*/get value(){return this._value;}
     /**@param{*}value*/
     set value(value) {
         this._value = value;
@@ -639,33 +663,32 @@ class CachedProperty {
         else this._expires = moment().add(this._time, this._unit);
     }
     /**@return{boolean}*/
-    isExpired() {
+    get isExpired() {
         if(this._expires == null) return true;
         else return (moment().isSameOrAfter(this._expires));
     }
     /**@return{Promise<void>}*/
-    async clear() {this.value = null;}
+    async clear() {this._value = null; this._expires = null;}
 }
 /**
- * CachePropertyManager
+ * CachedPropertyManager
  * @author Robert R Murrell
  */
-class CachePropertyManager extends PropertyManager {
+class CachedPropertyManager extends PropertyManager {
     /**
      * @param {PropertyManager} [manager=new AppSettingsPropertyManager()]
      * @param {number} [defaultTime=300]
      * @param {moment.DurationInputArg2} [defaultUnit="s"]
-     * @param {Object} [overrides={}]
      */
     constructor(manager = new AppSettingsPropertyManager(), defaultTime = 300,
-                defaultUnit = "s", overrides = {}) {
+                defaultUnit = "s") {
         super();
         /**@type{PropertyManager}*/this._manager = manager;
-        this._cache = overrides;
+        this._cache = {};
         this._defaultTime = defaultTime;
         /**@type{moment.DurationInputArg2}*/this._defaultUnit = defaultUnit;
     }
-    /**@return{string}*/get name() {return "CachePropertyManager(" + this._manager.name + ")";}
+    /**@return{string}*/get name() {return "CachedPropertyManager(" + this._manager.name + ")";}
     /**@return{PropertyManager}*/get manager(){return this._manager;}
     /**@return{{Object}}*/get cache(){return this._cache;}
     /**@return{Promise<void>}*/
@@ -683,8 +706,8 @@ class CachePropertyManager extends PropertyManager {
      * @return {Promise<void>}
      */
     async ready(azcontext, config) {
-        await this._manager.ready(azcontext, config);
-        azcontext.log.verbose("[CachePropertyManager.ready(context, config, force)]: Caching ready.");
+        azcontext.log.verbose("[CachedPropertyManager.ready(context, config, force)]: Caching ready.");
+        return this._manager.ready(azcontext, config);
     }
     /**
      * @param {_AzureFunctionContext} azcontext
@@ -692,8 +715,8 @@ class CachePropertyManager extends PropertyManager {
      * @return {Promise<void>}
      */
     async initialize(azcontext, config) {
-        await this._manager.initialize(azcontext, config);
-        azcontext.log.verbose("[CachePropertyManager.initialize(context, config)]: Caching initialized.");
+        azcontext.log.verbose("[CachedPropertyManager.initialize(context, config)]: Caching initialized.");
+        return this._manager.initialize(azcontext, config);
     }
     /**
      * @param {string} key
@@ -706,26 +729,96 @@ class CachePropertyManager extends PropertyManager {
     }
     /**
      * @param {string} key
+     * @param {*} defaultValue
+     * @param {string} func
+     * @param {...*} args
+     * @return {Promise<*>}
+     * @private
+     */
+    async _getCache(key, defaultValue, func, ...args) {
+        let cached  = this._cache[key];
+        if(!(cached instanceof CachedProperty)) {
+            let _value =await this._manager[func](key, defaultValue, args);
+            if(_value != null) this._cache[key] =  new CachedProperty(_value, this._defaultTime, this._defaultUnit);
+            return _value;
+        }
+        else if(cached.isExpired) {
+            let _value =await this._manager[func](key, defaultValue, args);
+            if(_value != null) cached.value = _value;
+            return _value;
+        }
+        else
+            return cached.value;
+    }
+    /**
+     * @param {string} key
+     * @param {*} [defaultValue = null]
+     * @param {(null|StringConstructor|BooleanConstructor|NumberConstructor|ObjectConstructor|DateConstructor|
+     *          RegExpConstructor|ErrorConstructor|ArrayConstructor|ArrayBufferConstructor|DataViewConstructor|
+     *          Int8ArrayConstructor|Uint8ArrayConstructor|Uint8ClampedArrayConstructor|Int16ArrayConstructor|
+     *          Uint16ArrayConstructor|Int32ArrayConstructor|Uint32ArrayConstructor|Float32ArrayConstructor|
+     *          Float64ArrayConstructor|FunctionConstructor|function(...*))} [type = String]
      * @return {Promise<*>}
      */
+    async _getConvertProperty(key, defaultValue = null, type) {
+        return super._getConvertProperty(key, defaultValue, type);
+    }
+    /**
+     * @param {string} key
+     * @return {Promise<*>}
+     * @abstract
+     */
     async _getProperty(key) {
-        /**@type{(undefined|CachedProperty)}*/
-        let cached  = this._cache[key];
-        let value;
-        if(!(cached instanceof CachedProperty)) {
-            value = await this._manager._getProperty(key);
-            if(typeof value !== "undefined") {
-                cached = new CachedProperty(this._defaultTime, this._defaultUnit);
-                cached.value = value;
-                this._cache[key] = cached;
-            }
-        }
-        else if(cached.isExpired()) {
-            value = await this._manager._getProperty(key);
-            cached.value = value;
-        }
-        else value = cached.value;
-        return value;
+        return super._getProperty(key);
+    }
+    /**
+     * @param {string} key
+     * @param {null|string} [defaultValue = null]
+     * @return {Promise<string>}
+     */
+    async getProperty(key, defaultValue = null) {
+        return this._getCache(key, defaultValue, "getProperty");
+    }
+    /**
+     * @param {string} key
+     * @param {null|string|RegExp} [defaultValue = false]
+     * @return {Promise<null|RegExp>}
+     */
+    async getRegExp(key, defaultValue = /.*/g) {
+        return this._getCache(key, defaultValue, "getRegExp");
+    }
+    /**
+     * @param {string} key
+     * @param {null|boolean} [defaultValue = false]
+     * @return {Promise<null|boolean>}
+     */
+    async getBoolean(key, defaultValue = false) {
+        return this._getCache(key, defaultValue, "getBoolean");
+    }
+    /**
+     * @param {string} key
+     * @param {null|number} [defaultValue = Number.NaN]
+     * @return {Promise<null|number>}
+     */
+    async getNumber(key, defaultValue = Number.NaN) {
+        return this._getCache(key, defaultValue, "getNumber");
+    }
+    /**
+     * @param {string} key
+     * @param {null|Date} [defaultValue = new Date()]
+     * @return {Promise<null|Date>}
+     */
+    async getDate(key, defaultValue = new Date()) {
+        return this._getCache(key, defaultValue, "getDate");
+    }
+    /**
+     * @param {string} key
+     * @param {Object} [defaultValue = null]
+     * @param {function(*)} [construct]
+     * @return {Promise<Object>}
+     */
+    async getObject(key, defaultValue = null, construct = null) {
+        return this._getCache(key, defaultValue, "getObject", construct);
     }
 }
 
@@ -735,7 +828,6 @@ class CachePropertyManager extends PropertyManager {
  * @author Robert R Murrell
  */
 class PropertyManagerFactory extends ConfigurationItem {
-
     /**@param{(null|string)}[name=null]*/
     constructor(name = null) {
         super();
@@ -769,20 +861,7 @@ class PropertyManagerFactory extends ConfigurationItem {
                 throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.ttl");
             if(!cache.hasOwnProperty("unit") || typeof cache.unit !== "string" || cache.unit.length === 0)
                 throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.unit");
-            /**@type{Object}*/let overrides = {};
-            if(cache.hasOwnProperty("overrides") && Array.isArray(cache.overrides)) {
-                let overrides = cache.overrides;
-                for(/**@type{{key:string, ttl:number, unit:moment.DurationInputArg2}}*/const ovr of overrides) {
-                    if(!ovr.hasOwnProperty("key") || typeof ovr.key !== "string" || ovr.key.left === 0)
-                        throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.overrides.key");
-                    if(!ovr.hasOwnProperty("ttl") || typeof ovr.ttl !== "number")
-                        throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.overrides.ttl");
-                    if(!ovr.hasOwnProperty("unit") || typeof ovr.unit !== "string" || ovr.unit.length === 0)
-                        throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.overrides.unit");
-                    overrides[ovr.key] = new CachedProperty(ovr.ttl, ovr.unit);
-                }
-            }
-            return new CachePropertyManager(manager, cache.ttl, cache.unit, overrides);
+            return new CachedPropertyManager(manager, cache.ttl, cache.unit);
         }
         else
             return manager;
@@ -1688,25 +1767,27 @@ class ContentLoader {
     /**@return{string}*/get version() {return this._version;}
     /**
      * @param {{_content:{type:string,version:string}}} _Object
+     * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
      * @return {Promise<void>}
      */
-    async load(_Object, config) {
+    async load(_Object, azcontext, config) {
         if(_Object._content.type === this._type && _Object._content.version === this._version)
-            return this._load(_Object, config);
+            return this._load(_Object, azcontext, config);
         else if(this._link != null)
-            return this._link.load(_Object, config);
+            return this._link.load(_Object, azcontext, config);
         else
-            throw CelastrinaError.newError("No ContentLoader found for type '" +
-                                                   _Object._content.type + "'.", 404);
+            azcontext.log.warn("[ContentLoader.load(_Object, azcontext, config)]: No ContentLoader found for type '" +
+                                _Object._content.type + "'.", 404);
     }
     /**
      * @param {Object} _Object
+     * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
      * @return {Promise<void>}
      * @abstract
      */
-    async _load(_Object, config) {throw CelastrinaError.newError("Not Implemented.", 501);}
+    async _load(_Object, azcontext, config) {throw CelastrinaError.newError("Not Implemented.", 501);}
 }
 /**
  * CoreContentLoader
@@ -1727,11 +1808,12 @@ class CoreContentLoader extends ContentLoader {
      */
     /**
      * @param {Object|CoreContentLoader} _Object
+     * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
      * @return {Promise<void>}
      * @private
      */
-    async _load(_Object, config) {
+    async _load(_Object, azcontext, config) {
         if(!_Object.hasOwnProperty("name") || (typeof _Object.name !== "string" ||
                 _Object.name.trim().length === 0))
             throw CelastrinaError.newError("[" + this.type + "]: Property 'name' is required.", 400);
@@ -1770,7 +1852,7 @@ class ConfigurationLoader {
         this._loader.addLink(loader);
         return this;
     }
-    async _getProperties(properties) {
+    async _getProperties(properties, pm) {
         //
     }
     async _replaceReferences() {
@@ -1792,19 +1874,21 @@ class ConfigurationLoader {
      */
     /**
      * @param {PropertyManager} pm
+     * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
      * @return {Promise<void>}
      */
-    async load(pm, config) {
-        /**@type{ConfigurationJson}*/let _funcconfig = await pm.getObjectFromJSONProperty(this._property);
+    async load(pm, azcontext, config) {
+        /**@type{(null|ConfigurationJson)}*/let _funcconfig = await pm.getObject(this._property);
+        if(_funcconfig == null)
+            throw CelastrinaError.newError("[ConfigurationLoader]: Invalid property '" + this._property + "'.", 400);
         if(!_funcconfig.hasOwnProperty("configurations") || !Array.isArray(_funcconfig.configurations))
-            throw CelastrinaError.newError("[ConfigurationLoader]: Property 'configurations is required and must be an array.'", 400);
+            throw CelastrinaError.newError("[ConfigurationLoader]: Property 'configurations' is required and must be an array.", 400);
         /**@type{Array.<ContentType>}*/let _configuration = _funcconfig.configurations;
         if(_funcconfig.hasOwnProperty("properties")) {
             if(!Array.isArray(_funcconfig.properties))
-                throw CelastrinaError.newError("[ConfigurationLoader]: Property 'references is must be an array.'", 400);
-            let _reference = await this._getProperties(_funcconfig.properties);
-
+                throw CelastrinaError.newError("[ConfigurationLoader]: Property 'references' is must be an array.", 400);
+            let _reference = await this._getProperties(_funcconfig.properties, pm);
         }
         let _promises = [];
         let _contentIndex = 0;
@@ -1821,7 +1905,7 @@ class ConfigurationLoader {
             if(!_content.hasOwnProperty("version") || (typeof _content.version !== "string") ||
                     _content.version.trim().length === 0)
                 throw CelastrinaError.newError("[configurations(" + index + ")]: Property '_content.version' is required.", 400);
-            _promises.unshift(this._loader.load(_Object, config));
+            _promises.unshift(this._loader.load(_Object, azcontext, config));
         }
         await Promise.all(_promises);
     }
@@ -1840,7 +1924,7 @@ module.exports = {
     AppSettingsPropertyManager: AppSettingsPropertyManager,
     AppConfigPropertyManager: AppConfigPropertyManager,
     CachedProperty: CachedProperty,
-    CachePropertyManager: CachePropertyManager,
+    CachedPropertyManager: CachedPropertyManager,
     PropertyManagerFactory: PropertyManagerFactory,
     AppConfigPropertyManagerFactory: AppConfigPropertyManagerFactory,
     ContentLoader: ContentLoader,

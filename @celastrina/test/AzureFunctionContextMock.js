@@ -63,10 +63,10 @@ class MockAzureFunctionContext {
             message: null,
             invoked: null,
             reset() {this.message = null; this.invoked = null;},
-            error(message) {this.message = message; this.invoked = "error";console.log("+++++[celastrinajs.mocha.azcontext.mock.logging]" + message);},
-            warn(message) {this.message = message; this.invoked = "warn";console.log("+++++[celastrinajs.mocha.azcontext.mock.logging]" + message);},
-            info(message) {this.message = message; this.invoked = "info";console.log("+++++[celastrinajs.mocha.azcontext.mock.logging]" + message);},
-            verbose(message) {this.message = message; this.invoked = "verbose";console.log("+++++[celastrinajs.mocha.azcontext.mock.logging]" + message);},
+            error(message) {this.message = message; this.invoked = "error";console.log("+++++[celastrinajs.mocha.azcontext.mock.logging][error]" + message);},
+            warn(message) {this.message = message; this.invoked = "warn";console.log("+++++[celastrinajs.mocha.azcontext.mock.logging][warn]" + message);},
+            info(message) {this.message = message; this.invoked = "info";console.log("+++++[celastrinajs.mocha.azcontext.mock.logging][info]" + message);},
+            verbose(message) {this.message = message; this.invoked = "verbose";console.log("+++++[celastrinajs.mocha.azcontext.mock.logging][verbose]" + message);},
         }
     }
     get req() {

@@ -1,4 +1,5 @@
-const {CelastrinaError, ConfigurationItem, Configuration, AppSettingsPropertyManager} = require("../Core");
+const {CelastrinaError, ConfigurationItem, Configuration, AppSettingsPropertyManager, ResourceManager,
+       PermissionManager} = require("../Core");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockPropertyManager} = require("./PropertyManagerTest");
 const {MockAuthorizationManager} = require("./ResourceAuthorizationTest");
@@ -11,8 +12,6 @@ class MockConfigurationItem extends ConfigurationItem {
     get key() {return "mock-key";}
     get value() {return "mock-value";}
 }
-
-
 
 describe("Configuration", () => {
     describe("#constructor(name)", () => {
@@ -56,19 +55,19 @@ describe("Configuration", () => {
                 let err = new CelastrinaError("Invalid configuration. Key cannot be undefined, null or 0 length.");
                 assert.throws(() => {_config.setValue(undefined, "mock-value")}, err);
             });
-            it("Mest set value string at key", () => {
+            it("Must set value string at key", () => {
                 _config.setValue("mock-key", "mock-value");
                 assert.strictEqual(_config._config["mock-key"], "mock-value");
             });
-            it("Mest set value number at key", () => {
+            it("Must set value number at key", () => {
                 _config.setValue("mock-key", 42);
                 assert.strictEqual(_config._config["mock-key"], 42);
             });
-            it("Mest set value boolean at key", () => {
+            it("Must set value boolean at key", () => {
                 _config.setValue("mock-key", true);
                 assert.strictEqual(_config._config["mock-key"], true);
             });
-            it("Mest set value Object at key", () => {
+            it("Must set value Object at key", () => {
                 let _test = {value: 123456789};
                 _config.setValue("mock-key", _test);
                 assert.strictEqual(_config._config["mock-key"], _test);
@@ -79,32 +78,27 @@ describe("Configuration", () => {
             it("must return null if key not found and defaultValue not set", () => {
                 assert.strictEqual(_config.getValue("mock-key"), null);
             });
-            it("must return defaultValue if key not found", () => {
+            it("Must return defaultValue if key not found", () => {
                 let _default = "default";
                 assert.strictEqual(_config.getValue("mock-key", _default), _default);
             });
-            it("must return string 'mock-value' if key not found", () => {
+            it("Must return string 'mock-value' if key not found", () => {
                 _config.setValue("mock-key", "mock-value")
                 assert.strictEqual(_config.getValue("mock-key"), "mock-value");
             });
-            it("must return number '42' if key not found", () => {
+            it("Must return number '42' if key not found", () => {
                 _config.setValue("mock-key", 42)
                 assert.strictEqual(_config.getValue("mock-key"), 42);
             });
-            it("must return boolean 'true' if key not found", () => {
+            it("Must return boolean 'true' if key not found", () => {
                 _config.setValue("mock-key", true)
                 assert.strictEqual(_config.getValue("mock-key"), true);
             });
-            it("must return object '{value: 123456789}' if key not found", () => {
+            it("Must return object '{value: 123456789}' if key not found", () => {
                 let _test = {value: 123456789};
                 _config.setValue("mock-key", _test)
                 assert.strictEqual(_config.getValue("mock-key"), _test);
             });
-        });
-    });
-    describe("permissions", () => {
-        describe("addPermission(permission)", () => {
-            //
         });
     });
     describe("#setConfigurationItem(config)", () => {
@@ -124,22 +118,22 @@ describe("Configuration", () => {
             let _pm = new MockPropertyManager();
             let _am = new MockAuthorizationManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _config.setValue(Configuration.CONFIG_AUTHORIATION, _am);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _am);
             await _config.initialize(_azcontext);
             assert.strictEqual(_config.properties, _pm);
-            assert.strictEqual(_config.authorizations, _am);
+            assert.strictEqual(_config.resources, _am);
             assert.strictEqual(_config.loaded, false, "Should not be loaded yet.");
             assert.strictEqual(_pm.initialized, true, "PropertyManager Initialized.");
             assert.strictEqual(_pm.readied, true, "PropertyManager Readied.");
             assert.strictEqual(_am.initialized, true, "AuthorizationManager Initialized.");
             assert.strictEqual(_am.readied, true, "AuthorizationManager Readied.");
         });
-        it("Should initialize default property and authorization managers", async () => {
+        it("Should initialize default property, permission, and authorization managers", async () => {
             let _config = new Configuration("mock_configuration");
             await _config.initialize(_azcontext);
-            assert.notStrictEqual(_config.properties, null, "PropertyManager should not be null.");
-            assert.strictEqual(_config.properties instanceof AppSettingsPropertyManager, true, "PropertyManager should not be AppSettingsPropertyManager.");
-            assert.notStrictEqual(_config.authorizations, null, "AuthorizationManager should not be null.");
+            assert.strictEqual(_config.properties instanceof AppSettingsPropertyManager, true, "properties is AppSettingsPropertyManager.");
+            assert.strictEqual(_config.resources instanceof ResourceManager, true, "authorizations is ResourceManager.");
+            assert.strictEqual(_config.permissions instanceof PermissionManager, true, "authorizations is PermissionManager.");
             assert.strictEqual(_config.loaded, false, "Should not be loaded yet.");
         });
     });

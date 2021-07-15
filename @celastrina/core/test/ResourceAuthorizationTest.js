@@ -1,8 +1,8 @@
-const {CelastrinaError, ResourceAuthorization, AuthorizationManager} = require("../Core");
+const {CelastrinaError, ResourceAuthorization, ResourceManager} = require("../Core");
 const assert = require("assert");
 const moment = require("moment");
 
-class MockAuthorizationManager extends AuthorizationManager {
+class MockResourceManager extends ResourceManager {
     constructor() {
         super();
         this.initialized = false;
@@ -78,30 +78,30 @@ describe("ResourceAuthorization", () => {
 });
 describe("AuthorizationManager", () => {
     describe("#addAuthorization(auth)", () => {
-        let _am = new AuthorizationManager();
+        let _rm = new ResourceManager();
         it("Should set and return itself for chaining", async () => {
             let _auth = new MockResourceAuthorization("mock_authorization");
-            let result = await _am.addAuthorization(_auth);
-            assert.strictEqual(result, _am, "Result instance of AuthorizationManager.");
-            assert.strictEqual(_am._authorizations[_auth.id], _auth, "Added auth.");
+            let result = await _rm.addResource(_auth);
+            assert.strictEqual(result, _rm, "Result instance of AuthorizationManager.");
+            assert.strictEqual(_rm._resources[_auth.id], _auth, "Added auth.");
         });
     });
     describe("#getAuthorization(id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY)", () => {
-        let _am = new AuthorizationManager();
+        let _rm = new ResourceManager();
         it("Should get an added authorization", async () => {
             let _auth = new MockResourceAuthorization("mock_authorization");
-            await _am.addAuthorization(_auth);
-            let _newauth = await _am.getAuthorization(_auth.id);
+            await _rm.addResource(_auth);
+            let _newauth = await _rm.getResource(_auth.id);
             assert.strictEqual(_newauth, _auth, "Response passed in ResourceAuthorization.");
         });
         it("Should reject with 401 on not found", () => {
             let _err = new CelastrinaError("Not Authorized.", 401);
-            assert.rejects(_am.getAuthorization("does_not_exist"), _err, "Expected exception..");
+            assert.rejects(_rm.getResource("does_not_exist"), _err, "Expected exception..");
         });
     });
 });
 
 module.exports = {
     MockResourceAuthorization: MockResourceAuthorization,
-    MockAuthorizationManager: MockAuthorizationManager
+    MockAuthorizationManager: MockResourceManager
 };

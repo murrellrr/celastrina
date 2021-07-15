@@ -4,6 +4,14 @@ const {MockResourceAuthorization} = require("./ResourceAuthorizationTest");
 const {MockPropertyManager} = require("./PropertyManagerTest");
 const assert = require("assert");
 
+class MockContext extends BaseContext {
+    constructor(azcontext, config) {
+        super(azcontext, config);
+    }
+    setMonitorMode() {this._monitor = true;}
+}
+
+
 describe("BaseContext", () => {
     describe("#constructor(azcontext, config)", () => {
         let _config = new Configuration("mock_configuration");
@@ -207,3 +215,6 @@ describe("BaseContext", () => {
 });
 
 
+module.exports = {
+    MockContext: MockContext
+};

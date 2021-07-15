@@ -661,7 +661,6 @@ class HTTPConfiguration extends Configuration {
     constructor(name) {
         super(name);
         this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER] = null;
-
         this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS] = true;
     }
     /**@return{SessionManager}*/get sessionManager() {return this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER];}

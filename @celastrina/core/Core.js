@@ -237,14 +237,14 @@ class ResourceAuthorization {
     }
 }
 /**
- * ManagedIdentityAuthorization
+ * ManagedIdentityResource
  * @author Robert R Murrell
  */
-class ManagedIdentityAuthorization extends ResourceAuthorization {
+class ManagedIdentityResource extends ResourceAuthorization {
     /**@type{string}*/static SYSTEM_MANAGED_IDENTITY = "celastrinajs.core.system.managed.identity";
     /**@param {number}[skew=0]*/
     constructor(skew = 0) {
-        super(ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY, skew);
+        super(ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY, skew);
     }
     /**
      * @param {string} resource
@@ -275,10 +275,10 @@ class ManagedIdentityAuthorization extends ResourceAuthorization {
     }
 }
 /**
- * AppRegistrationAuthorization
+ * AppRegistrationResource
  * @author Robert R Murrell
  */
-class AppRegistrationAuthorization extends ResourceAuthorization {
+class AppRegistrationResource extends ResourceAuthorization {
     /**
      * @param {string} id
      * @param {string} authority
@@ -325,27 +325,27 @@ class AppRegistrationAuthorization extends ResourceAuthorization {
     }
 }
 /**
- * AuthorizationManager
+ * ResourceManager
  */
-class AuthorizationManager {
+class ResourceManager {
     constructor() {
-        this._authorizations = {};
+        this._resources = {};
     }
-    /**@return{Object}*/get authorizations() {return this._authorizations;}
+    /**@return{Object}*/get authorizations() {return this._resources;}
     /**
      * @param {ResourceAuthorization} auth
-     * @return {AuthorizationManager}
+     * @return {ResourceManager}
      */
-    async addAuthorization(auth) {
-        this._authorizations[auth.id] = auth;
+    async addResource(auth) {
+        this._resources[auth.id] = auth;
         return this;
     }
     /**
      * @param {string} id
      * @return {Promise<ResourceAuthorization>}
      */
-    async getAuthorization(id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY) {
-        let _auth = this._authorizations[id];
+    async getResource(id = ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY) {
+        let _auth = this._resources[id];
         if(typeof _auth === "undefined" || _auth == null)
             throw CelastrinaError.newError("Not authorized.", 401);
         return _auth;
@@ -355,8 +355,8 @@ class AuthorizationManager {
      * @param {string} id
      * @return {Promise<string>}
      */
-    async getToken(resource, id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY) {
-        /**@type{ResourceAuthorization}*/let _auth = await this.getAuthorization(id);
+    async getToken(resource, id = ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY) {
+        /**@type{ResourceAuthorization}*/let _auth = await this.getResource(id);
         return await _auth.getToken(resource);
     }
     /**
@@ -524,7 +524,7 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
         this._endpoint = "https://management.azure.com/subscriptions/" + subscriptionId +
                     "/resourceGroups/" + resourceGroupName + "/providers/Microsoft.AppConfiguration/configurationStores/" +
                     configStoreName + "/listKeyValue?api-version=2019-10-01";
-        /** @type {ManagedIdentityAuthorization} */this._auth = null;
+        /** @type {ManagedIdentityResource} */this._auth = null;
         /** @type{boolean} */this._useVaultSecrets = useVaultSecrets;
         if(this._useVaultSecrets)
             /** @type{Vault} */this._vault = new Vault();
@@ -540,8 +540,8 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
         if(typeof _identityEndpoint === "undefined" || _identityEndpoint == null)
             throw CelastrinaError.newError("AppConfigPropertyManager requires User or System Assigned Managed Identy to be enabled.");
         else {
-            azcontext.log.verbose("[AppConfigPropertyManager.initialize(azcontext, config)]: ManagedIdentityAuthorization created.");
-            this._auth = new ManagedIdentityAuthorization();
+            azcontext.log.verbose("[AppConfigPropertyManager.initialize(azcontext, config)]: ManagedIdentityResource created.");
+            this._auth = new ManagedIdentityResource();
         }
     }
     /**
@@ -550,8 +550,8 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
      * @return {Promise<void>}
      */
     async ready(azcontext, config) {
-        azcontext.log.info("[AppConfigPropertyManager.ready(azcontext, config)]: Added ManagedIdentityAuthorization to authorization context.");
-        config[Configuration.CONFIG_AUTHORIATION].addAuthorization(this._auth);
+        azcontext.log.info("[AppConfigPropertyManager.ready(azcontext, config)]: Added ManagedIdentityResource to authorization context.");
+        config[Configuration.CONFIG_RESOURCE].addResource(this._auth);
     }
     /**
      * @param kvp
@@ -841,9 +841,9 @@ class Configuration {
     /**@type{string}*/static CONFIG_PROPERTY = "celastrinajs.core.property.manager";
     /**@type{string}*/static PROP_LOCAL_DEV = "celastringjs.core.property.deployment.local.development";
     /**@type{string}*/static CONFIG_PERMISSION = "celastrinajs.core.permission";
-    /**@type{string}*/static CONFIG_AUTHORIATION = "celastrinajs.core.authorization";
+    /**@type{string}*/static CONFIG_RESOURCE = "celastrinajs.core.resource";
     /**@type{string}*/static CONFIG_AUTHORIATION_OPTIMISTIC = "celastrinajs.core.authorization.optimistic";
-    /**@type{string}*/static CONFIG_AUTHORIATION_ROLE_RESOLVER = "celastrinajs.core.authorization.role.resolver";
+    /**@type{string}*/static CONFIG_AUTHORIATION_ROLE_FACTORY = "celastrinajs.core.authorization.role.factory";
     /**@param{string} name*/
     constructor(name) {
         if(typeof name === "string") {
@@ -854,44 +854,28 @@ class Configuration {
         /**@type{Object}*/this._config = {};
         /**@type{boolean}*/this._loaded = false;
         this._config[Configuration.CONFIG_CONTEXT] = null;
-        this._config[Configuration.CONFIG_PROPERTY] = null;
+        this._config[Configuration.CONFIG_PROPERTY] = new AppSettingsPropertyManager();
         this._config[Configuration.CONFIG_NAME] = name;
-        this._config[Configuration.CONFIG_AUTHORIATION] = null;
-        this._config[Configuration.CONFIG_PERMISSION] = {};
+        this._config[Configuration.CONFIG_RESOURCE] = new ResourceManager();
+        this._config[Configuration.CONFIG_PERMISSION] = new PermissionManager();
         this._config[Configuration.CONFIG_AUTHORIATION_OPTIMISTIC] = false;
-        this._config[Configuration.CONFIG_AUTHORIATION_ROLE_RESOLVER] = new BaseRoleResolver();
+        this._config[Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY] = new BaseRoleFactory();
     }
     /**@return{string}*/get name(){return this._config[Configuration.CONFIG_NAME];}
     /**@return{PropertyManager}*/get properties() {return this._config[Configuration.CONFIG_PROPERTY];}
     /**@return{Object}*/get values(){return this._config;}
     /**@return{_AzureFunctionContext}*/get context(){return this._config[Configuration.CONFIG_CONTEXT];}
     /**@return{boolean}*/get loaded(){return this._loaded;}
-    /**@return{Array.<Permission>}*/get permissions() {return this._config[Configuration.CONFIG_PERMISSION];}
-    /**@return{RoleResolver}*/get roleResolver() {return this._config[Configuration.CONFIG_AUTHORIATION_ROLE_RESOLVER];}
-    /**@return{AuthorizationManager}*/get authorizations() {return this._config[Configuration.CONFIG_AUTHORIATION];}
+    /**@return{PermissionManager}*/get permissions() {return this._config[Configuration.CONFIG_PERMISSION];}
+    /**@return{RoleFactory}*/get roleFactory() {return this._config[Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY];}
+    /**@return{ResourceManager}*/get resources() {return this._config[Configuration.CONFIG_RESOURCE];}
     /**@return{boolean}*/get authorizationOptimistic() {return this._config[Configuration.CONFIG_AUTHORIATION_OPTIMISTIC];};
-    /**
-     * @param {Permission} permission
-     * @return {Configuration}
-     */
-    addPermission(permission) {
-        this._config[Configuration.CONFIG_PERMISSION][permission.action] = permission;
-        return this;
-    }
     /**
      * @param {boolean} optimistic
      * @return {Configuration}
      */
     setAuthorizationOptimistic(optimistic) {
         this._config[Configuration.CONFIG_AUTHORIATION_OPTIMISTIC] = optimistic;
-        return this;
-    }
-    /**
-     * @param {RoleResolver} resolver
-     * @return {Configuration}
-     */
-    setRoleResolver(resolver) {
-        this._config[Configuration.CONFIG_AUTHORIATION_OPTIMISTIC] = resolver;
         return this;
     }
     /**
@@ -933,15 +917,29 @@ class Configuration {
     }
     /**
      * @param {_AzureFunctionContext} azcontext
-     * @return {AuthorizationManager}
+     * @return {PermissionManager}
      * @private
      */
-    _getAuthorizationManager(azcontext) {
-        /**@type{(undefined|null|AuthorizationManager)}*/let _manager = this._config[Configuration.CONFIG_AUTHORIATION];
+    _getPermissionManager(azcontext) {
+        /**@type{(undefined|null|PermissionManager)}*/let _manager = this._config[Configuration.CONFIG_PERMISSION];
         if(typeof _manager === "undefined" || _manager == null) {
-            azcontext.log.info("[Configuration._getAuthorizationManager(azcontext)]: No authorization manager specified, defaulting to AuthorizationManager.");
-            _manager = new AuthorizationManager();
-            this._config[Configuration.CONFIG_AUTHORIATION] = _manager;
+            azcontext.log.info("[Configuration._getPermissionManager(azcontext)]: No permission manager specified, defaulting to PermissionManager.");
+            _manager = new PermissionManager();
+            this._config[Configuration.CONFIG_PERMISSION] = _manager;
+        }
+        return _manager;
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @return {ResourceManager}
+     * @private
+     */
+    _getResourceManager(azcontext) {
+        /**@type{(undefined|null|ResourceManager)}*/let _manager = this._config[Configuration.CONFIG_RESOURCE];
+        if(typeof _manager === "undefined" || _manager == null) {
+            azcontext.log.info("[Configuration._getResourceManager(azcontext)]: No resource manager specified, defaulting to ResourceManager.");
+            _manager = new ResourceManager();
+            this._config[Configuration.CONFIG_RESOURCE] = _manager;
         }
         return _manager;
     }
@@ -976,12 +974,13 @@ class Configuration {
      * @return {Promise<void>}
      */
     async initialize(azcontext) {
-        azcontext.log.info("[Configuration.initialize(azcontext)]: Initializing configuration.");
+        azcontext.log.info("[Configuration.initialize(azcontext)]: Preparing configuration.");
         this._config[Configuration.CONFIG_CONTEXT] = azcontext;
         if(!this._loaded) {
             azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration not loaded, initializing.");
             /**@type{PropertyManager}*/let _pm = this._getPropertyManager(azcontext);
-            /**@type{AuthorizationManager}*/let _am = this._getAuthorizationManager(azcontext);
+            /**@type{ResourceManager}*/let _rm = this._getResourceManager(azcontext);
+            /**@type{PermissionManager}*/let _prm = this._getPermissionManager(azcontext);
             let _name = this._config[Configuration.CONFIG_NAME];
             if(typeof _name !== "string" || _name.trim().length === 0) {
                 azcontext.log.error("[Configuration.load(azcontext)]: Invalid Configuration. Name cannot be undefined, null, or 0 length.");
@@ -991,10 +990,17 @@ class Configuration {
             azcontext.log.info("[Configuration.load(azcontext)]: PropertyManager Initialized.");
             await _pm.ready(azcontext, this._config);
             azcontext.log.info("[Configuration.initialize(azcontext)]: PropertyManager Ready.");
-            await _am.initialize(azcontext, this._config);
-            azcontext.log.info("[Configuration.load(azcontext)]: AuthorizationManager Initialized.");
-            await _am.ready(azcontext, this._config);
-            azcontext.log.info("[Configuration.initialize(azcontext)]: AuthorizationManager Ready.");
+
+            // TODO: Run the configuration loader if its present.
+
+            await _prm.initialize(azcontext, this._config);
+            azcontext.log.info("[Configuration.load(azcontext)]: PermissionManager Initialized.");
+            await _prm.ready(azcontext, this._config);
+            azcontext.log.info("[Configuration.initialize(azcontext)]: PermissionManager Ready.");
+            await _rm.initialize(azcontext, this._config);
+            azcontext.log.info("[Configuration.load(azcontext)]: ResourceManager Initialized.");
+            await _rm.ready(azcontext, this._config);
+            azcontext.log.info("[Configuration.initialize(azcontext)]: ResourceManager Ready.");
             azcontext.log.info("[Configuration.initialize(azcontext)]: Initialization successful.");
         }
         else
@@ -1005,41 +1011,6 @@ class Configuration {
      */
     async ready() {this._loaded = true;}
 }
-
-
-class JsonConfigurationProperty {
-    constructor(id, type="celastrinajs.com.core.configuration.custom") {
-        this._object = {"content-type": "application/" + type + "+json;charset=utf-8", id: id};
-    }
-}
-
-class PropertyReference extends JsonConfigurationProperty {
-    //
-}
-
-class VaultReferenceConfigurationProperty extends JsonConfigurationProperty {
-    constructor(id) {
-        super(id, "celastrinajs.com.core.configuration.keyvaultref");
-    }
-}
-
-
-class ConfigurationLoader extends ConfigurationItem {
-    constructor() {
-        super();
-    }
-    get key() {
-        return "";
-    }
-}
-
-
-
-
-
-
-
-
 
 /**@abstract*/
 class Algorithm {
@@ -1276,11 +1247,49 @@ class Permission {
     }
 }
 /**
- * BaseRoleResolver
+ * @author Robert R Murrell
+ */
+class PermissionManager {
+    constructor() {
+        /**@type{Object}*/this._permissions = {};
+    }
+    /**@return{Object}*/get permissions() {return this._permissions;}
+    /**
+     * @param {Permission} perm
+     * @return {PermissionManager}
+     */
+    addPermission(perm) {
+        this._permissions[perm.action] = perm;
+        return this;
+    }
+    /**
+     * @param {string} action
+     * @return {Permission}
+     */
+    getPermission(action) {
+        /**@type{Permission}*/let _perm = this._permissions[action];
+        if(typeof _perm === "undefined") _perm = null;
+        return _perm;
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param {Object} config
+     * @return {Promise<void>}
+     */
+    async initialize(azcontext, config) {}
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param {Object} config
+     * @return {Promise<void>}
+     */
+    async ready(azcontext, config) {}
+}
+/**
+ * BaseRoleFactory
  * @abstract
  * @author Robert R Murrell
  */
-class RoleResolver {
+class RoleFactory {
     constructor() {}
     /**
      * @param {BaseContext} context
@@ -1296,10 +1305,10 @@ class RoleResolver {
     async initialize(config) {};
 }
 /**
- * BaseRoleResolver
+ * BaseRoleFactory
  * @author Robert R Murrell
  */
-class BaseRoleResolver extends RoleResolver {
+class BaseRoleFactory extends RoleFactory {
     constructor() {super()}
     /**
      * @param {BaseContext} context
@@ -1349,8 +1358,8 @@ class BaseSubject {
 class BaseSentry {
     constructor() {
         /**@type{boolean}*/this._optimistic = false;
-        this._permissions = null;
-        /**@type{RoleResolver}*/this._roleResolver = null;
+        /**@type{PermissionManager}*/this._permissions = null;
+        /**@type{RoleFactory}*/this._roleResolver = null;
     }
     /**
      * @param {BaseContext} context
@@ -1374,7 +1383,7 @@ class BaseSentry {
      * @return {Promise<void>}
      */
     async authorize(context, subject) {
-        /**@type{Permission}*/let _permission = this._permissions[context.action];
+        /**@type{Permission}*/let _permission = this._permissions.getPermission(context.action);
         if(typeof _permission === "undefined" || _permission == null) {
             if(!this._optimistic) {
                 context.log("No permission found for action '" + context.action +
@@ -1398,7 +1407,7 @@ class BaseSentry {
     async initialize(config) {
         this._optimistic = config.authorizationOptimistic;
         this._permissions = config.permissions;
-        this._roleResolver = config.roleResolver;
+        this._roleResolver = config.roleFactory;
         return this._roleResolver.initialize(config);
     }
 }
@@ -1447,7 +1456,7 @@ class BaseContext {
     /**@param{BaseSubject} subject*/set subject(subject){this._subject = subject;}
     /**@return{string}*/get action(){return this._action;}
     /**@return{PropertyManager}*/get properties(){return this._config.properties;}
-    /**@return{AuthorizationManager}*/get authorizations(){return this._config.authorizations;}
+    /**@return{ResourceManager}*/get authorizations(){return this._config.resources;}
     /**@return{_AzureFunctionContext}*/get azureFunctionContext(){return this._azfunccontext;}
     /**
      * @param{string} name
@@ -1653,15 +1662,179 @@ class BaseFunction {
         return ex;
     }
 }
+/**
+ * ValueLoader
+ * @abstract
+ * @author Robert R Murrell
+ */
+class ContentLoader {
+    /**
+     * @param {string} type
+     * @param {string} version
+     * @param {ContentLoader} link
+     */
+    constructor(type = "application/json;utf-8", version = "1.0.0", link = null) {
+        /**@type{string}*/this._type = type;
+        /**@type{string}*/this._version = version;
+        /**@type{ContentLoader}*/this._link = link;
+    }
+    /**
+     * @param {ContentLoader} link
+     */
+    addLink(link) {
+        (this._link == null)? this._link = link : this._link.addLink(link);
+    }
+    /**@return{string}*/get type() {return this._type;}
+    /**@return{string}*/get version() {return this._version;}
+    /**
+     * @param {{_content:{type:string,version:string}}} _Object
+     * @param {Object} config
+     * @return {Promise<void>}
+     */
+    async load(_Object, config) {
+        if(_Object._content.type === this._type && _Object._content.version === this._version)
+            return this._load(_Object, config);
+        else if(this._link != null)
+            return this._link.load(_Object, config);
+        else
+            throw CelastrinaError.newError("No ContentLoader found for type '" +
+                                                   _Object._content.type + "'.", 404);
+    }
+    /**
+     * @param {Object} _Object
+     * @param {Object} config
+     * @return {Promise<void>}
+     * @abstract
+     */
+    async _load(_Object, config) {throw CelastrinaError.newError("Not Implemented.", 501);}
+}
+/**
+ * CoreContentLoader
+ * @author Robert R Murrell
+ */
+class CoreContentLoader extends ContentLoader {
+    constructor() {
+        super("application/com.celastrinajs.core+json;utf-8");
+    }
+    /**
+     * @typedef CoreAuthentication
+     * @property {boolean} optimistic
+     */
+    /**
+     * @typedef CoreContentLoader
+     * @property {string} name
+     * @property {CoreAuthentication} authentication
+     */
+    /**
+     * @param {Object|CoreContentLoader} _Object
+     * @param {Object} config
+     * @return {Promise<void>}
+     * @private
+     */
+    async _load(_Object, config) {
+        if(!_Object.hasOwnProperty("name") || (typeof _Object.name !== "string" ||
+                _Object.name.trim().length === 0))
+            throw CelastrinaError.newError("[" + this.type + "]: Property 'name' is required.", 400);
+        config[Configuration.CONFIG_NAME] = _Object.name;
+
+        if(_Object.hasOwnProperty("authentication") && (typeof _Object.authentication === "object" &&
+                _Object.authentication != null )) {
+            let _authentication = _Object.authentication;
+            if(_authentication.hasOwnProperty("optimistic") && (typeof _authentication.optimistic === "boolean"))
+                config[Configuration.CONFIG_AUTHORIATION_OPTIMISTIC] = _authentication.optimistic;
+        }
+    }
+}
+/**
+ * ConfigurationLoader
+ * @author Robert R Murrell
+ */
+class ConfigurationLoader {
+    /**
+     * @param {string} property
+     */
+    constructor(property) {
+        if(typeof property !== "string" || property.trim().length === 0)
+            throw CelastrinaError.newError("[ConfigurationLoader]: Argument 'property' is required.", 400);
+        /**@type{string}*/this._property = property.trim();
+        if(this._property.includes(' '))
+            throw CelastrinaError.newError("[ConfigurationLoader]: Argument 'property' is required.", 400);
+        this._loader = new CoreContentLoader();
+    }
+    /**@return{string}*/get property() {return this._property;}
+    /**
+     * @param {ContentLoader} loader
+     * @return {ConfigurationLoader}
+     */
+    addContentLoader(loader) {
+        this._loader.addLink(loader);
+        return this;
+    }
+    async _getProperties(properties) {
+        //
+    }
+    async _replaceReferences() {
+        //
+    }
+    /**
+     * @typedef _Content
+     * @property {string} [type]
+     * @property {string} [version]
+     */
+    /**
+     * @typedef ContentType
+     * @property {_Content} [_content]
+     */
+    /**
+     * @typedef ConfigurationJson
+     * @property {Array.<*>} [properties]
+     * @property {Array.<ContentType>} [configurations]
+     */
+    /**
+     * @param {PropertyManager} pm
+     * @param {Object} config
+     * @return {Promise<void>}
+     */
+    async load(pm, config) {
+        /**@type{ConfigurationJson}*/let _funcconfig = await pm.getObjectFromJSONProperty(this._property);
+        if(!_funcconfig.hasOwnProperty("configurations") || !Array.isArray(_funcconfig.configurations))
+            throw CelastrinaError.newError("[ConfigurationLoader]: Property 'configurations is required and must be an array.'", 400);
+        /**@type{Array.<ContentType>}*/let _configuration = _funcconfig.configurations;
+        if(_funcconfig.hasOwnProperty("properties")) {
+            if(!Array.isArray(_funcconfig.properties))
+                throw CelastrinaError.newError("[ConfigurationLoader]: Property 'references is must be an array.'", 400);
+            let _reference = await this._getProperties(_funcconfig.properties);
+
+        }
+        let _promises = [];
+        let _contentIndex = 0;
+        for(let index in _configuration) {
+            let _Object = /**@type{(null|ContentType)}*/_configuration[index];
+            if(typeof _Object === "undefined" || _Object == null)
+                throw CelastrinaError.newError("[configurations(" + index + ")]: Object was null or undefined.", 400);
+            if(!_Object.hasOwnProperty("_content"))
+                throw CelastrinaError.newError("[configurations(" + index + ")]: Property '_content' is required.", 400);
+            let _content = _Object._content;
+            if(!_content.hasOwnProperty("type") || (typeof _content.type !== "string") ||
+                    _content.type.trim().length === 0)
+                throw CelastrinaError.newError("[configurations(" + index + ")]: Property '_content.type' is required.", 400);
+            if(!_content.hasOwnProperty("version") || (typeof _content.version !== "string") ||
+                    _content.version.trim().length === 0)
+                throw CelastrinaError.newError("[configurations(" + index + ")]: Property '_content.version' is required.", 400);
+            _promises.unshift(this._loader.load(_Object, config));
+        }
+        await Promise.all(_promises);
+    }
+}
 module.exports = {
     CelastrinaError: CelastrinaError,
     CelastrinaValidationError: CelastrinaValidationError,
     LOG_LEVEL: LOG_LEVEL,
     ConfigurationItem: ConfigurationItem,
     ResourceAuthorization: ResourceAuthorization,
-    ManagedIdentityAuthorization: ManagedIdentityAuthorization,
-    AppRegistrationAuthorization: AppRegistrationAuthorization,
-    AuthorizationManager: AuthorizationManager,
+    ManagedIdentityResource: ManagedIdentityResource,
+    AppRegistrationResource: AppRegistrationResource,
+    ResourceManager: ResourceManager,
     Vault: Vault,
     PropertyManager: PropertyManager,
     AppSettingsPropertyManager: AppSettingsPropertyManager,
@@ -1670,8 +1843,9 @@ module.exports = {
     CachePropertyManager: CachePropertyManager,
     PropertyManagerFactory: PropertyManagerFactory,
     AppConfigPropertyManagerFactory: AppConfigPropertyManagerFactory,
-    Configuration: Configuration,
+    ContentLoader: ContentLoader,
     ConfigurationLoader: ConfigurationLoader,
+    Configuration: Configuration,
     Algorithm: Algorithm,
     AES256Algorithm: AES256Algorithm,
     Cryptography: Cryptography,
@@ -1681,7 +1855,8 @@ module.exports = {
     MatchAll: MatchAll,
     MatchNone: MatchNone,
     Permission: Permission,
-    RoleResolver: RoleResolver,
+    PermissionManager: PermissionManager,
+    RoleFactory: RoleFactory,
     BaseSubject: BaseSubject,
     BaseSentry: BaseSentry,
     BaseContext: BaseContext,

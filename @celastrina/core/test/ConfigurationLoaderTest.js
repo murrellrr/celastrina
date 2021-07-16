@@ -35,7 +35,7 @@ describe("ConfigurationLoader", () => {
     describe("#load(pm, config)", () => {
         let _loader = new ConfigurationLoader("mock_property");
         let _pm = new MockPropertyManager();
-        _pm.mockProperty("mock_property", fs.readFileSync("./test/configuration.json", "utf8"));
+        _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good.json", "utf8"));
         let _config = {};
         let _azcontext = new MockAzureFunctionContext();
         it("Loads config file to config object", async () => {

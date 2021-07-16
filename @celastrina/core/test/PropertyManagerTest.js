@@ -9,6 +9,7 @@ process.env["mock_env_var_one"]   = "mock_env_val_one";
 process.env["mock_env_var_two"]   = 42;
 process.env["mock_env_var_three"] = true;
 process.env["mock_env_var_four"]  = "{\"key\": \"mock_key\", \"value\": \"mock_value\"}";
+process.env["mock_env_var_five"]  = "1995-12-17T03:24:00";
 process.env["mock_env_var_regexp"]  = "/.*/g";
 
 class MockPropertyManager extends PropertyManager {
@@ -91,6 +92,9 @@ describe("AppSettingsPropertyManager", () => {
         it("Gets boolean", async () => {
             assert.strictEqual(await _pm.getBoolean("mock_env_var_three"), true);
         });
+        it("Gets Date", async () => {
+            assert.deepStrictEqual(await _pm.getDate("mock_env_var_five"), new Date("1995-12-17T03:24:00"));
+        });
         it("Gets RegExp", async () => {
             let _comp = new RegExp("/.*/g");
             let _regexp = await _pm.getRegExp("mock_env_var_regexp");
@@ -114,6 +118,9 @@ describe("AppSettingsPropertyManager", () => {
         it("Gets boolean default", async () => {
             assert.strictEqual(await _pm.getBoolean("mock_env_var_six", true), true);
         });
+        it("Gets Date default", async () => {
+            assert.deepStrictEqual(await _pm.getDate("mock_env_var_six", new Date("1995-12-17T03:24:00")), new Date("1995-12-17T03:24:00"));
+        });
         it("Gets RegExp default", async () => {
             let _comp = new RegExp("/.*/g");
             let _regexp = await _pm.getRegExp("mock_env_var_six", new RegExp("/.*/g"));
@@ -124,8 +131,72 @@ describe("AppSettingsPropertyManager", () => {
             assert.deepStrictEqual(await _pm.getObject("mock_env_var_six", {key: "mock_key", value: "mock_value"}),
                                     {key: "mock_key", value: "mock_value"});
         });
-        it("Gets MockObject from JSON defaule", async () => {
+        it("Gets MockObject from JSON default", async () => {
             let _object = await _pm.getObject("mock_env_var_six", {key: "mock_key", value: "mock_value"}, convertToNewObject);
+            assert.deepStrictEqual(_object instanceof MockObject, true, "Instanceof MockObject");
+            assert.deepStrictEqual(_object, new MockObject("mock_key", "mock_value"), "Mock object has correct values.");
+        });
+    });
+    describe("#getTypedProperty(key, typename, defaultValue, factory)", () => {
+        it("Gets property", async () => {
+            assert.strictEqual(await _pm.getTypedProperty("mock_env_var_one", "property"), "mock_env_val_one");
+        });
+        it("Gets property with string name", async () => {
+            assert.strictEqual(await _pm.getTypedProperty("mock_env_var_one", "string"), "mock_env_val_one");
+        });
+        it("Gets number", async () => {
+            assert.strictEqual(await _pm.getTypedProperty("mock_env_var_two", "number"), 42);
+        });
+        it("Gets boolean", async () => {
+            assert.strictEqual(await _pm.getTypedProperty("mock_env_var_three", "boolean"), true);
+        });
+        it("Gets Date", async () => {
+            assert.deepStrictEqual(await _pm.getTypedProperty("mock_env_var_five", "date"), new Date("1995-12-17T03:24:00"));
+        });
+        it("Gets RegExp", async () => {
+            let _comp = new RegExp("/.*/g");
+            let _regexp = await _pm.getTypedProperty("mock_env_var_regexp", "regexp");
+            assert.strictEqual(_regexp instanceof RegExp, true, "Instance of RegExp");
+            assert.deepStrictEqual(_regexp, _comp, "Same expression.");
+        });
+        it("Gets Date", async () => {
+            let _comp = new RegExp("/.*/g");
+            let _regexp = await _pm.getTypedProperty("mock_env_var_regexp", "regexp");
+            assert.strictEqual(_regexp instanceof RegExp, true, "Instance of RegExp");
+            assert.deepStrictEqual(_regexp, _comp, "Same expression.");
+        });
+        it("Gets object from JSON", async () => {
+            assert.deepStrictEqual(await _pm.getTypedProperty("mock_env_var_four", "object"), {key: "mock_key", value: "mock_value"});
+        });
+        it("Gets MockObject from JSON", async () => {
+            let _object = await _pm.getTypedProperty("mock_env_var_four", "object", null, convertToNewObject);
+            assert.deepStrictEqual(_object instanceof MockObject, true, "Instanceof MockObject");
+            assert.deepStrictEqual(_object, new MockObject("mock_key", "mock_value"), "Mock object has correct values.");
+        });
+        it("Gets string default", async () => {
+            assert.strictEqual(await _pm.getTypedProperty("mock_env_var_six", "string", "mock_env_val_one"), "mock_env_val_one");
+        });
+        it("Gets number default", async () => {
+            assert.strictEqual(await _pm.getTypedProperty("mock_env_var_six", "number", 24), 24);
+        });
+        it("Gets boolean default", async () => {
+            assert.strictEqual(await _pm.getTypedProperty("mock_env_var_six", "boolean", true), true);
+        });
+        it("Gets Date", async () => {
+            assert.deepStrictEqual(await _pm.getTypedProperty("mock_env_var_five", "date", new Date("1995-12-17T03:24:00")), new Date("1995-12-17T03:24:00"));
+        });
+        it("Gets RegExp default", async () => {
+            let _comp = new RegExp("/.*/g");
+            let _regexp = await _pm.getTypedProperty("mock_env_var_six", "regexp", new RegExp("/.*/g"));
+            assert.strictEqual(_regexp instanceof RegExp, true, "Instance of RegExp");
+            assert.deepStrictEqual(_regexp, _comp, "Same expression.");
+        });
+        it("Gets object from JSON default", async () => {
+            assert.deepStrictEqual(await _pm.getTypedProperty("mock_env_var_six", "object", {key: "mock_key", value: "mock_value"}),
+                {key: "mock_key", value: "mock_value"});
+        });
+        it("Gets MockObject from JSON default", async () => {
+            let _object = await _pm.getTypedProperty("mock_env_var_six", "object", {key: "mock_key", value: "mock_value"}, convertToNewObject);
             assert.deepStrictEqual(_object instanceof MockObject, true, "Instanceof MockObject");
             assert.deepStrictEqual(_object, new MockObject("mock_key", "mock_value"), "Mock object has correct values.");
         });

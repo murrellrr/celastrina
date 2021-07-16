@@ -99,13 +99,29 @@ describe("CachePropertyManager", () => {
 
 describe("CachePropertyManager:Accessors", () => {
     let _pm = new MockPropertyManager();
+    _pm.mockProperty("getProperty", "value");
     _pm.mockProperty("getRegExpProperty", "/^Test/g");
     _pm.mockProperty("getBooleanProperty", "true");
     _pm.mockProperty("getNumberProperty", "42");
     _pm.mockProperty("getDateProperty", "1995-12-17T03:24:00");
     _pm.mockProperty("getObject", "{\"key\": \"mock_key\", \"value\": \"mock_value\"}");
     let _cpm = new CachedPropertyManager(_pm);
-
+    describe("#getProperty(key, defaultValue)", () => {
+        it("Should get cached regex from string", async () => {
+            _pm.reset();
+            let _value = await _cpm.getProperty("getProperty");
+            assert.strictEqual(_pm.getPropertyInvoked, true, "_getProperty was invoked.");
+            assert.strictEqual(_pm.lastKey, "getProperty", "Last key looked up was 'getProperty'.");
+            assert.deepStrictEqual(_value, "value", "Value is 'value'.");
+            _pm.reset();
+            _value = await _cpm.getRegExp("getProperty");
+            assert.strictEqual(_pm.getPropertyInvoked, false, "_getProperty was invoked.");
+            assert.strictEqual(_pm.lastKey, null, "Last key looked up should be null.");
+            assert.deepStrictEqual(_value, "value", "Value is 'value'.");
+            let _cache = await _cpm.getCacheInfo("getProperty");
+            assert.strictEqual(_cache instanceof CachedProperty, true, "Hash cached property.");
+        });
+    });
     describe("#getRegExp(key, defaultValue)", () => {
         it("Should get cached regex from string", async () => {
             _pm.reset();
@@ -189,6 +205,51 @@ describe("CachePropertyManager:Accessors", () => {
             assert.deepStrictEqual(_value, new MockObject("mock_key", "mock_value"), "Value is MockObject from cahce.");
             let _cache = await _cpm.getCacheInfo("getObject");
             assert.strictEqual(_cache instanceof CachedProperty, true, "Hash cached property.");
+        });
+    });
+    describe("#getTypedProperty(key, typename, defaultValue, factory)", () => {
+        it("Gets property", async () => {
+            assert.strictEqual(await _cpm.getTypedProperty("getProperty", "property"), "value");
+        });
+        it("Gets property with string name", async () => {
+            assert.strictEqual(await _cpm.getTypedProperty("getProperty", "string"), "value");
+        });
+        it("Gets number", async () => {
+            assert.strictEqual(await _cpm.getTypedProperty("getNumberProperty", "number"), 42);
+        });
+        it("Gets boolean", async () => {
+            assert.strictEqual(await _cpm.getTypedProperty("getBooleanProperty", "boolean"), true);
+        });
+        it("Gets RegExp", async () => {
+            let _comp = new RegExp("/^Test/g");
+            let _regexp = await _cpm.getTypedProperty("getRegExpProperty", "regexp");
+            assert.strictEqual(_regexp instanceof RegExp, true, "Instance of RegExp");
+            assert.deepStrictEqual(_regexp, _comp, "Same expression.");
+        });
+        it("Gets MockObject from JSON", async () => {
+            let _object = await _cpm.getTypedProperty("getObject", "object", null, createMockObject);
+            assert.deepStrictEqual(_object instanceof MockObject, true, "Instanceof MockObject");
+            assert.deepStrictEqual(_object, new MockObject("mock_key", "mock_value"), "Mock object has correct values.");
+        });
+        it("Gets string default", async () => {
+            assert.strictEqual(await _cpm.getTypedProperty("getProperty", "string", "mock_env_val_one"), "value");
+        });
+        it("Gets number default", async () => {
+            assert.strictEqual(await _cpm.getTypedProperty("getNumberProperty", "number", 42), 42);
+        });
+        it("Gets boolean default", async () => {
+            assert.strictEqual(await _cpm.getTypedProperty("getBooleanProperty", "boolean", true), true);
+        });
+        it("Gets RegExp default", async () => {
+            let _comp = new RegExp("/^Test/g");
+            let _regexp = await _pm.getTypedProperty("getRegExpProperty", "regexp", new RegExp("/^Test/g"));
+            assert.strictEqual(_regexp instanceof RegExp, true, "Instance of RegExp");
+            assert.deepStrictEqual(_regexp, _comp, "Same expression.");
+        });
+        it("Gets MockObject from JSON default", async () => {
+            let _object = await _cpm.getTypedProperty("getObject", "object", {key: "mock_key", value: "mock_value"}, createMockObject);
+            assert.deepStrictEqual(_object instanceof MockObject, true, "Instanceof MockObject");
+            assert.deepStrictEqual(_object, new MockObject("mock_key", "mock_value"), "Mock object has correct values.");
         });
     });
 });

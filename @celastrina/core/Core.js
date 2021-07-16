@@ -428,19 +428,20 @@ class PropertyManager {
     async ready(azcontext, config) {}
     /**
      * @param {string} key
-     * @return {Promise<*>}
+     * @return {null|*}
      * @abstract
      */
     async _getProperty(key) {throw CelastrinaError.newError("Not Implemented.", 501);}
     /**
      * @param {string} key
-     * @param {null|string} [defaultValue = null]
-     * @return {Promise<string>}
+     * @param {(null|*)} defaultValue
+     * @return {{value: (null|*), defaulted: boolean}}
+     * @private
      */
-    async getProperty(key, defaultValue = null) {
+    async _getPropertyOrDefault(key, defaultValue = null){
         let value = await this._getProperty(key);
-        if(typeof value === "undefined" || value == null) return defaultValue;
-        else return value;
+        if(typeof value === "undefined" || value == null) return {value: defaultValue, defaulted: true};
+        else return {value: value, defaulted: false};
     }
     /**
      * @param {string} key
@@ -450,13 +451,21 @@ class PropertyManager {
      *          Int8ArrayConstructor|Uint8ArrayConstructor|Uint8ClampedArrayConstructor|Int16ArrayConstructor|
      *          Uint16ArrayConstructor|Int32ArrayConstructor|Uint32ArrayConstructor|Float32ArrayConstructor|
      *          Float64ArrayConstructor|FunctionConstructor|function(...*))} [type = String]
-     * @return {Promise<*>}
+     * @return {null|*}
      */
     async _getConvertProperty(key, defaultValue = null, type = null) {
-        let _value = await this.getProperty(key);
-        if(_value == null) return defaultValue;
-        if(type == null) return _value;
-        return type(_value);
+        let _response = await this._getPropertyOrDefault(key, defaultValue);
+        if(_response.defaulted) return _response.value;
+        else return type(_response.value);
+    }
+    /**
+     * @param {string} key
+     * @param {null|string} [defaultValue = null]
+     * @return {Promise<string>}
+     */
+    async getProperty(key, defaultValue = null) {
+        let _response = await this._getPropertyOrDefault(key, defaultValue);
+        return _response.value;
     }
     /**
      * @param {string} key
@@ -493,16 +502,43 @@ class PropertyManager {
     /**
      * @param {string} key
      * @param {Object} [defaultValue = null]
-     * @param {function(*)} [construct]
+     * @param {function(*)} [factory]
      * @return {Promise<Object>}
      */
-    async getObject(key, defaultValue = null, construct = null) {
+    async getObject(key, defaultValue = null, factory = null) {
         let _object = await this._getConvertProperty(key, defaultValue, JSON.parse);
-        if(_object != null && construct != null) {
-            if(Array.isArray(construct)) _object = construct[0](_object);
-            else _object = construct(_object);
+        if(_object != null && factory != null) {
+            if(Array.isArray(factory)) _object = factory[0](_object);
+            else _object = factory(_object);
         }
         return _object;
+    }
+    /**
+     * @param {string} key
+     * @param {("property"|"string"|"date"|"regexp"|"number"|"boolean"|"object")} typename
+     * @param {(null|*)} defaultValue
+     * @param {function((null|*))} factory
+     * @return {Promise<void>}
+     */
+    async getTypedProperty(key, typename = "property", defaultValue = null, factory = null) {
+        switch(typename) {
+            case "property":
+                return this.getProperty(key, defaultValue);
+            case "string":
+                return this.getProperty(key, defaultValue);
+            case "date":
+                return this.getDate(key, defaultValue);
+            case "regexp":
+                return this.getRegExp(key, defaultValue);
+            case "number":
+                return this.getNumber(key, defaultValue);
+            case "boolean":
+                return this.getBoolean(key, defaultValue);
+            case "object":
+                return this.getObject(key, defaultValue, factory);
+            default:
+                throw CelastrinaError.newError("Property type '" + typename + "' is invalid.", 400);
+        }
     }
     /**
      * @param {string} dateTimeString
@@ -820,8 +856,17 @@ class CachedPropertyManager extends PropertyManager {
     async getObject(key, defaultValue = null, construct = null) {
         return this._getCache(key, defaultValue, "getObject", construct);
     }
+    /**
+     * @param {string} key
+     * @param {("property"|"string"|"date"|"regexp"|"number"|"boolean"|"object")} typename
+     * @param {(null|*)} defaultValue
+     * @param {function((null|*))} factory
+     * @return {Promise<void>}
+     */
+    async getTypedProperty(key, typename = "property", defaultValue = null, factory = null) {
+        return super.getTypedProperty(key, typename, defaultValue, factory);
+    }
 }
-
 /**
  * PropertyManagerFactory
  * @abstract
@@ -853,9 +898,7 @@ class PropertyManagerFactory extends ConfigurationItem {
      * @private
      */
     _createCache(manager, source) {
-        // Checking to see if there is a cache object.
         if(source.hasOwnProperty("cache") && typeof source.cache === "object" && source.cache != null) {
-            // Getting the attributes for the cache.
             /**@type{CachedProperty}*/let cache = source.cache;
             if(!cache.hasOwnProperty("ttl") || typeof cache.ttl !== "number")
                 throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.ttl");
@@ -866,7 +909,9 @@ class PropertyManagerFactory extends ConfigurationItem {
         else
             return manager;
     }
-    /**@return{PropertyManager}*/
+    /**
+     * @return{PropertyManager}
+     */
     createPropertyManager() {
         let lname = this._name;
         if(typeof lname === "undefined" || lname == null)
@@ -888,7 +933,8 @@ class AppConfigPropertyManagerFactory extends PropertyManagerFactory {
     constructor(name = "celastrinajs.core.property.appconfig.config"){super(name);}
     /**@return{string}*/getName() {return "AppConfigPropertyManagerFactory";}
     /**
-     * @param {{subscriptionId:string, resourceGroupName:string, configStoreName:string, label:(null|undefined|string), useVault:(null|undefined|boolean)}} source
+     * @param {{subscriptionId:string, resourceGroupName:string, configStoreName:string, label:(null|undefined|string),
+     *          useVault:(null|undefined|boolean)}} source
      * @return {PropertyManager}
      */
     _createPropertyManager(source) {
@@ -1777,8 +1823,8 @@ class ContentLoader {
         else if(this._link != null)
             return this._link.load(_Object, azcontext, config);
         else
-            azcontext.log.warn("[ContentLoader.load(_Object, azcontext, config)]: No ContentLoader found for type '" +
-                                _Object._content.type + "'.", 404);
+            throw CelastrinaError.newError("No ContentLoader found for type '" + _Object._content.type +
+                                                   "'.", 404);
     }
     /**
      * @param {Object} _Object
@@ -1795,7 +1841,7 @@ class ContentLoader {
  */
 class CoreContentLoader extends ContentLoader {
     constructor() {
-        super("application/com.celastrinajs.core+json;utf-8");
+        super("application/com.celastrinajs.core.configuration+json;utf-8");
     }
     /**
      * @typedef CoreAuthentication
@@ -1833,6 +1879,20 @@ class CoreContentLoader extends ContentLoader {
  */
 class ConfigurationLoader {
     /**
+     * @typedef _Content
+     * @property {string} [type]
+     * @property {string} [version]
+     */
+    /**
+     * @typedef ContentType
+     * @property {_Content} [_content]
+     */
+    /**
+     * @typedef ConfigurationJson
+     * @property {Array.<*>} [references]
+     * @property {Array.<ContentType>} [configurations]
+     */
+    /**
      * @param {string} property
      */
     constructor(property) {
@@ -1852,26 +1912,6 @@ class ConfigurationLoader {
         this._loader.addLink(loader);
         return this;
     }
-    async _getProperties(properties, pm) {
-        //
-    }
-    async _replaceReferences() {
-        //
-    }
-    /**
-     * @typedef _Content
-     * @property {string} [type]
-     * @property {string} [version]
-     */
-    /**
-     * @typedef ContentType
-     * @property {_Content} [_content]
-     */
-    /**
-     * @typedef ConfigurationJson
-     * @property {Array.<*>} [properties]
-     * @property {Array.<ContentType>} [configurations]
-     */
     /**
      * @param {PropertyManager} pm
      * @param {_AzureFunctionContext} azcontext
@@ -1884,30 +1924,82 @@ class ConfigurationLoader {
             throw CelastrinaError.newError("[ConfigurationLoader]: Invalid property '" + this._property + "'.", 400);
         if(!_funcconfig.hasOwnProperty("configurations") || !Array.isArray(_funcconfig.configurations))
             throw CelastrinaError.newError("[ConfigurationLoader]: Property 'configurations' is required and must be an array.", 400);
-        /**@type{Array.<ContentType>}*/let _configuration = _funcconfig.configurations;
-        if(_funcconfig.hasOwnProperty("properties")) {
-            if(!Array.isArray(_funcconfig.properties))
-                throw CelastrinaError.newError("[ConfigurationLoader]: Property 'references' is must be an array.", 400);
-            let _reference = await this._getProperties(_funcconfig.properties, pm);
+        /**@type{Array.<ContentType>}*/let _configurations = _funcconfig.configurations;
+        if(!_funcconfig.hasOwnProperty("references") || !Array.isArray(_funcconfig.references))
+            throw CelastrinaError.newError("[ConfigurationLoader]: Property 'references' must be an array.", 400);
+        /**@type{Array.<ContentType>}*/let _references = _funcconfig.references;
+
+        let promises = [];
+        for(let _idx = 0; _idx < _references.length; ++_idx) {
+            promises.unshift(ConfigurationLoader._validateContentObject(_idx, _references[_idx]));
         }
-        let _promises = [];
-        let _contentIndex = 0;
-        for(let index in _configuration) {
-            let _Object = /**@type{(null|ContentType)}*/_configuration[index];
-            if(typeof _Object === "undefined" || _Object == null)
-                throw CelastrinaError.newError("[configurations(" + index + ")]: Object was null or undefined.", 400);
-            if(!_Object.hasOwnProperty("_content"))
-                throw CelastrinaError.newError("[configurations(" + index + ")]: Property '_content' is required.", 400);
-            let _content = _Object._content;
-            if(!_content.hasOwnProperty("type") || (typeof _content.type !== "string") ||
-                    _content.type.trim().length === 0)
-                throw CelastrinaError.newError("[configurations(" + index + ")]: Property '_content.type' is required.", 400);
-            if(!_content.hasOwnProperty("version") || (typeof _content.version !== "string") ||
-                    _content.version.trim().length === 0)
-                throw CelastrinaError.newError("[configurations(" + index + ")]: Property '_content.version' is required.", 400);
-            _promises.unshift(this._loader.load(_Object, azcontext, config));
+        await Promise.all(promises);
+        promises = [];
+        for(let _idx = 0; _idx < _configurations.length; ++_idx) {
+            promises.unshift(ConfigurationLoader._validateContentObject(_idx, _configurations[_idx]));
         }
-        await Promise.all(_promises);
+        await Promise.all(promises);
+        await ConfigurationLoader._replaceReferences(_references, _configurations, pm);
+        promises = [];
+        for(let _idx = 0; _idx < _configurations.length; ++_idx) {
+            promises.unshift(this._loader.load(_configurations[_idx], azcontext, config));
+        }
+        await Promise.all(promises);
+    }
+    /**
+     * @param {number} index
+     * @param {Object} _Object
+     * @private
+     */
+    static async _validateContentObject(index, _Object) {
+        if(typeof _Object === "undefined" || _Object == null)
+            throw CelastrinaError.newError("[" + index + "]: Object was null or undefined.", 400);
+        if(!_Object.hasOwnProperty("_content"))
+            throw CelastrinaError.newError("[" + index + "]: Property '_content' is required.", 400);
+        let _content = _Object._content;
+        if(!_content.hasOwnProperty("type") || (typeof _content.type !== "string") || _content.type.trim().length === 0)
+            throw CelastrinaError.newError("[" + index + "]: Property '_content.type' is required.", 400);
+        if(!_content.hasOwnProperty("version") || (typeof _content.version !== "string") || _content.version.trim().length === 0)
+            throw CelastrinaError.newError("[" + index + "]: Property '_content.version' is required.", 400);
+    }
+    /**
+     * @param {Object} configuration
+     * @param {string} reference
+     * @param {*} value
+     * @param {Array.<Promise<*>>} promises
+     * @return {void}
+     * @private
+     */
+    static _replace(configuration, reference, value, promises) {
+        for(let _prop in configuration) {
+            if(configuration.hasOwnProperty(_prop)) {
+                let _value = configuration[_prop];
+                if(typeof _value === "object" && _value != null) {
+                    // TODO : Inspect to see if its a reference.
+                }
+            }
+        }
+    }
+    /**
+     * @param {Array.<Object>} references
+     * @param {Array.<Object>} configurations
+     * @param {PropertyManager} pm
+     * @return {Promise<void>}
+     * @private
+     */
+    static async _replaceReferences(references, configurations, pm) {
+        let _propPromises = [];
+        for(let _idx = 0; _idx < references.length; ++_idx) {
+            /**@type{{reference:string,key:string,type:string}}*/let _property = references[_idx];
+            _propPromises.unshift(pm.getTypedProperty(_property.key, _property.type));
+        }
+        _propPromises = await Promise.all(_propPromises);
+        let _confPromises = [];
+        for(let _idx = 0; _idx < references.length; ++_idx) {
+            ConfigurationLoader._replace(configurations, references[_idx].reference, _propPromises[_idx],
+                                         _confPromises);
+        }
+        await Promise.all(_confPromises);
     }
 }
 module.exports = {

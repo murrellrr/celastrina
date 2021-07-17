@@ -1,57 +1,19 @@
 {
-  "properties": [
-    {
-      "_content": {
-        "type": "application/com.celastrinajs.core.configuration.property+json;utf-8",
-        "version": "1.0.0"
-      },
-      "reference": "mock_reference_resource",
-      "type": "property",
-      "key": "mock_resources"
-    },
-    {
-      "_content": {
-        "type": "application/com.celastrinajs.core.configuration.property+json;utf-8",
-        "version": "1.0.0"
-      },
-      "reference": "mock_reference_permissions",
-      "type": "property",
-      "key": "mock_permissions"
-    }
+  "references": [
+    {"name": "mock_reference_resource", "key": "mock_resources", "type": "property" },
+    {"name": "mock_reference_permissions", "key": "mock_permissions", "type": "property"}
   ],
   "configurations": [
     {
-      "_content": {
-        "type": "application/com.celastrinajs.core.configuration+json;utf-8",
-        "version": "1.0.0"
-      },
       "name": "mock_configuration",
       "resources": [
-        {
-          "_content": {
-            "type": "application/com.celastrinajs.core.configuration.reference+json;utf-8",
-            "version": "1.0.0"
-          },
-          "reference": "mock_reference_resource"
-        }
+        {"reference": "mock_reference_resource", "expand": true}
       ],
       "authentication": {
         "optimistic": true,
         "permissions": [
-          {
-            "_content": {
-              "type": "application/com.celastrinajs.core.configuration.reference+json;utf-8",
-              "version": "1.0.0"
-            },
-            "reference": "mock_reference_permissions"
-          }
+          {"reference": "mock_reference_permissions", "expand": true}
         ]
-      }
-    },
-    {
-      "_content": {
-        "type": "application/com.celastrinajs.http.configuration+json;utf-8",
-        "version": "1.0.0"
       }
     }
   ]

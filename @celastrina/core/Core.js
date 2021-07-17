@@ -1947,7 +1947,7 @@ class ConfigurationLoader {
         await Promise.all(promises);
     }
     /**
-     * @param {number} index
+     * @param {*} index
      * @param {Object} _Object
      * @private
      */
@@ -1963,19 +1963,38 @@ class ConfigurationLoader {
             throw CelastrinaError.newError("[" + index + "]: Property '_content.version' is required.", 400);
     }
     /**
-     * @param {Object} configuration
-     * @param {string} reference
+     * @param {Object} _object
+     * @param {Object} references
      * @param {*} value
      * @param {Array.<Promise<*>>} promises
      * @return {void}
      * @private
      */
-    static _replace(configuration, reference, value, promises) {
-        for(let _prop in configuration) {
-            if(configuration.hasOwnProperty(_prop)) {
-                let _value = configuration[_prop];
+    static async _replace(_object, references, value, promises) {
+        for(let _prop in _object) {
+            if(_object.hasOwnProperty(_prop)) {
+                let _value = _object[_prop];
                 if(typeof _value === "object" && _value != null) {
-                    // TODO : Inspect to see if its a reference.
+                    if(_value.hasOwnProperty("reference")) {
+                        let index = _object.constructor.name + "." + _prop;
+                        await ConfigurationLoader._validateContentObject(index, _value);
+                        if(_value._content.type === "application/com.celastrinajs.core._object.reference+json;utf-8") {
+                            let _rv = references[_value.reference];
+                            if(typeof _rv === "undefined" || _rv == null)
+                                throw CelastrinaError.newError("[" + index + "]: Invalid property reference '" +
+                                                                        _value.reference + "'.", 400);
+                            else {
+                                if(_value.hasOwnProperty("expand") && typeof _value.expand === "boolean" &&
+                                        _value.expand && Array.isArray(_object))
+                                     _object.splice(_prop, 1, ..._value);
+                                else
+                                    _object[_prop] = _value;
+                            }
+                        }
+                        else
+                            throw CelastrinaError.newError("[" + index + "]: Invalid content type.", 400);
+                    }
+                    else ConfigurationLoader._replace(_value, references, value, promises);
                 }
             }
         }
@@ -1995,10 +2014,10 @@ class ConfigurationLoader {
         }
         _propPromises = await Promise.all(_propPromises);
         let _confPromises = [];
-        for(let _idx = 0; _idx < references.length; ++_idx) {
-            ConfigurationLoader._replace(configurations, references[_idx].reference, _propPromises[_idx],
-                                         _confPromises);
-        }
+        // for(let _idx = 0; _idx < references.length; ++_idx) {
+        //     ConfigurationLoader._replace(configurations, references[_idx].reference, _propPromises[_idx],
+        //                                  _confPromises);
+        // }
         await Promise.all(_confPromises);
     }
 }

@@ -27,3 +27,28 @@ jobs:
              npm run build --if-present
              npm test
       working-directory: "@celastrina/core"
+    - run: |
+        npm ci
+        npm run build --if-present
+        npm test
+      working-directory: "@celastrina/http"
+    - run: |
+        npm ci
+        npm run build --if-present
+        npm test
+      working-directory: "@celastrina/message"
+    - run: |
+        npm ci
+        npm run build --if-present
+        npm test
+      working-directory: "@celastrina/semaphore"
+    - run: |
+        npm ci
+        npm run build --if-present
+        npm test
+      working-directory: "@celastrina/timer"
+    - run: |
+        npm ci
+        npm run build --if-present
+        npm test
+      working-directory: "@celastrina/transact"

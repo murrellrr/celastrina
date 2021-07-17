@@ -4,7 +4,7 @@
   "description": "Javascript Framework for simplifying Microsoft Azure Functions and supporting resources.",
   "main": "Core.js",
   "scripts": {
-    "build": "exit 1",
+    "build": "exit 0",
     "test": "mocha"
   },
   "repository": {

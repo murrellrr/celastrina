@@ -15,7 +15,6 @@ jobs:
     strategy:
       matrix:
         node-version: [12.x, 14.x, 16.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
     steps:
     - uses: actions/checkout@v2
     - name: Use Node.js ${{ matrix.node-version }}
@@ -26,4 +25,4 @@ jobs:
     - run: npm ci
            npm run build --if-present
            npm test
-      working-directory: "./@celastrina/core"
+      working-directory: "./\@celastrina/core"

@@ -203,7 +203,7 @@ describe("BaseContext", () => {
                 let _config = new Configuration("mock_configuration");
                 let _azcontext = new MockAzureFunctionContext();
                 let _context = new BaseContext(_azcontext, _config);
-                it("has trace ID", () => {
+                it("Monitor is true and response not null.", () => {
                     _context._monitor = true;
                     _context.initialize();
                     assert.strictEqual(_context.isMonitorInvocation, true);

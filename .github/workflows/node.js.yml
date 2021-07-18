@@ -27,4 +27,4 @@ jobs:
         npm run build --if-present
         npm test
       working-directory: "@celastrina/core"
-    - run: cp -R @celastrina ./dist
+    - run: cp -R @celastrina dist/

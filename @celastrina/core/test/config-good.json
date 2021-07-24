@@ -1,34 +1,33 @@
 {
-  "references": [
-    {"_content": {
-        "type": "application/com.celastrinajs.core.configuration.property+json;utf-8",
-        "version": "1.0.0"},
-      "name": "mock_reference_resource", "type": "property", "key": "mock_resources"},
-    {"_content": {
-        "type": "application/com.celastrinajs.core.configuration.property+json;utf-8",
-        "version": "1.0.0"},
-      "name": "mock_reference_permissions", "type": "property", "key": "mock_permissions"}
-  ],
   "configurations": [
     {
-      "_content": {
-        "type": "application/com.celastrinajs.core.configuration+json;utf-8",
+      "configuration": {
+        "type": "application/celastrinajs.core+json;Configuration",
         "version": "1.0.0"
       },
       "name": "mock_configuration",
-      "resources": [
-        {"_content": {
-            "type": "application/com.celastrinajs.core.configuration.reference+json;utf-8",
-            "version": "1.0.0"},
-          "reference": "mock_reference_resource", "expand": true}
-      ],
+      "resources":[],
       "authentication": {
         "optimistic": true,
         "permissions": [
           {"_content": {
-              "type": "application/com.celastrinajs.core.configuration.reference+json;utf-8",
+              "type": "application/celastrinajs.core+json;Permission",
               "version": "1.0.0"},
-            "reference": "mock_reference_resource", "expand": true}
+            "action": "mock-process-1", "roles": ["role-1", "role-2", "role-3"], "match": {"type": "MatchAny"}},
+          {"_content": {
+              "type": "application/celastrinajs.core+json;Permission",
+              "version": "1.0.0"},
+            "action": "mock-process-2", "roles": ["role-4", "role-5", "role-6"], "match": {"type": "MatchAll"}},
+          {"_content": {
+              "type": "application/celastrinajs.core+json;Permission",
+              "subtype": "application/celastrinajs.core+json;Property",
+              "version": "1.0.0"},
+            "key": "mock_permission", "type": "object"},
+          {"_content": {
+            "type": "application/celastrinajs.core+json;Permission",
+            "subtype": "application/celastrinajs.core+json;Property",
+            "version": "1.0.0"},
+            "key": "mock_permission_expand", "type": "object", "expand": true}
         ]
       }
     }

@@ -54,6 +54,16 @@ function convertToNewObject(_Object) {
     return new MockObject(_Object.key, _Object.value);
 }
 
+class MockFactory {
+    constructor() {}
+    convertInstance(o) {
+        return new MockObject(o.key, o.value);
+    }
+    static convertStatic(o) {
+        return new MockObject(o.key, o.value);
+    }
+}
+
 describe("PropertyManager", () => {
     describe("#getProperty(key, defaultValue = null)", () => {
         it("Rejects with Not Implemented exception", () => {
@@ -104,8 +114,19 @@ describe("AppSettingsPropertyManager", () => {
         it("Gets object from JSON", async () => {
             assert.deepStrictEqual(await _pm.getObject("mock_env_var_four"), {key: "mock_key", value: "mock_value"});
         });
-        it("Gets MockObject from JSON", async () => {
+        it("Gets MockObject from JSON using function", async () => {
             let _object = await _pm.getObject("mock_env_var_four", null, convertToNewObject);
+            assert.deepStrictEqual(_object instanceof MockObject, true, "Instanceof MockObject");
+            assert.deepStrictEqual(_object, new MockObject("mock_key", "mock_value"), "Mock object has correct values.");
+        });
+        it("Gets MockObject from JSON using Static member", async () => {
+            let _object = await _pm.getObject("mock_env_var_four", null, MockFactory.convertStatic);
+            assert.deepStrictEqual(_object instanceof MockObject, true, "Instanceof MockObject");
+            assert.deepStrictEqual(_object, new MockObject("mock_key", "mock_value"), "Mock object has correct values.");
+        });
+        it("Gets MockObject from JSON using Instance member", async () => {
+            let _factory = new MockFactory();
+            let _object = await _pm.getObject("mock_env_var_four", null, _factory.convertInstance);
             assert.deepStrictEqual(_object instanceof MockObject, true, "Instanceof MockObject");
             assert.deepStrictEqual(_object, new MockObject("mock_key", "mock_value"), "Mock object has correct values.");
         });

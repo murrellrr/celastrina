@@ -513,10 +513,7 @@ class PropertyManager {
      */
     async getObject(key, defaultValue = null, factory = null) {
         let _object = await this._getConvertProperty(key, defaultValue, JSON.parse);
-        if(_object != null && factory != null) {
-            if(Array.isArray(factory)) _object = factory[0](_object);
-            else _object = factory(_object);
-        }
+        if(_object != null && factory != null) _object = factory(_object);
         return _object;
     }
     /**
@@ -1135,7 +1132,7 @@ class Configuration {
             /**@type{ResourceManager}*/let _rm = this._getResourceManager(azcontext);
             /**@type{PermissionManager}*/let _prm = this._getPermissionManager(azcontext);
             let _name = this._config[Configuration.CONFIG_NAME];
-            if(typeof _name !== "string" || _name.trim().length === 0) {
+            if(typeof _name !== "string" || _name.trim().length === 0 || _name.indexOf(' ') >= 0) {
                 azcontext.log.error("[Configuration.load(azcontext)]: Invalid Configuration. Name cannot be undefined, null, or 0 length.");
                 throw CelastrinaValidationError.newValidationError("Name cannot be undefined, null, or 0 length.", Configuration.CONFIG_NAME);
             }
@@ -1815,109 +1812,147 @@ class BaseFunction {
         return ex;
     }
 }
+
 /**
- * ContentParser
- * @abstract
+ * ParserChain
  * @author Robert R Murrell
+ * @abstract
  */
-class ContentParser {
+class ParserChain {
     /**
-     * @param {string} type
-     * @param {string} version
-     * @param {ContentParser} link
+     * @param {string} [mime="application/celastrinajs+json"]
+     * @param {string} [type="Object"]
+     * @param {ParserChain} [link=null]
+     * @param {string} [version="1.0.0"]
      */
-    constructor(type = "application/json;utf-8", version = "1.0.0", link = null) {
+    constructor(mime = "application/celastrinajs+json", type = "Object", link = null,
+                version = "1.0.0") {
+        /**@type{string}*/this._mime = mime;
         /**@type{string}*/this._type = type;
         /**@type{string}*/this._version = version;
-        /**@type{ContentParser}*/this._link = link;
+        /**@type{ParserChain}*/this._link = link;
         /**@type{PropertyManager}*/this._pm = null;
         /**@type{_AzureFunctionContext}*/this._azcontext = null;
         /**@type{Object}*/this._config = null;
     }
     /**
-     * @param {PropertyManager} pm
      * @param {_AzureFunctionContext} azcontext
-     * @param {Object} config
+     * @apram {Object} config
      */
-    initialize(pm, azcontext, config) {
-        this._pm = pm;
+    initialize(azcontext, config) {
+        this._pm = config[Configuration.CONFIG_PROPERTY];
         this._azcontext = azcontext;
         this._config = config;
         if(this._link != null)
-            this._link.initialize(pm, azcontext, config);
+            this._link.initialize(azcontext, config);
     }
     /**
-     * @param {ContentParser} link
+     * @param {ParserChain} link
      */
     addLink(link) {
         (this._link == null)? this._link = link : this._link.addLink(link);
     }
+    /**@return{string}*/get mime() {return this._mime;}
     /**@return{string}*/get type() {return this._type;}
     /**@return{string}*/get version() {return this._version;}
     /**@return{PropertyManager}*/get propertyManager() {return this._pm;}
     /**@return{_AzureFunctionContext}*/get azureFunctionContext() {return this._azcontext;}
     /**@return{Object}*/get config() {return this._config;}
     /**
-     * @param {Object} _Object
-     * @private
+     * @param {{_content:{type:string,version:string}}} _Object
+     * @return {Promise<*>}
      */
-    static _validate(_Object) {
+    async parse(_Object) {
         if(typeof _Object === "undefined" || _Object == null)
             throw CelastrinaValidationError.newValidationError(
-                "[ContentParser._validate(_Object)][_Object]: Invalid argument. Argument cannot be 'undefined' or null.",
+                "[ParserChain.parse(_Object, config)][_Object]: Invalid argument. Argument cannot be 'undefined' or null.",
                 "_Object");
         if(!_Object.hasOwnProperty("_content") || _Object._content == null)
             throw CelastrinaValidationError.newValidationError(
-                "[ContentParser._validate(_Object)][_content]: Invalid object. Attribute cannot be undefined or null.",
+                "[ParserChain.parse(_Object, config)][_content]: Invalid object. Attribute cannot be undefined or null.",
                 "_Object._content");
         let _content = _Object._content;
         if(!_content.hasOwnProperty("type") || (typeof _content.type !== "string") || _content.type.trim().length === 0)
             throw CelastrinaValidationError.newValidationError(
-                "[ContentParser._validate(_Object)][_content.type]: Invalid string. Attribute cannot be null or zero length.",
+                "[ParserChain.parse(_Object, config)][_content.type]: Invalid string. Attribute cannot be null or zero length.",
                 "_Object._content.type");
         if(!_content.hasOwnProperty("version") || (typeof _content.version !== "string") || _content.version.trim().length === 0)
             throw CelastrinaValidationError.newValidationError(
-                "[ContentParser._validate(_Object)][_content.version]: Invalid string. Attribute cannot be null or zero length.",
+                "[ParserChain.parse(_Object, config)][_content.version]: Invalid string. Attribute cannot be null or zero length.",
                 "_Object._content.version");
+        let _types = _Object._content.type.trim();
+        _types = _types.replaceAll(" ", "");
+        _types = _types.split(";");
+        let _mime = _types[0];
+        let _type = _types[1];
+        let _subtypes = _type.split("+");
+        let _target = _Object;
+        if(_mime !== this._mime)
+            throw CelastrinaValidationError.newValidationError(
+                "[ParserChain.parse(_Object, config)][_content.type]: Invalid mime type. Expected '" +
+                this._mime + "', but got '" + _mime + "'.",
+                "_content.type+mime");
+        if(_Object._content.version !== this._version)
+            throw CelastrinaValidationError.newValidationError(
+                "[ParserChain.parse(_Object, config)][_content.version]: Unsupported version. Expected '" +
+                        this._version + "', but got '" + _Object._content.version + "'.",
+                    "_content.version");
+        for(let _subtype of _subtypes) {
+            _target = await this._parse(_subtype, _target);
+        }
+        return _target;
+    }
+    /**
+     * @param {string} subtype
+     * @param {Object} _Object
+     * @return {Promise<*>}
+     */
+    async _parse(subtype, _Object) {
+        if(subtype === this._type)
+            return this._create(_Object);
+        else if(this._link != null)
+            return this._link._parse(subtype, _Object);
+        else
+            throw CelastrinaValidationError.newValidationError(
+                "[ParserChain._parse(subtype, _Object, config)][_content.type]: Unsupported subtype '" + subtype + "'.",
+                    "_content.type+subtype");
     }
     /**
      * @param {{_content:{type:string,version:string}}} _Object
      * @return {Promise<*>}
-     */
-    async load(_Object) {
-        ContentParser._validate(_Object);
-        if(_Object._content.type === this._type && _Object._content.version === this._version)
-            return this._load(_Object);
-        else if(this._link != null)
-            return this._link.load(_Object);
-        else
-            throw CelastrinaError.newError("No ContentParser found for type '" + _Object._content.type +
-                                                   "'.", 404);
-    }
-    /**
-     * @param {Object} _Object
-     * @param {Object} [parent=null]
-     * @return {Promise<*>}
      * @abstract
      */
-    async _load(_Object, parent = null) {
-        throw CelastrinaError.newError("Not Implemented.", 501);
+    async _create(_Object) {
+        throw CelastrinaError.newError("[ParserChain._create(_Object,)]: Not Implemented.", 501);
     }
 }
 /**
- * PropertyContentParser
+ * AttributeParser
+ * @abstract
  * @author Robert R Murrell
  */
-class PropertyContentParser extends ContentParser {
-    static CONTENT_TYPE = "application/celastrinajs.core+json;Property";
+class AttributeParser extends ParserChain {
+    static _CONFIG_PARSER_ATTRIBUTE_TYPE = "application/celastrinajs.attribute+json";
     /**
-     * @param {string} type
-     * @param {string} version
-     * @param {ContentParser} link
+     * @param {string} [type="Object"]
+     * @param {AttributeParser} [link=null]
+     * @param {string} [version="1.0.0"]
      */
-    constructor(type = "application/celastrinajs.core+json;Property", version = "1.0.0",
-                link = null) {
-        super(type, version, link);
+    constructor(type = "Object", link = null, version = "1.0.0") {
+        super(AttributeParser._CONFIG_PARSER_ATTRIBUTE_TYPE, type, link, version);
+    }
+}
+/**
+ * PropertyParser
+ * @author Robert R Murrell
+ */
+class PropertyParser extends AttributeParser {
+    /**
+     * @param {PropertyParser} link
+     * @param {string} version
+     */
+    constructor(link = null, version = "1.0.0") {
+        super("Property", link, version);
     }
     /**
      * @param {string} key
@@ -1927,72 +1962,34 @@ class PropertyContentParser extends ContentParser {
      * @return {Promise<*>}
      */
     async getProperty(key, type, defaultValue = null, factory = null) {
-       return this._pm.getTypedProperty(key, type, defaultValue, factory);
+       return await this._pm.getTypedProperty(key, type, defaultValue, factory);
     }
     /**
      * @param {{_content:{type:string,subtype?:string,version:string}, ...}} _Object
-     * @param {Object} [parent=null]
      * @return {Promise<*>}
      * @abstract
      */
-    async _load(_Object, parent) {
+    async _create(_Object) {
         if(!_Object.hasOwnProperty("key") || (typeof _Object.key !== "string") || _Object.key.trim().length === 0)
             throw CelastrinaValidationError.newValidationError(
-                "[PropertyContentParser._load(_Object, azcontext, config)][key]: Invalid string. Attribute cannot be null or zero length.",
-                "Property.key");
+                "[PropertyParser._load(_Object, azcontext, config)][key]: Invalid string. Attribute cannot be null or zero length.",
+                    "Property.key");
         if(!_Object.hasOwnProperty("type") || (typeof _Object.type !== "string") || _Object.type.trim().length === 0)
             _Object.type = "property";
-        return this.getProperty(_Object, _Object.type);
+        return this.getProperty(_Object.key, _Object.type);
     }
 }
 /**
- * PermissionContentParser
- * @author Robert R Murrell
- * @abstract
- */
-class ObjectPropertyContentParser extends PropertyContentParser {
-    static CONTENT_TYPE = "application/celastrinajs.core+json;Object";
-    /**
-     * @param {string} type
-     * @param {string} version
-     * @param {ContentParser} link
-     */
-    constructor(type = ObjectPropertyContentParser.CONTENT_TYPE, version = "1.0.0",
-                link = null) {
-        super(type, version, link);
-    }
-    /**
-     * @param {Object} _Object
-     * @return {*}
-     * @abstract
-     */
-    create(_Object) {
-        throw CelastrinaError.newError("Not Implimented.", 501);
-    }
-    /**
-     * @param {{_content:{type:string,subtype?:string,version:string}, key?:string, type?:string, ...}} _Object
-     * @param {Object} [parent=null]
-     * @return {Promise<*>}
-     */
-    async _load(_Object, parent = null) {
-        if(_Object._content.subtype === PropertyContentParser.CONTENT_TYPE)
-            return this.getProperty(_Object.key, "object", null, this.create);
-        else
-            return this.create(_Object);
-    }
-}
-/**
- * PermissionContentParser
+ * PermissionParser
  * @author Robert R Murrell
  */
-class PermissionContentParser extends ObjectPropertyContentParser {
-    static CONTENT_TYPE = "application/celastrinajs.core+json;Permission";
+class PermissionParser extends AttributeParser {
     /**
      * @param {string} version
-     * @param {ContentParser} link
+     * @param {AttributeParser} link
      */
     constructor(version = "1.0.0", link = null) {
-        super(PermissionContentParser.CONTENT_TYPE, version, link);
+        super("Permission", link, version);
     }
     /**
      * @param {Object} type
@@ -2008,88 +2005,153 @@ class PermissionContentParser extends ObjectPropertyContentParser {
                 return new MatchNone();
             default:
                 throw CelastrinaValidationError.newValidationError(
-                    "[PermissionContentParser._getValueMatch(type)][type]: Invalid object. Unhandled match-type '" +
-                    type + "'.", "Permission.MatchType")
+                    "[PermissionParser._getValueMatch(type)][type]: Invalid object. Unhandled match-type '" +
+                            type + "'.", "Permission.MatchType")
         }
     }
     /**
      * @param {Object} _Permission
-     * @return {Permission}
+     * @return {Promise<Permission>}
      */
-    create(_Permission) {
+    async _create(_Permission) {
         if(typeof _Permission === "undefined" || _Permission == null)
             throw CelastrinaValidationError.newValidationError(
-                "[PermissionContentParser.create(_Permission)][permission]: Invalid object, Attribute cannot be 'undefined' or null.",
-                "Permission.permission");
+                "[PermissionParser.create(_Permission)][permission]: Invalid object, Attribute cannot be 'undefined' or null.",
+                    "Permission.permission");
         if(!_Permission.hasOwnProperty("action") || typeof _Permission.action !== "string" ||
                 _Permission.action.trim().length === 0)
             throw CelastrinaValidationError.newValidationError(
-                "[PermissionContentParser.create(_Permission)][action]: Invalid string. Attribute cannot be null or zero length.",
-                "Permission.action");
+                "[PermissionParser.create(_Permission)][action]: Invalid string. Attribute cannot be null or zero length.",
+                    "Permission.action");
         if(!_Permission.hasOwnProperty("roles") || !Array.isArray(_Permission.roles) ||
                 _Permission.roles.length === 0)
             throw CelastrinaValidationError.newValidationError(
-                "[PermissionContentParser.create(_Permission)][roles]: Ivalid array. Attribute must be string array with at least one element.",
-                "Permission.roles");
+                "[PermissionParser.create(_Permission)][roles]: Ivalid array. Attribute must be string array with at least one element.",
+                    "Permission.roles");
         if(!_Permission.hasOwnProperty("match") || _Permission.match == null)
             throw CelastrinaValidationError.newValidationError(
-                "[PermissionContentParser.create(_Permission)][match]: Invalid object. Attribute cannot be 'undefined' or null.",
-                "Permission.match");
+                "[PermissionParser.create(_Permission)][match]: Invalid object. Attribute cannot be 'undefined' or null.",
+                    "Permission.match");
         let _match = _Permission.match;
         if(!_match.hasOwnProperty("type")  || typeof _match.type !== "string" ||
                 _match.type.trim().length === 0)
             throw CelastrinaValidationError.newValidationError(
-                "[PermissionContentParser.create(_Permission)][match.type]: Invalid string. Attribute cannot be null or zero length.",
-                "Permission.match.type");
-        return new Permission(_Permission.action, _Permission.roles, PermissionContentParser._getValueMatch(_match.type));
+                "[PermissionParser.create(_Permission)][match.type]: Invalid string. Attribute cannot be null or zero length.",
+                    "Permission.match.type");
+        return new Permission(_Permission.action, _Permission.roles, PermissionParser._getValueMatch(_match.type));
     }
 }
 /**
- * AppRegistrationResourceContentParser
+ * AppRegistrationResourceParser
  * @author Robert R Murrell
  */
-class AppRegistrationResourceContentParser extends ObjectPropertyContentParser {
+class AppRegistrationResourceParser extends AttributeParser {
     /**
+     * @param {AttributeParser} link
      * @param {string} version
-     * @param {ContentParser} link
      */
-    constructor(version = "1.0.0", link = null) {
-        super("application/celastrinajs.core+json;AppRegistrationResource", version, link);
+    constructor(link = null, version = "1.0.0") {
+        super("AppRegistrationResource", link, version);
     }
     /**
      * @param {Object} _AppRegistrationResource
-     * @return {AppRegistrationResource}
+     * @return {Promise<AppRegistrationResource>}
      */
-    create(_AppRegistrationResource) {
+    async _create(_AppRegistrationResource) {
         if(!_AppRegistrationResource.hasOwnProperty("id") || typeof _AppRegistrationResource.id !== "string" ||
             _AppRegistrationResource.id.trim().length === 0)
-            throw CelastrinaValidationError.newValidationError("Invalid string. Attribute cannot be null or zero length.",
-                "Resource.id");
+            throw CelastrinaValidationError.newValidationError(
+                "[AppRegistrationResourceParser._create(_AppRegistrationResource)][id]: Invalid string. Attribute cannot be null or zero length.",
+                    "Resource.id");
         if(!_AppRegistrationResource.hasOwnProperty("authority") || typeof _AppRegistrationResource.authority !== "string" ||
             _AppRegistrationResource.authority.trim().length === 0)
-            throw CelastrinaValidationError.newValidationError("Invalid string. Attribute cannot be null or zero length.",
-                "Resource.authority");
+            throw CelastrinaValidationError.newValidationError(
+                "[AppRegistrationResourceParser._create(_AppRegistrationResource)][authority]: Invalid string. Attribute cannot be null or zero length.",
+                    "Resource.authority");
         if(!_AppRegistrationResource.hasOwnProperty("tenant") || typeof _AppRegistrationResource.tenant !== "string" ||
             _AppRegistrationResource.tenant.trim().length === 0)
-            throw CelastrinaValidationError.newValidationError("Invalid string. Attribute cannot be null or zero length.",
-                "Resource.tenant");
+            throw CelastrinaValidationError.newValidationError(
+                "[AppRegistrationResourceParser._create(_AppRegistrationResource)][tenant]: Invalid string. Attribute cannot be null or zero length.",
+                    "Resource.tenant");
         if(!_AppRegistrationResource.hasOwnProperty("secret") || typeof _AppRegistrationResource.secret !== "string" ||
             _AppRegistrationResource.secret.trim().length === 0)
-            throw CelastrinaValidationError.newValidationError("Invalid string. Attribute cannot be null or zero length.",
-                "Resource.secret");
+            throw CelastrinaValidationError.newValidationError(
+                "[AppRegistrationResourceParser._create(_AppRegistrationResource)][secret]: Invalid string. Attribute cannot be null or zero length.",
+                    "Resource.secret");
         return new AppRegistrationResource(_AppRegistrationResource.id, _AppRegistrationResource.authority,
                                            _AppRegistrationResource.tenant, _AppRegistrationResource.secret);
+    }
+}
+
+/**
+ * ConfigParser
+ * @author Robert R Murrell
+ * @abstract
+ */
+class ConfigParser extends ParserChain {
+    static _CONFIG_PARSER_TYPE = "application/celastrinajs.config+json";
+    /**
+     * @param {string} [type="Config"]
+     * @param {ConfigParser} [link=null]
+     * @param {string} [version="1.0.0"]
+     */
+    constructor(type = "Config", link = null, version = "1.0.0") {
+        super(ConfigParser._CONFIG_PARSER_TYPE, type, link, version);
+    }
+}
+/**
+ * CoreConfigParser
+ * @author Robert R Murrell
+ */
+class CoreConfigParser extends ConfigParser {
+    /**
+     * @param {ConfigParser} [link=null]
+     * @param {string} [version="1.0.0"]
+     */
+    constructor(link = null, version = "1.0.0") {
+        super("Core", link, version);
+    }
+    /**
+     * @param _Object
+     * @return {Promise<void>}
+     * @private
+     */
+    async _create(_Object) {
+        if(_Object.hasOwnProperty("resources") && Array.isArray(_Object.resources)) {
+            /**@type{ResourceManager}*/let _rm = this._config[Configuration.CONFIG_RESOURCE];
+            /**@type{Array.<ResourceAuthorization>}*/let _Resources = _Object.resources;
+            for(/**@type{ResourceAuthorization}*/let _resource of _Resources) {
+                _rm.addResource(_resource);
+            }
+        }
+        if(_Object.hasOwnProperty("authentication") && (typeof _Object.authentication === "object") &&
+                _Object.authentication != null) {
+            let _Authentication = _Object.authentication;
+            let _optimistic = false;
+            if(_Authentication.hasOwnProperty("optimistic") && (typeof _Authentication.optimistic === "boolean"))
+                _optimistic = _Authentication.optimistic
+            this._config[Configuration.CONFIG_AUTHORIATION_OPTIMISTIC] = _optimistic;
+            if(_Authentication.hasOwnProperty("permissions") && Array.isArray(_Authentication.permissions)) {
+                /**@type{PermissionManager}*/let _pm = this._config[Configuration.CONFIG_PERMISSION];
+                /**@type{Array.<Permission>}*/let _Permissions = _Object.permissions;
+                for(/**@type{Permission}*/let _permission of _Permissions) {
+                    _pm.addPermission(_permission);
+                }
+            }
+        }
     }
 }
 /**
  * ConfigurationLoader
  * @author Robert R Murrell
  */
-class ConfigurationLoader {
+class ConfigurationLoader extends ConfigurationItem {
+    static CONFIG_CONFIGRATION_LOADER = "";
     /**
      * @param {string} property
      */
     constructor(property) {
+        super();
         if(typeof property !== "string" || property.trim().length === 0)
             throw CelastrinaValidationError.newValidationError(
                 "[ConfigurationLoader][property]: Invalid string. Argument cannot be null or zero length.",
@@ -2099,426 +2161,92 @@ class ConfigurationLoader {
             throw CelastrinaValidationError.newValidationError(
                 "[ConfigurationLoader][property]: Invalid string. Argument cannot contain spaces.",
                 "property");
-        this._pm = null;
-        this._azcontext = null;
-        this._config = null;
-        /**@type{ContentParser}*/this._ctp = new PropertyContentParser();
-        /**@type{ContentParser}*/this._cfp = null;
+        /**@type{AttributeParser}*/this._ctp = new PropertyParser();
+        /**@type{ConfigParser}*/this._cfp = new CoreConfigParser();
     }
-    async initialize(pm, azcontext, config) {
-        this._pm = pm;
-        this._azcontext = azcontext;
-        this._config = config;
-        this._ctp.addLink(new PropertyContentParser());
-        this._ctp.addLink(new PermissionContentParser());
-        this._ctp.addLink(new AppRegistrationResourceContentParser());
-        this._ctp.initialize(this._pm, this._azcontext, this._config);
-        //this._cfp.initialize(this._pm, this._azcontext, this._config);
-    }
-    /**@return{ContentParser}*/get contentParser() {return this._ctp;}
-    /**@return{ContentParser}*/get configParser() {return this._cfp;}
+    /**@return{AttributeParser}*/get contentParser() {return this._ctp;}
+    /**@return{ConfigParser}*/get configParser() {return this._cfp;}
     /**
-     * @param {ContentParser} cp
+     * @param {AttributeParser} cp
      * @return {ConfigurationLoader}
      */
-    addContentParser(cp) {
+    addAttributeParser(cp) {
         this._ctp.addLink(cp);
         return this;
     }
     /**
-     * @param {ContentParser} cp
+     * @param {AttributeParser} cp
      * @return {ConfigurationLoader}
      */
-    addConfigurationParser(cp) {
+    addConfigParser(cp) {
         this._cfp.addLink(cp);
         return this;
     }
     /**
+     * @param {AttributeParser} parser
      * @param {Object} _Object
      * @param {Object} _value
      * @param {*} _prop
      * @return {Promise<void>}
      */
-    async replace(_Object, _value, _prop) {
-        let _lvalue = await this._ctp.load(_value);
+    static async replace(parser, _Object, _value, _prop) {
+        let _lvalue = await parser.parse(_value);
         if(typeof _lvalue === "undefined") _lvalue = null;
-        _Object[_prop] = _lvalue;
+        if(Array.isArray(_lvalue) && Array.isArray(_Object) && _value.hasOwnProperty("expand") &&
+                (typeof _value.expand === "boolean") && _value.expand) {
+            _Object.splice(_prop, 1, ..._lvalue);
+        }
+        else
+            _Object[_prop] = _lvalue;
     }
     /**
+     * @param {AttributeParser} parser
      * @param {Object} config
      * @param {Object} _object
      * @param {Array.<Promise<void>>} promises
      * @return void
      */
-    _parseProperties(config, _object, promises) {
+    static _parseProperties(parser, config, _object, promises) {
         for(let prop in _object) {
             if(_object.hasOwnProperty(prop)) {
                 let value = _object[prop];
                 if(typeof value === "object" && value != null) {
                     if(value.hasOwnProperty("_content") && (typeof value._content === "object") &&
                             value._content != null) {
-                        promises.unshift(this.replace(_object, value, prop));
+                        promises.unshift(ConfigurationLoader.replace(parser, _object, value, prop));
                     }
-                    else this._parseProperties(config, value, promises);
+                    else this._parseProperties(parser, config, value, promises);
                 }
             }
         }
     }
     /**
+     * @param {Object} azcontext
      * @param {Object} config
      * @return {Promise<void>}
      */
-    async load(config) {
+    async load(azcontext, config) {
+        this._ctp.addLink(new PermissionParser());
+        this._ctp.addLink(new AppRegistrationResourceParser());
+        this._ctp.initialize(azcontext, config);
+        this._cfp.initialize(azcontext, config);
         /**@type{(null|undefined|Object)}*/let _funcconfig = await this._pm.getObject(this._property);
         if(_funcconfig == null)
             throw CelastrinaValidationError.newValidationError(
                 "[ConfigurationLoader.load(pm, azcontext, config)][_funcconfig]: Invalid object. Attribute _funcconfig cannot be 'undefined' or null.",
-                this._property);
+                        this._property);
         if(!_funcconfig.hasOwnProperty("configurations") || !Array.isArray(_funcconfig.configurations))
             throw CelastrinaValidationError.newValidationError(
                 "[ConfigurationLoader.load(pm, azcontext, config)][configurations]: Invalid object. Attribute is required and must be an array.",
-                "configurations");
+                    "configurations");
         /**@type{Array.<Object>}*/let _configurations = _funcconfig.configurations;
         let _promises = [];
-        this._parseProperties(config, _configurations, _promises);
+        ConfigurationLoader._parseProperties(this._ctp, config, _configurations, _promises);
         await Promise.all(_promises);
+        _promises = [];
     }
+    /**@return{string}*/get key() {return ConfigurationLoader.CONFIG_CONFIGRATION_LOADER;}
 }
-
-
-// /**
-//  * CoreContentLoader
-//  * @author Robert R Murrell
-//  */
-// class CoreContentLoader extends ContentParser {
-//     /**
-//      * @typedef CoreContentLoader
-//      * @property {string} name
-//      * @property {CoreAuthentication} authentication
-//      * @return {Promise<Permission>}
-//      */
-//     /**
-//      * @typedef CoreAuthentication
-//      * @property {boolean} optimistic
-//      */
-//     /**
-//      */
-//     constructor() {
-//         super("application/com.celastrinajs.core.configuration+json;utf-8");
-//     }
-//     /**
-//      * @param {Object} _resource
-//      * @param {*} index
-//      * @return {Promise<ResourceAuthorization>}
-//      */
-//     static async _getResource(_resource, index) {
-//         if(!_resource.hasOwnProperty("id") || typeof _resource.id !== "string" ||
-//                 _resource.id.trim().length === 0)
-//             throw CelastrinaValidationError.newValidationError("Invalid string. Attribute cannot be null or zero length.",
-//                 "Resource[" + index + "].id");
-//         if(!_resource.hasOwnProperty("authority") || typeof _resource.authority !== "string" ||
-//                 _resource.authority.trim().length === 0)
-//             throw CelastrinaValidationError.newValidationError("Invalid string. Attribute cannot be null or zero length.",
-//                 "Resource[" + index + "].authority");
-//         if(!_resource.hasOwnProperty("tenant") || typeof _resource.tenant !== "string" ||
-//                 _resource.tenant.trim().length === 0)
-//             throw CelastrinaValidationError.newValidationError("Invalid string. Attribute cannot be null or zero length.",
-//                 "Resource[" + index + "].tenant");
-//         if(!_resource.hasOwnProperty("secret") || typeof _resource.secret !== "string" ||
-//                 _resource.secret.trim().length === 0)
-//             throw CelastrinaValidationError.newValidationError("Invalid string. Attribute cannot be null or zero length.",
-//                 "Resource[" + index + "].secret");
-//         return new AppRegistrationResource(_resource.id, _resource.authority, _resource.tenant, _resource.secret);
-//     }
-//     /**
-//      * @param {Object} _resources
-//      * @param {Object} _config
-//      * @return {Promise<void>}
-//      */
-//     static async _setResources(_resources, _config) {
-//
-//     }
-//     /**
-//      * @param {Object} type
-//      * @param {*} index
-//      * @return {Promise<ValueMatch>}
-//      */
-//     static async _getValueMatch(type, index) {
-//         switch(type) {
-//             case "MatchAny":
-//                 return new MatchAny();
-//             case "MatchAll":
-//                 return new MatchAll();
-//             case "MatchNone":
-//                 return new MatchNone();
-//             default:
-//                 throw CelastrinaValidationError.newValidationError("Invalid object. Unhandled match-type '" +
-//                                             type + "'.", "Permission[" + index + "].MatchType")
-//         }
-//     }
-//     /**
-//      * @param {Object} _permission
-//      * @param {*} index
-//      * @return {Promise<Permission>}
-//      */
-//     static async _getPermission(_permission, index) {
-//         if(typeof _permission === "undefined" || _permission == null)
-//             throw CelastrinaValidationError.newValidationError("Invalid object, Attribute cannot be 'undefined' or null.",
-//                                                         "Permission[" + index + "].permission");
-//         if(!_permission.hasOwnProperty("action") || typeof _permission.action !== "string" ||
-//                 _permission.action.trim().length === 0)
-//             throw CelastrinaValidationError.newValidationError("Invalid string. Attribute cannot be null or zero length.",
-//                                                         "Permission[" + index + "].action");
-//         if(!_permission.hasOwnProperty("roles") || !Array.isArray(_permission.roles) ||
-//                 _permission.roles.length === 0)
-//             throw CelastrinaValidationError.newValidationError("Ivalid array. Attribute must be string array with at least one element.",
-//                                                         "Permission[" + index + "].roles");
-//         if(!_permission.hasOwnProperty("match") || _permission.match == null)
-//             throw CelastrinaValidationError.newValidationError("Invalid object. Attribute cannot be 'undefined' or null.",
-//                                                         "Permission[" + index + "].match");
-//         let _match = _permission.match;
-//         if(!_match.hasOwnProperty("type")  || typeof _match.type !== "string" ||
-//                 _match.type.trim().length === 0)
-//             throw CelastrinaValidationError.newValidationError("Invalid string. Attribute cannot be null or zero length.",
-//                 "Permission[" + index + "].match.type");
-//         return new Permission(_permission.action, _permission.roles, await CoreContentLoader._getValueMatch(_match.type, index));
-//     }
-//     /**
-//      * @param {Object} _authentication
-//      * @param {Object} _config
-//      * @return {Promise<void>}
-//      */
-//     static async _setPermissions(_authentication, _config) {
-//         if(_authentication.hasOwnProperty("permissions")) {
-//             let _manager = /**@type{PermissionManager}*/_config[Configuration.CONFIG_PERMISSION];
-//             if(!Array.isArray(_authentication.permissions))
-//                 throw CelastrinaValidationError.newError("", 400);
-//             let _promises = [];
-//             for(let index in _authentication.permissions) {
-//                 let _permission = _authentication.permissions[index];
-//                 _promises.unshift(CoreContentLoader._getPermission(_permission, index));
-//             }
-//             _promises = await Promise.all(_promises);
-//             for(let _Permission of _promises) {
-//                 _manager.addPermission(_Permission);
-//             }
-//         }
-//     }
-//     /**
-//      * @param {Object} _authentication
-//      * @param {Object} _config
-//      * @return {Promise<void>}
-//      */
-//     static async _setOptimistic(_authentication, _config) {
-//         if(_authentication.hasOwnProperty("optimistic") && (typeof _authentication.optimistic === "boolean"))
-//             _config[Configuration.CONFIG_AUTHORIATION_OPTIMISTIC] = _authentication.optimistic;
-//     }
-//     /**
-//      * @param {Object} _Object
-//      * @param {Object} config
-//      * @return {Promise<void>}
-//      */
-//     static async _setName(_Object, config) {
-//         if(!_Object.hasOwnProperty("name") || (typeof _Object.name !== "string" ||
-//             _Object.name.trim().length === 0))
-//             throw CelastrinaError.newValidationError("Invalid string. attribute cannot be null or zero length.",
-//                                                         "name", 400);
-//         config[Configuration.CONFIG_NAME] = _Object.name;
-//     }
-//     /**
-//      * @param {Object} _Object
-//      * @param {_AzureFunctionContext} azcontext
-//      * @param {Object} config
-//      * @return {Promise<void>}
-//      * @private
-//      */
-//     async _load(_Object, azcontext, config) {
-//         let _promises = [];
-//         _promises.unshift(CoreContentLoader._setName(_Object, config));
-//         if(_Object.hasOwnProperty("authentication") && (typeof _Object.authentication === "object" &&
-//                 _Object.authentication != null )) {
-//             let _authentication = _Object.authentication;
-//             _promises.unshift(CoreContentLoader._setOptimistic(_authentication, config));
-//             _promises.unshift(CoreContentLoader._setPermissions(_authentication, config));
-//
-//         }
-//         if(_Object.hasOwnProperty("resources") && Array.isArray(_Object.resources) &&
-//                 _Object.resources != null ) {
-//             let _resources = _Object.resources;
-//             _promises.unshift(CoreContentLoader._setResources(_resources, config));
-//         }
-//         await Promise.all(_promises);
-//     }
-// }
-// /**
-//  * ConfigurationLoader
-//  * @author Robert R Murrell
-//  */
-// class ConfigurationLoader {
-//     /**
-//      * @typedef _Content
-//      * @property {string} [type]
-//      * @property {string} [version]
-//      */
-//     /**
-//      * @typedef ContentType
-//      * @property {_Content} [_content]
-//      */
-//     /**
-//      * @typedef ConfigurationJson
-//      * @property {Array.<*>} [references]
-//      * @property {Array.<ContentType>} [configurations]
-//      */
-//     /**
-//      * @param {string} property
-//      */
-//     constructor(property) {
-//         if(typeof property !== "string" || property.trim().length === 0)
-//             throw CelastrinaValidationError.newValidationError("Invalid string. Argument cannot be null or zero length.",
-//                                                         "property");
-//         /**@type{string}*/this._property = property.trim();
-//         if(this._property.includes(' '))
-//             throw CelastrinaValidationError.newValidationError("Invalid string. Argument cannot contain spaces.",
-//                                                         "property");
-//         this._loader = new CoreContentLoader();
-//     }
-//     /**@return{string}*/get property() {return this._property;}
-//     /**
-//      * @param {ContentParser} loader
-//      * @return {ConfigurationLoader}
-//      */
-//     addContentLoader(loader) {
-//         this._loader.addLink(loader);
-//         return this;
-//     }
-//     /**
-//      * @param {PropertyManager} pm
-//      * @param {_AzureFunctionContext} azcontext
-//      * @param {Object} config
-//      * @return {Promise<void>}
-//      */
-//     async load(pm, azcontext, config) {
-//         /**@type{(null|undefined|ConfigurationJson)}*/let _funcconfig = await pm.getObject(this._property);
-//         if(_funcconfig == null)
-//             throw CelastrinaValidationError.newValidationError("Invalid object. Attribute _funcconfig cannot be 'undefined' or null.",
-//                                                         this._property);
-//         if(!_funcconfig.hasOwnProperty("configurations") || !Array.isArray(_funcconfig.configurations))
-//             throw CelastrinaValidationError.newValidationError("Invalid object. Attribute is required and must be an array.",
-//                                                         "configurations");
-//         /**@type{Array.<ContentType>}*/let _configurations = _funcconfig.configurations;
-//         if(!_funcconfig.hasOwnProperty("references") || !Array.isArray(_funcconfig.references))
-//             throw CelastrinaValidationError.newValidationError("Invalid object. Attribute is required and must be an array.",
-//                                                         "references");
-//         /**@type{Array.<ContentType>}*/let _references = _funcconfig.references;
-//         let promises = [];
-//         for(let _idx = 0; _idx < _references.length; ++_idx) {
-//             promises.unshift(ConfigurationLoader._validateContentObject(_idx, _references[_idx]));
-//         }
-//         await Promise.all(promises);
-//         promises = [];
-//         for(let _idx = 0; _idx < _configurations.length; ++_idx) {
-//             promises.unshift(ConfigurationLoader._validateContentObject(_idx, _configurations[_idx]));
-//         }
-//         await Promise.all(promises);
-//         await ConfigurationLoader._replaceReferences(_references, _configurations, pm);
-//         promises = [];
-//         for(let _idx = 0; _idx < _configurations.length; ++_idx) {
-//             promises.unshift(this._loader.load(_configurations[_idx], azcontext, config));
-//         }
-//         await Promise.all(promises);
-//     }
-//     /**
-//      * @param {*} index
-//      * @param {Object} _Object
-//      * @private
-//      */
-//     static async _validateContentObject(index, _Object) {
-//         if(typeof _Object === "undefined" || _Object == null)
-//             throw CelastrinaValidationError.newValidationError("Invalid argument. Argument cannot be 'undefined' or null.",
-//                                                         "_Object[" + index + "]");
-//         if(!_Object.hasOwnProperty("_content") || _Object._content == null)
-//             throw CelastrinaValidationError.newValidationError("Invalid object. Attribute cannot be undefined or null.",
-//                                                         "_Object[" + index + "]._content");
-//         let _content = _Object._content;
-//         if(!_content.hasOwnProperty("type") || (typeof _content.type !== "string") || _content.type.trim().length === 0)
-//             throw CelastrinaValidationError.newValidationError("Invalid string. Attribute cannot be null or zero length.",
-//                                                         "_Object[" + index + "]._content.type");
-//         if(!_content.hasOwnProperty("version") || (typeof _content.version !== "string") || _content.version.trim().length === 0)
-//             throw CelastrinaValidationError.newValidationError("Invalid string. Attribute cannot be null or zero length.",
-//                                                         "_Object[" + index + "]._content.version");
-//     }
-//     /**
-//      * @param {Object} _object
-//      * @param {Object} references
-//      * @param {Array.<Promise<*>>} promises
-//      * @return {Promise<void>}
-//      * @private
-//      */
-//     static async _replace(_object, references, promises) {
-//         for(let _prop in _object) {
-//             if(_object.hasOwnProperty(_prop)) {
-//                 let _value = _object[_prop];
-//                 if(typeof _value === "object" && _value != null) {
-//                     if(_value.hasOwnProperty("reference")) {
-//                         let index = _object.constructor.name + "." + _prop;
-//                         await ConfigurationLoader._validateContentObject(index, _value);
-//                         if(_value._content.type === "application/com.celastrinajs.core.configuration.reference+json;utf-8") {
-//                             let _rv = references[_value.reference];
-//                             if(typeof _rv === "undefined" || _rv == null)
-//                                 throw CelastrinaValidationError.newValidationError("Invalid reference. Property '" +
-//                                     _value.reference + "' not found.", "_object[" + index + "].reference");
-//                             else {
-//                                 if(_value.hasOwnProperty("expand") && typeof _value.expand === "boolean" &&
-//                                         _value.expand && Array.isArray(_object))
-//                                      _object.splice(_prop, 1, ..._rv);
-//                                 else
-//                                     _object[_prop] = _rv;
-//                             }
-//                         }
-//                         else
-//                             throw CelastrinaValidationError.newValidationError("Invalid string. Expected " +
-//                                 "application/com.celastrinajs.core.configuration.reference+json;utf-8', but got '" +
-//                                 _value._content.type + "'.", "_object[" + index + "]._content.type");
-//                     }
-//                     else promises.unshift(ConfigurationLoader._replace(_value, references, promises));
-//                 }
-//             }
-//         }
-//     }
-//     /**
-//      * @param {string} name
-//      * @param {string} key
-//      * @param {string} type
-//      * @param {Object} _references
-//      * @param {PropertyManager} _pm
-//      * @return {Promise<void>}
-//      * @private
-//      */
-//     static async _getTypedProperty(name, key, type, _references, _pm) {
-//         _references[name] = await _pm.getTypedProperty(key, type);
-//     }
-//     /**
-//      * @param {Array.<Object>} references
-//      * @param {Array.<Object>} configurations
-//      * @param {PropertyManager} pm
-//      * @return {Promise<void>}
-//      * @private
-//      */
-//     static async _replaceReferences(references, configurations, pm) {
-//         let _promises = [];
-//         let _references = {};
-//         for(let _idx = 0; _idx < references.length; ++_idx) {
-//             /**@type{{name:string,key:string,type:string}}*/
-//             let _ref = references[_idx];
-//             _promises.unshift(ConfigurationLoader._getTypedProperty(_ref.name, _ref.key, _ref.type,
-//                                                                         _references, pm));
-//         }
-//         await Promise.all(_promises);
-//         _promises = [];
-//         _promises.unshift(ConfigurationLoader._replace(configurations, _references, _promises));
-//         await Promise.all(_promises);
-//     }
-// }
 module.exports = {
     CelastrinaError: CelastrinaError,
     CelastrinaValidationError: CelastrinaValidationError,
@@ -2536,7 +2264,8 @@ module.exports = {
     CachedPropertyManager: CachedPropertyManager,
     PropertyManagerFactory: PropertyManagerFactory,
     AppConfigPropertyManagerFactory: AppConfigPropertyManagerFactory,
-    ContentParser: ContentParser,
+    AttributeParser: AttributeParser,
+    ConfigParser: ConfigParser,
     ConfigurationLoader: ConfigurationLoader,
     Configuration: Configuration,
     Algorithm: Algorithm,

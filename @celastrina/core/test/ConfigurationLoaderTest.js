@@ -55,8 +55,7 @@ describe("ConfigurationLoader", () => {
             let _config = {"celastrinajs.core.permission": new PermissionManager(),
                 "celastrinajs.core.resource": new ResourceManager(),
                 "celastrinajs.core.property.manager": _pm};
-            await assert.doesNotReject(_loader.initialize(_pm, _azcontext, _config));
-            await assert.doesNotReject(_loader.load(_config));
+            await assert.doesNotReject(_loader.load(_pm, _azcontext, _config));
             assert.notStrictEqual(_config[Configuration.CONFIG_PERMISSION], null, "PermissionManager null.");
             /**@type{PermissionManager}*/let _permissions = _config[Configuration.CONFIG_PERMISSION];
             let _pm1 = new Permission("mock-process-1", ["role-1", "role-2", "role-3"], new MatchAny());
@@ -73,8 +72,7 @@ describe("ConfigurationLoader", () => {
             let _config = {"celastrinajs.core.permission": new PermissionManager(),
                 "celastrinajs.core.resource": new ResourceManager(),
                 "celastrinajs.core.property.manager": _pm};
-            await assert.doesNotReject(_loader.initialize(_pm, _azcontext, _config));
-            await assert.doesNotReject(_loader.load(_config));
+            await assert.doesNotReject(_loader.load(_pm, _azcontext, _config));
             assert.notStrictEqual(_config[Configuration.CONFIG_RESOURCE], null, "ResourceManager null.");
             /**@type{ResourceManager}*/let _resources = _config[Configuration.CONFIG_RESOURCE];
             let _rm1 = new AppRegistrationResource("mock_resource_1", "authority1", "tenant1", "secret1");

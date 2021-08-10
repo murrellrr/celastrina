@@ -2,31 +2,28 @@
   "configurations": [
     {
       "configuration": {
-        "type": "application/celastrinajs.core+json;Configuration",
+        "type": "application/celastrinajs.config+json;Core",
         "version": "1.0.0"
       },
-      "name": "mock_configuration",
       "resources":[],
       "authentication": {
         "optimistic": true,
         "permissions": [
           {"_content": {
-              "type": "application/celastrinajs.core+json;Permission",
+              "type": "application/celastrinajs.attribute+json;Permission",
               "version": "1.0.0"},
             "action": "mock-process-1", "roles": ["role-1", "role-2", "role-3"], "match": {"type": "MatchAny"}},
           {"_content": {
-              "type": "application/celastrinajs.core+json;Permission",
+              "type": "application/celastrinajs.attribute+json;Permission",
               "version": "1.0.0"},
             "action": "mock-process-2", "roles": ["role-4", "role-5", "role-6"], "match": {"type": "MatchAll"}},
           {"_content": {
-              "type": "application/celastrinajs.core+json;Permission",
-              "subtype": "application/celastrinajs.core+json;Property",
+              "type": "application/celastrinajs.attribute+json;Property+Permission",
               "version": "1.0.0"},
             "key": "mock_permission", "type": "object"},
           {"_content": {
-            "type": "application/celastrinajs.core+json;Permission",
-            "subtype": "application/celastrinajs.core+json;Property",
-            "version": "1.0.0"},
+              "type": "application/celastrinajs.attribute+json;Property+Permission",
+              "version": "1.0.0"},
             "key": "mock_permission_expand", "type": "object", "expand": true}
         ]
       }

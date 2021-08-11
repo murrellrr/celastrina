@@ -1876,46 +1876,83 @@ class ParserChain {
             throw CelastrinaValidationError.newValidationError(
                 "[ParserChain.parse(_Object, config)][_content.type]: Invalid string. Attribute cannot be null or zero length.",
                 "_Object._content.type");
-        if(!_content.hasOwnProperty("version") || (typeof _content.version !== "string") || _content.version.trim().length === 0)
-            throw CelastrinaValidationError.newValidationError(
-                "[ParserChain.parse(_Object, config)][_content.version]: Invalid string. Attribute cannot be null or zero length.",
-                "_Object._content.version");
+        let _versioned = false;
+        if(_content.hasOwnProperty("version")) {
+            if((typeof _content.version !== "string") || _content.version.trim().length === 0)
+                throw CelastrinaValidationError.newValidationError(
+                    "[ParserChain.parse(_Object, config)][_content.version]: Invalid string. Attribute cannot be null or zero length.",
+                    "_Object._content.version");
+            _versioned = true;
+        }
         let _types = _Object._content.type.trim();
-        _types = _types.replaceAll(" ", "");
+        _types = _types.split(" ").join("");
         _types = _types.split(";");
         let _mime = _types[0];
         let _type = _types[1];
         let _subtypes = _type.split("+");
-        let _target = _Object;
-        if(_mime !== this._mime)
-            throw CelastrinaValidationError.newValidationError(
-                "[ParserChain.parse(_Object, config)][_content.type]: Invalid mime type. Expected '" +
-                this._mime + "', but got '" + _mime + "'.",
-                "_content.type+mime");
-        if(_Object._content.version !== this._version)
-            throw CelastrinaValidationError.newValidationError(
-                "[ParserChain.parse(_Object, config)][_content.version]: Unsupported version. Expected '" +
-                        this._version + "', but got '" + _Object._content.version + "'.",
+        /**@type{*}*/let _target = _Object;
+        if(_mime === this._mime) {
+            if(_versioned && _Object._content.version !== this._version)
+                throw CelastrinaValidationError.newValidationError(
+                    "[ParserChain.parse(_Object, config)][_content.version]: Unsupported version. Expected '" +
+                    this._version + "', but got '" + _Object._content.version + "'.",
                     "_content.version");
-        for(let _subtype of _subtypes) {
-            _target = await this._parse(_subtype, _target);
+            for (let _subtype of _subtypes) {
+                if((typeof _target !== "undefined") && _target != null) {
+                    let _expand = false;
+                    if (_subtype.startsWith("[")) {
+                        if (!_subtype.endsWith("]"))
+                            throw CelastrinaValidationError.newValidationError(
+                                "[ParserChain.parse(_Object, config)][_content.version]: Invalid subtype. Sub-type '" + _subtype +
+                                "' indicated an array opening with '[' but is missing closing ']'.",
+                                "_content.type+subtype");
+                        else {
+                            _expand = true;
+                            _subtype = _subtype.substring(1);
+                            _subtype = _subtype.substring(0, _subtype.length - 1);
+                        }
+                    } else if (_subtype.endsWith("]"))
+                        throw CelastrinaValidationError.newValidationError(
+                            "[ParserChain.parse(_Object, config)][_content.version]: Invalid subtype. Sub-type '" + _subtype +
+                            "' indicated an array closing with ']' but is missing opening '['.",
+                            "_content.type+subtype");
+                    _target = await this._parse(_subtype, _target, _expand);
+                }
+            }
         }
         return _target;
     }
     /**
+     * @param _Object
+     * @return {Promise<Array.<*>>}
+     * @private
+     */
+    async _parseArray(_Object) {
+        let promises = [];
+        for(let index in _Object) {
+            if(_Object.hasOwnProperty(index)) {
+                promises.unshift(this._create(_Object[index]));
+            }
+        }
+        return Promise.all(promises);
+    }
+    /**
      * @param {string} subtype
      * @param {Object} _Object
+     * @param {boolean} [expand=false]
      * @return {Promise<*>}
      */
-    async _parse(subtype, _Object) {
-        if(subtype === this._type)
-            return this._create(_Object);
+    async _parse(subtype, _Object, expand = false) {
+        if(subtype === this._type) {
+            if(Array.isArray(_Object) && expand)
+                return this._parseArray(_Object);
+            else
+                return this._create(_Object);
+        }
         else if(this._link != null)
-            return this._link._parse(subtype, _Object);
+            return this._link._parse(subtype, _Object, expand);
         else
-            throw CelastrinaValidationError.newValidationError(
-                "[ParserChain._parse(subtype, _Object, config)][_content.type]: Unsupported subtype '" + subtype + "'.",
-                    "_content.type+subtype");
+            return _Object;
     }
     /**
      * @param {{_content:{type:string,version:string}}} _Object
@@ -1948,7 +1985,7 @@ class AttributeParser extends ParserChain {
  */
 class PropertyParser extends AttributeParser {
     /**
-     * @param {PropertyParser} link
+     * @param {AttributeParser} link
      * @param {string} version
      */
     constructor(link = null, version = "1.0.0") {
@@ -1962,7 +1999,7 @@ class PropertyParser extends AttributeParser {
      * @return {Promise<*>}
      */
     async getProperty(key, type, defaultValue = null, factory = null) {
-       return await this._pm.getTypedProperty(key, type, defaultValue, factory);
+       return this._pm.getTypedProperty(key, type, defaultValue, factory);
     }
     /**
      * @param {{_content:{type:string,subtype?:string,version:string}, ...}} _Object
@@ -1988,7 +2025,7 @@ class PermissionParser extends AttributeParser {
      * @param {string} version
      * @param {AttributeParser} link
      */
-    constructor(version = "1.0.0", link = null) {
+    constructor(link = null, version = "1.0.0", ) {
         super("Permission", link, version);
     }
     /**
@@ -2133,7 +2170,7 @@ class CoreConfigParser extends ConfigParser {
             this._config[Configuration.CONFIG_AUTHORIATION_OPTIMISTIC] = _optimistic;
             if(_Authentication.hasOwnProperty("permissions") && Array.isArray(_Authentication.permissions)) {
                 /**@type{PermissionManager}*/let _pm = this._config[Configuration.CONFIG_PERMISSION];
-                /**@type{Array.<Permission>}*/let _Permissions = _Object.permissions;
+                /**@type{Array.<Permission>}*/let _Permissions = _Authentication.permissions;
                 for(/**@type{Permission}*/let _permission of _Permissions) {
                     _pm.addPermission(_permission);
                 }
@@ -2161,7 +2198,8 @@ class ConfigurationLoader extends ConfigurationItem {
             throw CelastrinaValidationError.newValidationError(
                 "[ConfigurationLoader][property]: Invalid string. Argument cannot contain spaces.",
                 "property");
-        /**@type{AttributeParser}*/this._ctp = new PropertyParser();
+        /**@type{AttributeParser}*/this._ctp = new PropertyParser(new PermissionParser(
+                                                                  new AppRegistrationResourceParser()));
         /**@type{ConfigParser}*/this._cfp = new CoreConfigParser();
     }
     /**@return{AttributeParser}*/get contentParser() {return this._ctp;}
@@ -2201,21 +2239,23 @@ class ConfigurationLoader extends ConfigurationItem {
     }
     /**
      * @param {AttributeParser} parser
-     * @param {Object} config
      * @param {Object} _object
-     * @param {Array.<Promise<void>>} promises
-     * @return void
+     * @return {Promise<void>}
      */
-    static _parseProperties(parser, config, _object, promises) {
+    static async _parseProperties(parser, _object) {
         for(let prop in _object) {
             if(_object.hasOwnProperty(prop)) {
-                let value = _object[prop];
-                if(typeof value === "object" && value != null) {
-                    if(value.hasOwnProperty("_content") && (typeof value._content === "object") &&
-                            value._content != null) {
-                        promises.unshift(ConfigurationLoader.replace(parser, _object, value, prop));
+                if(prop !== "_content") {
+                    let value = _object[prop];
+                    if(typeof value === "object" && value != null) {
+                        if (value.hasOwnProperty("_content") && (typeof value._content === "object") &&
+                                value._content != null) {
+                            await this._parseProperties(parser, value);
+                            await ConfigurationLoader.replace(parser, _object, value, prop);
+                        }
+                        else
+                            await this._parseProperties(parser, value);
                     }
-                    else this._parseProperties(parser, config, value, promises);
                 }
             }
         }
@@ -2226,11 +2266,10 @@ class ConfigurationLoader extends ConfigurationItem {
      * @return {Promise<void>}
      */
     async load(azcontext, config) {
-        this._ctp.addLink(new PermissionParser());
-        this._ctp.addLink(new AppRegistrationResourceParser());
         this._ctp.initialize(azcontext, config);
         this._cfp.initialize(azcontext, config);
-        /**@type{(null|undefined|Object)}*/let _funcconfig = await this._pm.getObject(this._property);
+        let _pm = config[Configuration.CONFIG_PROPERTY];
+        /**@type{(null|undefined|Object)}*/let _funcconfig = await _pm.getObject(this._property);
         if(_funcconfig == null)
             throw CelastrinaValidationError.newValidationError(
                 "[ConfigurationLoader.load(pm, azcontext, config)][_funcconfig]: Invalid object. Attribute _funcconfig cannot be 'undefined' or null.",
@@ -2240,10 +2279,12 @@ class ConfigurationLoader extends ConfigurationItem {
                 "[ConfigurationLoader.load(pm, azcontext, config)][configurations]: Invalid object. Attribute is required and must be an array.",
                     "configurations");
         /**@type{Array.<Object>}*/let _configurations = _funcconfig.configurations;
+        await ConfigurationLoader._parseProperties(this._ctp, _configurations);
         let _promises = [];
-        ConfigurationLoader._parseProperties(this._ctp, config, _configurations, _promises);
+        for(let _configuration of _configurations) {
+            _promises.unshift(this._cfp.parse(_configuration));
+        }
         await Promise.all(_promises);
-        _promises = [];
     }
     /**@return{string}*/get key() {return ConfigurationLoader.CONFIG_CONFIGRATION_LOADER;}
 }

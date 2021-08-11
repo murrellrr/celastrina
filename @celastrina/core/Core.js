@@ -29,9 +29,8 @@
 "use strict";
 const axios  = require("axios").default;
 const moment = require("moment");
-const { v4: uuidv4 } = require('uuid');
-const crypto = require('crypto');
-const {EventEmitter} = require('events');
+const { v4: uuidv4 } = require("uuid");
+const crypto = require("crypto");
 const {TokenResponse, AuthenticationContext} = require("adal-node");
 /**
  * @typedef _ManagedResourceToken
@@ -751,8 +750,10 @@ class CachedPropertyManager extends PropertyManager {
     async clear() {
         /**@type{Array.<Promise<void>>}*/let promises = [];
         for(let prop in this._cache) {
-            let cached = this._cache[prop];
-            if(cached instanceof CachedProperty) promises.unshift(cached.clear());
+            if(this._cache.hasOwnProperty(prop)) {
+                let cached = this._cache[prop];
+                if (cached instanceof CachedProperty) promises.unshift(cached.clear());
+            }
         }
         await Promise.all(promises);
     }
@@ -892,9 +893,9 @@ class CachedPropertyManager extends PropertyManager {
      * @return {Promise<void>}
      */
     async setProperty(key, value = null) {
-        let _cache = null;
-        if(value != null) _cache = new CachedProperty(value, this._defaultTime, this._defaultUnit);
-        else this._cache[key] = _cache;
+        let _lcache = null;
+        if(value != null) _lcache = new CachedProperty(value, this._defaultTime, this._defaultUnit);
+        this._cache[key] = _lcache;
     }
 }
 /**
@@ -1846,8 +1847,8 @@ class ParserChain {
         /**@type{Object}*/this._config = null;
     }
     /**
+     * @param {Object} config
      * @param {_AzureFunctionContext} azcontext
-     * @apram {Object} config
      */
     initialize(azcontext, config) {
         this._pm = config[Configuration.CONFIG_PROPERTY];
@@ -1869,7 +1870,7 @@ class ParserChain {
     /**@return{_AzureFunctionContext}*/get azureFunctionContext() {return this._azcontext;}
     /**@return{Object}*/get config() {return this._config;}
     /**
-     * @param {{_content:{type:string,version:string}}} _Object
+     * @param {{(null|_content:{type:string,version:string})}} _Object
      * @return {Promise<*>}
      */
     async parse(_Object) {

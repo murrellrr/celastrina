@@ -327,10 +327,12 @@ class AppRegistrationResource extends ResourceAuthorization {
 /**
  * ResourceManager
  */
-class ResourceManager {
+class ResourceManager extends ConfigurationItem {
     constructor() {
+        super();
         this._resources = {};
     }
+    get key() {return Configuration.CONFIG_RESOURCE;}
     /**@return{Object}*/get authorizations() {return this._resources;}
     /**
      * @param {ResourceAuthorization} auth
@@ -407,8 +409,11 @@ class Vault {
  * @abstract
  * @author Robert R Murrell
  */
-class PropertyManager {
-    constructor(){}
+class PropertyManager extends ConfigurationItem {
+    constructor(){
+        super();
+    }
+    get key() {return Configuration.CONFIG_PROPERTY;}
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
@@ -782,19 +787,19 @@ class CachedPropertyManager extends PropertyManager {
      * @param {string} key
      * @param {*} defaultValue
      * @param {string} func
-     * @param {...*} args
+     * @param {function(*)} [construct]
      * @return {Promise<*>}
      * @private
      */
-    async _getCache(key, defaultValue, func, ...args) {
+    async _getCache(key, defaultValue, func, construct) {
         let cached  = this._cache[key];
         if(!(cached instanceof CachedProperty)) {
-            let _value =await this._manager[func](key, defaultValue, args);
+            let _value =await this._manager[func](key, defaultValue, construct);
             if(_value != null) this._cache[key] =  new CachedProperty(_value, this._defaultTime, this._defaultUnit);
             return _value;
         }
         else if(cached.isExpired) {
-            let _value =await this._manager[func](key, defaultValue, args);
+            let _value =await this._manager[func](key, defaultValue, construct);
             if(_value != null) cached.value = _value;
             return _value;
         }
@@ -1141,7 +1146,12 @@ class Configuration {
             await _pm.ready(azcontext, this._config);
             azcontext.log.info("[Configuration.initialize(azcontext)]: PropertyManager Ready.");
 
-            // TODO: Run the configuration loader if its present.
+            let _loader = this._config[ConfigurationLoader.CONFIG_CONFIGRATION_LOADER];
+            if(_loader instanceof ConfigurationLoader) {
+                azcontext.log.info("[Configuration.load(azcontext)]: ConfigurationLoader found, loading from external JSON configuration.");
+                await _loader.load(azcontext, this._config);
+                azcontext.log.info("[Configuration.load(azcontext)]: ConfigurationLoader completed, configuration loaded.");
+            }
 
             await _prm.initialize(azcontext, this._config);
             azcontext.log.info("[Configuration.load(azcontext)]: PermissionManager Initialized.");
@@ -2183,7 +2193,7 @@ class CoreConfigParser extends ConfigParser {
  * @author Robert R Murrell
  */
 class ConfigurationLoader extends ConfigurationItem {
-    static CONFIG_CONFIGRATION_LOADER = "";
+    static CONFIG_CONFIGRATION_LOADER = "celastrinajs.core.configuration.loader";
     /**
      * @param {string} property
      */

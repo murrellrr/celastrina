@@ -1,9 +1,10 @@
 const {CelastrinaError, ConfigurationItem, Configuration, AppSettingsPropertyManager, ResourceManager,
-       PermissionManager} = require("../Core");
+       PermissionManager, ConfigurationLoader} = require("../Core");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockPropertyManager} = require("./PropertyManagerTest");
 const {MockAuthorizationManager} = require("./ResourceAuthorizationTest");
 const assert = require("assert");
+const fs = require("fs");
 
 class MockConfigurationItem extends ConfigurationItem {
     constructor() {
@@ -11,6 +12,17 @@ class MockConfigurationItem extends ConfigurationItem {
     }
     get key() {return "mock-key";}
     get value() {return "mock-value";}
+}
+
+class MockConfigLoader extends ConfigurationLoader {
+    constructor(property) {
+        super(property);
+        this.loaded = false;
+    }
+    async load(azcontext, config) {
+        this.loaded = true;
+        return super.load(azcontext, config);
+    }
 }
 
 describe("Configuration", () => {
@@ -117,8 +129,8 @@ describe("Configuration", () => {
             let _config = new Configuration("mock_configuration");
             let _pm = new MockPropertyManager();
             let _am = new MockAuthorizationManager();
-            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _config.setValue(Configuration.CONFIG_RESOURCE, _am);
+            _config.setConfigurationItem(_pm);
+            _config.setConfigurationItem(_am);
             await _config.initialize(_azcontext);
             assert.strictEqual(_config.properties, _pm);
             assert.strictEqual(_config.resources, _am);
@@ -135,6 +147,29 @@ describe("Configuration", () => {
             assert.strictEqual(_config.resources instanceof ResourceManager, true, "authorizations is ResourceManager.");
             assert.strictEqual(_config.permissions instanceof PermissionManager, true, "authorizations is PermissionManager.");
             assert.strictEqual(_config.loaded, false, "Should not be loaded yet.");
+        });
+        it("Should invoke configuration loader if present", async () => {
+            let _config = new Configuration("mock_configuration");
+            let _pm = new MockPropertyManager();
+            let _am = new MockAuthorizationManager();
+            let _mcl = new MockConfigLoader("mock_property");
+            _pm.mockProperty("mock_process-1-roles", "[\"role-1\", \"role-2\", \"role-3\"]");
+            _pm.mockProperty("mock_resources", "[{\"id\": \"mock-resource-1\", \"authority\": \"authority1\", \"tenant\":  \"tenant1\", \"secret\": \"secret1\"},{\"id\": \"mock-resource-2\", \"authority\": \"authority2\", \"tenant\":  \"tenant2\", \"secret\": \"secret2\"}]");
+            _pm.mockProperty("mock_permission", "{\"action\": \"mock-process-3\", \"roles\": [\"role-7\", \"role-8\", \"role-9\"], \"match\": {\"type\": \"MatchNone\"}}");
+            _pm.mockProperty("mock_permission_expand", "[{\"action\": \"mock-process-4\", \"roles\": [\"role-10\", \"role-11\", \"role-12\"], \"match\": {\"type\": \"MatchAny\"}}, {\"action\": \"mock-process-5\", \"roles\": [\"role-13\", \"role-14\", \"role-15\"], \"match\": {\"type\": \"MatchAny\"}}]");
+            _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good-all.json", "utf8"));
+            _config.setConfigurationItem(_pm);
+            _config.setConfigurationItem(_am);
+            _config.setConfigurationItem(_mcl);
+            await _config.initialize(_azcontext);
+            assert.strictEqual(_config.properties, _pm);
+            assert.strictEqual(_config.resources, _am);
+            assert.strictEqual(_mcl.loaded, true, "Should  be loaded.");
+            assert.strictEqual(_config.loaded, false, "Should not be loaded yet.");
+            assert.strictEqual(_pm.initialized, true, "PropertyManager Initialized.");
+            assert.strictEqual(_pm.readied, true, "PropertyManager Readied.");
+            assert.strictEqual(_am.initialized, true, "AuthorizationManager Initialized.");
+            assert.strictEqual(_am.readied, true, "AuthorizationManager Readied.");
         });
     });
 });

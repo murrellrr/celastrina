@@ -72,8 +72,14 @@ class MockAzureFunctionContext {
     get req() {
         return this.bindings.req;
     }
+    set req(req) {
+        this.bindings.req = req;
+    }
     get res() {
         return this.bindings.res;
+    }
+    set res(res) {
+        this.bindings.res = res;
     }
     done(something) {
         this.doneInvoked = true;

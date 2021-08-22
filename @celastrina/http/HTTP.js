@@ -31,8 +31,8 @@ const axios  = require("axios").default;
 const moment = require("moment");
 const jwt = require("jsonwebtoken");
 const cookie = require("cookie");
-const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL, JsonPropertyType, Configuration,
-       BaseSubject, BaseSentry, Algorithm, AES256Algorithm, Cryptography, RoleResolver, BaseContext,
+const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL, Configuration,
+       PermissionManager, BaseSubject, BaseSentry, Algorithm, AES256Algorithm, Cryptography, RoleResolver, BaseContext,
        BaseFunction, MatchAll, MatchNone} = require("@celastrina/core");
 /**
  * @typedef _jwtpayload
@@ -55,11 +55,6 @@ const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL,
  * @property {string} subject
  * @property {string} issuer
  */
-
-/**
- * @typedef {HTTPContext} JWTContext
- * @property {JwtSubject} subject
- */
 /**
  * @typedef {Object} JWKS
  * @property {(null|string)} [issuer]
@@ -75,6 +70,8 @@ class Cookie {
      * @param {Object} [options={}]
      */
     constructor(name, value = null, options = {}) {
+        if(typeof name !== "string" || name.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Invalid String. Attribute 'name' cannot be undefined, null, or zero length.", "cookie.name");
         this._name = name;
         this._value = value;
         this._options = options;
@@ -108,6 +105,21 @@ class Cookie {
         this._options[name] = value;
         this._dirty = true;
     }
+    /**
+     * @returns {string}
+     */
+    serialize() {
+        return cookie.serialize(this._name, this.parseValue, this._options);
+    }
+    /**
+     * @param {Array.<string>} value
+     * @returns {Array.<string>}
+     */
+    doSerializeCookie(value = []) {
+        if(this.doSetCookie)
+            value.unshift(this.serialize());
+        return value;
+    }
     /**@param{number}age*/set maxAge(age) {this.setOption("maxAge", age);}
     /**@param{Date}date*/set expires(date) {this.setOption("expires", date);}
     /**@param{boolean}http*/set httpOnly(http) {this.setOption("httpOnly", http);}
@@ -115,6 +127,13 @@ class Cookie {
     /**@param{string}path*/set path(path) {this.setOption("path", path);}
     /**@param{boolean}secure*/set secure(secure) {this.setOption("secure", secure);}
     /**@param("lax"|"none"|"strict")value*/set sameSite(value) {this.setOption("sameSite", value)};
+    /**@return{number}*/get maxAge() {return this._options["maxAge"];}
+    /**@return{Date}*/get expires() {return this._options["expires"];}
+    /**@return{boolean}*/get httpOnly() {return this._options["httpOnly"];}
+    /**@return{string}*/get domain() {return this._options["domain"];}
+    /**@return{string}*/get path() {return this._options["path"];}
+    /**@return{boolean}*/get secure() {return this._options["secure"];}
+    /**@return("lax"|"none"|"strict")*/get sameSite() {return this._options["sameSite"];};
     /**@param {string} value*/encodeStringToValue(value) {this.value = Buffer.from(value).toString("base64");}
     /**@param {Object} _object*/encodeObjectToValue(_object) {this.encodeStringToValue(JSON.stringify(_object));}
     /**@return{string}*/decodeStringFromValue() {return Buffer.from(this.value).toString("ascii");}
@@ -123,6 +142,44 @@ class Cookie {
         this.value = null;
         let _epoch = moment("1970-01-01T00:00:00Z");
         this.expires = _epoch.utc().toDate();
+    }
+    /**
+     * @param {string} name
+     * @param {(null|string)} [value=null]
+     * @param {Object} [options={}]
+     * @returns {Promise<Cookie>} A new cookie whos dirty marker is set to 'true', such that doSerializeCookie will generte a value to
+     *                   the Set-Cookie header.
+     */
+    static async newCookie(name, value = null, options = {}) {
+        let _cookie = new Cookie(name);
+        _cookie.value = value;
+        _cookie.options = options;
+        return _cookie;
+    }
+    /**
+     * @param {string} name
+     * @param {(null|string)} [value=null]
+     * @param {Object} [options={}]
+     * @returns {Promise<Cookie>} A new cookie whos dirty marker is set to 'false', such that doSerializeCookie will NOT generte a value to
+     *                            the Set-Cookie header.
+     */
+    static async loadCookie(name, value = null, options = {}) {
+        return new Cookie(name, value, options);
+    }
+    /**
+     * @param {string} value
+     * @param {Array.<Cookie>} [results=[]];
+     * @returns {Promise<Array.<Cookie>>} A new cookie whos dirty marker is set to 'false', such that doSerializeCookie will NOT generte a value to
+     *                                    the Set-Cookie header.
+     */
+    static async parseCookies(value,results = []) {
+        let _cookies = cookie.parse(value);
+        for(let _name in _cookies) {
+            if(_cookies.hasOwnProperty(_name)) {
+                results.unshift(new Cookie(_name, _cookies[_name]));
+            }
+        }
+        return results;
     }
 }
 /**
@@ -155,7 +212,7 @@ class JwtSubject extends BaseSubject {
     /**@return{moment.Moment}*/get issued(){return this._issued;}
     /**@return{moment.Moment}*/get expires(){return this._expires;}
     /**@return{(null|string)}*/get token(){return this._token;}
-    /**@return{boolean}*/isExpired(){return moment().isSameOrAfter(this._expires);}
+    /**@return{boolean}*/isExpired(){ return moment().isSameOrAfter(this._expires);}
     /**
      * @param {undefined|null|object}headers
      * @param {string}[name="Authorization]
@@ -218,9 +275,9 @@ class JwtSubject extends BaseSubject {
  */
 class BaseIssuer {
     /**
-     * @param {(PropertyType|string)} issuer
-     * @param {(JsonPropertyType|Array.<string>|null)} [audiences=null]
-     * @param {(JsonPropertyType|Array.<string>|null)} [assignments=[]] The roles to escalate to the subject if the JWT token is
+     * @param {string} issuer
+     * @param {(Array.<string>|null)} [audiences=null]
+     * @param {(Array.<string>|null)} [assignments=[]] The roles to escalate to the subject if the JWT token is
      *        valid for this issuer.
      * @param {boolean} [validateNonce=false]
      */
@@ -234,21 +291,22 @@ class BaseIssuer {
     /**@return{Array.<string>}*/get audience(){return this._audiences;}
     /**@return{Array<string>}*/get assignments(){return this._roles;}
     /**@return{boolean}*/get validatesNonce() {return this._validateNonce;}
+    /**@param{boolean}validate*/set validatesNonce(validate) {return this._validateNonce = validate;}
     /**
-     * @param {JWTContext} context
+     * @param {HTTPContext} context
      * @param {JwtSubject} subject
      * @return {Promise<*>}
      * @abstract
      */
     async getKey(context, subject) {throw CelastrinaError.newError("Not Implemented", 501);}
     /**
-     * @param {JWTContext} context
+     * @param {HTTPContext} context
      * @param {JwtSubject} subject
      * @return {Promise<(null|string)>}
      */
-    async getNonce(context, subject) {throw CelastrinaError.newError("Not Implemented", 501);}
+    async getNonce(context, subject) {return null;}
     /**
-     * @param {JWTContext} context
+     * @param {HTTPContext} context
      * @param {JwtSubject} _subject
      * @return {Promise<boolean>}
      */
@@ -283,10 +341,10 @@ class BaseIssuer {
  */
 class LocalJwtIssuer extends BaseIssuer {
     /**
-     * @param {(PropertyType|string)} issuer
-     * @param {(PropertyType|string)} keyProperty
-     * @param {(JsonPropertyType|Array.<string>|null)} [audiences=null]
-     * @param {(JsonPropertyType|Array.<string>|null)} [assignments=[]] The roles to escalate to the subject if the JWT token is
+     * @param {string} issuer
+     * @param {string} keyProperty
+     * @param {(Array.<string>|null)} [audiences=null]
+     * @param {(Array.<string>|null)} [assignments=[]] The roles to escalate to the subject if the JWT token is
      *        valid for this issuer.
      * @param {boolean} [validateNonce=false]
      */
@@ -296,12 +354,12 @@ class LocalJwtIssuer extends BaseIssuer {
         this._keyProperty = keyProperty;
     }
     /**
-     * @param {JWTContext} context
+     * @param {HTTPContext} context
      * @param {JwtSubject} subject
      * @return {Promise<*>}
      */
     async getKey(context, subject) {
-        return context.getProperty(this._keyProperty);
+        return context.properties.getProperty(this._keyProperty);
     }
 }
 /**
@@ -317,10 +375,10 @@ class LocalJwtIssuer extends BaseIssuer {
  */
 class OpenIDJwtIssuer extends BaseIssuer {
     /**
-     * @param {(PropertyType|string)} issuer
-     * @param {(PropertyType|string)} configUrl
-     * @param {(JsonPropertyType|Array.<string>|null)} [audiences=null]
-     * @param {(JsonPropertyType|Array.<string>|null)} [assignments=[]] The roles to escalate to the subject if the JWT token is
+     * @param {string} issuer
+     * @param {string} configUrl
+     * @param {(Array.<string>|null)} [audiences=null]
+     * @param {(Array.<string>|null)} [assignments=[]] The roles to escalate to the subject if the JWT token is
      *        valid for this issuer.
      * @param {boolean} [validateNonce=false]
      */
@@ -330,11 +388,12 @@ class OpenIDJwtIssuer extends BaseIssuer {
         this._configUrl = configUrl;
     }
     /**
-     * @param {JWTContext} context
+     * @param {HTTPContext} context
+     * @param {JwtSubject} subject
      * @param {string} url
      * @return {Promise<string>}
      */
-    async _replaceURLEndpoint(context, url) {
+    static async _replaceURLEndpoint(context, subject, url) {
         /**@type {RegExp}*/let regex = RegExp(/{([^}]*)}/g);
         let match;
         let matches = new Set();
@@ -342,7 +401,7 @@ class OpenIDJwtIssuer extends BaseIssuer {
             matches.add(match[1]);
         }
         for(const match of matches) {
-            let value = await context.subject.getClaim(match);
+            let value = await subject.getClaim(match);
             if(value == null) {
                 context.log("No claim'" + value + "' not found for subject '" + context.subject.id + "'.",
                                     LOG_LEVEL.ERROR, "BaseIssuer._replaceURLEndpoint(context, subject, url)");
@@ -354,12 +413,18 @@ class OpenIDJwtIssuer extends BaseIssuer {
         return url;
     }
     /**
-     * @param {JWTContext} context
+     * @param {HTTPContext} context
+     * @param {string} configUrl
      * @return {Promise<(null|JWKS)>}
      * @private
      */
-    async _getKey(context) {
-        let _endpoint = await this._replaceURLEndpoint(context, this._configUrl);
+    static async _getKey(context, configUrl) {
+        if(!(context.subject instanceof JwtSubject)) {
+            context.log("HTTPFunction not configured for JWT.", LOG_LEVEL.ERROR, "OpenIDJwtIssuer._getKey(context, configUrl)");
+            throw CelastrinaError.newError("Not Authorized.", 401);
+        }
+        /**@type{JwtSubject}*/let _subject = context.subject;
+        let _endpoint = await OpenIDJwtIssuer._replaceURLEndpoint(context, _subject, configUrl);
         try {
             let _response = await axios.get(_endpoint);
             let _issuer = _response.data["issuer"];
@@ -367,7 +432,7 @@ class OpenIDJwtIssuer extends BaseIssuer {
             _response = await axios.get(_endpoint);
             /**@type{(null|JWKS)}*/let _key = null;
             for (const key of _response.data.keys) {
-                if(key.kid === context.subject.header.kid) {
+                if(key.kid === _subject.header.kid) {
                     _key = {issuer: null, type: key.kty, e: key.e, n: key.n};
                     break;
                 }
@@ -383,7 +448,7 @@ class OpenIDJwtIssuer extends BaseIssuer {
     }
     /**
      * @param {(null|JWKS)} key
-     * @param {JWTContext} context
+     * @param {HTTPContext} context
      * @return {Promise<string>}
      * @private
      */
@@ -392,7 +457,7 @@ class OpenIDJwtIssuer extends BaseIssuer {
     }
     /**
      * @param {(null|JWKS)} key
-     * @param {JWTContext} context
+     * @param {HTTPContext} context
      * @return {Promise<string>}
      * @private
      */
@@ -466,13 +531,13 @@ class OpenIDJwtIssuer extends BaseIssuer {
         }
     }
     /**
-     * @param {JWTContext} context
+     * @param {HTTPContext} context
      * @param {JwtSubject} subject
      * @return {Promise<void>}
      * @private
      */
     async getKey(context, subject) {
-        /**@type{(null|JWKS)}*/let key = await this._getKey(context);
+        /**@type{(null|JWKS)}*/let key = await OpenIDJwtIssuer._getKey(context, this._configUrl);
         let pem;
         if(typeof key.x5c === "undefined" || key.x5c == null)
             pem = await this._getPemModExp(key, context);
@@ -495,6 +560,7 @@ class HTTPParameterFetch {
      * @param {string} key
      * @param {null|string} [defaultValue]
      * @return {Promise<string>}
+     * @abstract
      */
     async fetch(context, key, defaultValue = null) {
         throw CelastrinaError.newError("Not Implemented.", 501);
@@ -560,39 +626,6 @@ class BodyParameterFetch extends HTTPParameterFetch {
         return value;
     }
 }
-/**
- * HTTPParameterFetchProperty
- * @author Robert R Murrell
- */
-class HTTPParameterFetchProperty extends JsonPropertyType {
-    /**
-     * @param {string} name
-     * @param {null|string} defaultValue
-     */
-    constructor(name, defaultValue = null){super(name, defaultValue);}
-    /**@return {string}*/get mime() {return "application/json; celastrinajs.html.property.HTTPParameterFetchProperty";}
-    /**
-     * @param {string} value
-     * @return {Promise<null|Object>}
-     */
-    async resolve(value) {
-        let source = await super.resolve(value);
-        if(source != null) {
-            if(!source.hasOwnProperty("_type"))
-                throw CelastrinaError.newError("Invalid HTTPParameterFetch, _type required.");
-            switch(source._type) {
-                case "header": return new HeaderParameterFetch();
-                case "query": return new MatchAll();
-                case "body": return new MatchNone();
-                default: throw CelastrinaError.newError("Invalid Match Type " + source._type + ".");
-            }
-        }
-        else
-            throw CelastrinaError.newError("Parameter Fetch Property cannot be null.");
-    }
-}
-
-
 /**
  * Session
  * @author Robert R Murrell
@@ -667,7 +700,7 @@ class HTTPConfiguration extends Configuration {
 
     /**@return{boolean}*/get allowAnonymous() {return this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS];}
     /**
-     * @param {JsonPropertyType|SessionManager} sm
+     * @param {SessionManager} sm
      * @return {HTTPConfiguration}
      */
     setSessionManager(sm) {
@@ -675,7 +708,7 @@ class HTTPConfiguration extends Configuration {
         return this;
     }
     /**
-     * @param {(BooleanPropertyType|boolean)} anon
+     * @param {boolean} anon
      * @return {HTTPConfiguration}
      */
     setAllowAnonymous(anon) {this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS] = anon; return this;}
@@ -695,7 +728,7 @@ class JwtToken {
     }
     /**@return{string}*/get name() {return this._name;}
     /**
-     * @param {JWTContext} context
+     * @param {HTTPContext} context
      * @return {Promise<(null|string)>}
      */
     async get(context) {
@@ -785,27 +818,27 @@ class JwtConfiguration extends HTTPConfiguration {
     /**@return{boolean}*/get removeScheme() {return this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME_REMOVE];}
     /**@return{JwtAnonymousTokenConfig}*/get anonymousConfig() {return this._config[JwtConfiguration.CONFIG_JWT_TOKEN_ANON_CONFIG];};
     /**
-     * @param {(JsonPropertyType|Array.<(JsonPropertyType|BaseIssuer)>)} [issuers=[]]
+     * @param {Array.<BaseIssuer>} [issuers=[]]
      * @return {JwtConfiguration}
      */
     setIssuers(issuers = []){this._config[JwtConfiguration.CONFIG_JWT_ISSUERS] = issuers; return this;}
     /**
-     * @param {JsonPropertyType|BaseIssuer} issuer
+     * @param {BaseIssuer} issuer
      * @return {JwtConfiguration}
      */
     addIssuer(issuer){this._config[JwtConfiguration.CONFIG_JWT_ISSUERS].unshift(issuer); return this;}
     /**
-     * @param {JsonPropertyType|JwtToken} token
+     * @param {JwtToken} token
      * @return {JwtConfiguration}
      */
     setToken(token) {this._config[JwtConfiguration.CONFIG_JWT_TOKEN] = token; return this;}
     /**
-     * @param {StringPropertyType|string} scheme
+     * @param {string} scheme
      * @return {JwtConfiguration}
      */
     setScheme(scheme) {this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME] = scheme; return this;}
     /**
-     * @param {BooleanPropertyType|boolean} remove
+     * @param {boolean} remove
      * @return {JwtConfiguration}
      */
     setRemoveScheme(remove) {this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME_REMOVE] = remove; return this;}
@@ -827,8 +860,8 @@ class HTTPContext extends BaseContext {
     constructor(context, config) {
         super(context, config);
         this._azfunccontext.res = {status: 200,
-                                 headers:{"Content-Type": "text/html; charset=ISO-8859-1"},
-                                 body:"<html lang=\"en\"><head><title>" + config.name + "</title></head><body>200, Success</body></html>"};
+                                   headers:{"Content-Type": "text/html; charset=ISO-8859-1"},
+                                   body:"<html lang=\"en\"><head><title>" + config.name + "</title></head><body>200, Success</body></html>"};
         /**@type{string}*/this._action = this._azfunccontext.req.method.toLowerCase();
         /**@type{Object}*/this._cookies = {};
         /**@type{Session}*/this._session = null;
@@ -891,9 +924,11 @@ class HTTPContext extends BaseContext {
     async _parseCookies() {
         let cookies = cookie.parse(this.getRequestHeader("cookie"), "");
         for(let prop in cookies) {
-            let local = cookies[prop];
-            if(typeof local !== "undefined" && local != null)
-                this._cookies.unshift(new Cookie(prop, local));
+            if(cookies.hasOwnProperty(prop)) {
+                let local = cookies[prop];
+                if (typeof local !== "undefined" && local != null)
+                    this._cookies.unshift(new Cookie(prop, local));
+            }
         }
     }
     /**
@@ -1035,20 +1070,6 @@ class HTTPContext extends BaseContext {
         this.send(error, 403);
     }
 }
-/**@type{HTTPContext}*/
-class JSONHTTPContext extends HTTPContext {
-    /**
-     * @param {_AzureFunctionContext} context
-     * @param {Configuration} config
-     */
-    constructor(context, config) {
-        super(context, config);
-        this._azfunccontext.res = {status: 200,
-                                    headers: {"Content-Type": "application/json; charset=utf-8",
-                                              "X-celastrina-requestId": this._requestId},
-                                    body: {name: this._config.name, code: 200, message:"success"}};
-    }
-}
 /**
  * HTTPSentry
  * @author Robert R Murrell
@@ -1056,7 +1077,7 @@ class JSONHTTPContext extends HTTPContext {
 class HTTPSentry extends BaseSentry {
     constructor() {
         super();
-        /**@type{Array.<Permission>}*/this._permissions = [];
+        /**@type{PermissionManager}*/this._permissions = null;
     }
     /**
      * @param {Configuration | HTTPConfiguration} config
@@ -1085,7 +1106,7 @@ class JwtSentry extends HTTPSentry {
         super();
     }
     /**
-     * @param {HTTPContext | JWTContext} context
+     * @param {HTTPContext} context
      * @param {JwtConfiguration} _config
      * @return {Promise<string>}
      * @private
@@ -1108,7 +1129,7 @@ class JwtSentry extends HTTPSentry {
         return _token;
     }
     /**
-     * @param {BaseContext | HTTPContext | JWTContext} context
+     * @param {BaseContext | HTTPContext} context
      * @return {Promise<BaseSubject>}
      */
     async authenticate(context) {
@@ -1257,14 +1278,11 @@ class HTTPFunction extends BaseFunction {
             /**@type{SessionManager}*/let _sm = _config.sessionManager;
             await _sm.setSession(context.session);
         }
-
         // Set any cookies that have changed.
         let _cookies = context.cookies;
         /**@type{Array.<string>}*/let _cookieHeaders = [];
         for(/**@type{Cookie}*/const _cookie of _cookies) {
-            if(_cookie.doSetCookie) {
-                _cookieHeaders.unshift(cookie.serialize(_cookie.name, _cookie.parseValue, _cookie.options));
-            }
+            _cookie.doSerializeCookie(_cookieHeaders);
         }
         context.setResponseHeader("Set-Cookie", _cookieHeaders);
     }
@@ -1279,35 +1297,22 @@ class JSONHTTPFunction extends HTTPFunction {
     /**
      * @param {_AzureFunctionContext} context
      * @param {Configuration} config
-     * @return {Promise<HTTPContext & JSONHTTPContext>}
+     * @return {Promise<HTTPContext>}
      */
-    async createContext(context, config) {return new JSONHTTPContext(context, config);}
+    async createContext(context, config) {
+        let _context = new HTTPContext(context, config);
+        _context._azfunccontext.res = {status: 200,
+                                       headers: {"Content-Type": "application/json; charset=utf-8",
+                                                 "X-celastrina-requestId": this._requestId},
+                                       body: {name: this._config.name, code: 200, message:"success"}};
+        return _context;
+    }
 }
 module.exports = {
     Cookie: Cookie,
-    Session: Session,
-    HTTPParameterFetch: HTTPParameterFetch,
-    HeaderParameterFetch: HeaderParameterFetch,
-    QueryParameterFetch: QueryParameterFetch,
-    BodyParameterFetch: BodyParameterFetch,
-    SessionManager: SessionManager,
-    HTTPConfiguration: HTTPConfiguration,
-    JwtToken: JwtToken,
-    JwtHeaderToken: JwtHeaderToken,
-    JwtQueryToken: JwtQueryToken,
-    JwtBodyToken: JwtBodyToken,
-    JwtAnonymousTokenConfig: JwtAnonymousTokenConfig,
-    JwtConfiguration: JwtConfiguration,
     JwtSubject: JwtSubject,
-    HTTPSentry: HTTPSentry,
-    JwtSentry: JwtSentry,
     HTTPContext: HTTPContext,
-    JSONHTTPContext: JSONHTTPContext,
-
-    // CookieSessionResolver: CookieSessionResolver,
-    // CookieSessionResolverProperty: CookieSessionResolverProperty,
-    // SecureCookieSessionResolver: SecureCookieSessionResolver,
-    // SecureCookieSessionResolverProperty: SecureCookieSessionResolverProperty,
-    HTTPFunction: HTTPFunction,
-    JSONHTTPFunction: JSONHTTPFunction,
+    BaseIssuer: BaseIssuer,
+    HTTPParameterFetch: HTTPParameterFetch,
+    HeaderParameterFetch: HeaderParameterFetch
 };

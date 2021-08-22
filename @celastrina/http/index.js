@@ -22,39 +22,13 @@
  * SOFTWARE.
  */
 "use strict";
-const {JwtSubject, Issuer, IssuerProperty, JwtValidator, AzureIDPJwtValidator,AzureADJwtValidator, AzureADB2CJwtValidator,
-       JwtConfiguration, HTTPContext, HTTPParameterFetch, HeaderParameterFetch, AzureIDPJwtValidatorProperty,
-       QueryParameterFetch, BodyParameterFetch, HTTPParameterFetchProperty, JwtSentry,
-       CookieSessionResolver, CookieSessionResolverProperty, SecureCookieSessionResolver,
-       SecureCookieSessionResolverProperty, HTTPFunction, JwtHTTPFunction, JSONHTTPContext, JSONHTTPFunction,
-       JwtJSONHTTPFunction} = require("./HTTP");
-const {Recaptcha, RecaptchaFunctionRole} = require("./Recaptcha");
+const {Cookie, JwtSubject, HTTPContext, BaseIssuer, HTTPParameterFetch, HeaderParameterFetch} = require("./HTTP");
+
 module.exports = {
+    Cookie: Cookie,
     JwtSubject: JwtSubject,
-    Issuer: Issuer,
-    IssuerProperty: IssuerProperty,
-    AzureIDPJwtValidator: AzureIDPJwtValidator,
-    AzureADJwtValidator: AzureADJwtValidator,
-    AzureADB2CJwtValidator: AzureADB2CJwtValidator,
-    JwtValidator: JwtValidator,
-    AzureIDPJwtValidatorProperty: AzureIDPJwtValidatorProperty,
-    JwtConfiguration: JwtConfiguration,
     HTTPContext: HTTPContext,
+    BaseIssuer: BaseIssuer,
     HTTPParameterFetch: HTTPParameterFetch,
-    HeaderParameterFetch: HeaderParameterFetch,
-    QueryParameterFetch: QueryParameterFetch,
-    BodyParameterFetch: BodyParameterFetch,
-    HTTPParameterFetchProperty: HTTPParameterFetchProperty,
-    CookieSessionResolver: CookieSessionResolver,
-    CookieSessionResolverProperty: CookieSessionResolverProperty,
-    SecureCookieSessionResolver: SecureCookieSessionResolver,
-    SecureCookieSessionResolverProperty: SecureCookieSessionResolverProperty,
-    JwtSentry: JwtSentry,
-    HTTPFunction: HTTPFunction,
-    JwtHTTPFunction: JwtHTTPFunction,
-    JSONHTTPContext: JSONHTTPContext,
-    JSONHTTPFunction: JSONHTTPFunction,
-    JwtJSONHTTPFunction: JwtJSONHTTPFunction,
-    Recaptcha: Recaptcha,
-    RecaptchaFunctionRole: RecaptchaFunctionRole
+    HeaderParameterFetch: HeaderParameterFetch
 };

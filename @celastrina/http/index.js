@@ -22,13 +22,16 @@
  * SOFTWARE.
  */
 "use strict";
-const {Cookie, JwtSubject, HTTPContext, BaseIssuer, HTTPParameterFetch, HeaderParameterFetch} = require("./HTTP");
+const {Cookie, JwtSubject, HTTPContext, BaseIssuer, HTTPParameter, HeaderParameter, QueryParameter,
+       BodyParameter} = require("./HTTP");
 
 module.exports = {
     Cookie: Cookie,
     JwtSubject: JwtSubject,
     HTTPContext: HTTPContext,
     BaseIssuer: BaseIssuer,
-    HTTPParameterFetch: HTTPParameterFetch,
-    HeaderParameterFetch: HeaderParameterFetch
+    HTTPParameter: HTTPParameter,
+    HeaderParameter: HeaderParameter,
+    QueryParameter: QueryParameter,
+    BodyParameter: BodyParameter
 };

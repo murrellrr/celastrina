@@ -28,6 +28,7 @@
  */
 "use strict";
 const axios  = require("axios").default;
+const {v4: uuidv4} = require("uuid");
 const moment = require("moment");
 const jwt = require("jsonwebtoken");
 const cookie = require("cookie");
@@ -551,18 +552,21 @@ class OpenIDJwtIssuer extends BaseIssuer {
  * @abstract
  * @author Robert R Murrell
  */
-class HTTPParameterFetch {
-    /**@param{string}[type]*/
-    constructor(type = "HTTPParameterFetch") {this._type = type;}
+class HTTPParameter {
+    /**
+     * @param{string}[type]
+     * @param{boolean}[readOnly]
+     */
+    constructor(type = "HTTPParameterFetch", readOnly = false) {this._type = type; this._readOnly = readOnly}
     /**@return{string}*/get type() {return this._type;}
+    /**@return{boolean}*/get readOnly() {return this._readOnly;}
     /**
      * @param {HTTPContext} context
      * @param {string} key
-     * @param {null|string} [defaultValue]
-     * @return {Promise<string>}
+     * @return {(null|string)}
      * @abstract
      */
-    async fetch(context, key, defaultValue = null) {
+    _getParameter(context, key) {
         throw CelastrinaError.newError("Not Implemented.", 501);
     }
     /**
@@ -571,59 +575,107 @@ class HTTPParameterFetch {
      * @param {null|string} [defaultValue]
      * @return {Promise<null|string>}
      */
-    async get(context, key, defaultValue = null) {
-        return this.fetch(context, key, defaultValue);
+    async getParameter(context, key, defaultValue = null) {
+        let _value = this._getParameter(context, key);
+        if(typeof _value === "undefined" || _value == null) _value = defaultValue;
+        return _value;
+    }
+    /**
+     * @param {HTTPContext} context
+     * @param {string} key
+     * @param {(null|string)} [value = null]
+     * @abstract
+     */
+    _setParameter(context, key, value = null) {}
+    /**
+     * @param {HTTPContext} context
+     * @param {string} key
+     * @param {(null|string)} [value = null]
+     * @return {Promise<void>}
+     */
+    async setParameter(context, key, value = null) {
+        this._setParameter(context, key, value);
     }
 }
 /**
  * HeaderParameterFetch
  * @author Robert R Murrell
  */
-class HeaderParameterFetch extends HTTPParameterFetch {
+class HeaderParameter extends HTTPParameter {
     constructor(){super("header");}
     /**
      * @param {HTTPContext} context
      * @param {string} key
-     * @param {null|string} [defaultValue
-     * @return {Promise<null|string>}
+     * @return {(null|string)}
      */
-    async fetch(context, key, defaultValue = null) {
-        return context.getRequestHeader(key, defaultValue);
+    _getParameter(context, key) {
+        return context.getRequestHeader(key);
+    }
+    /**
+     * @param {HTTPContext} context
+     * @param {string} key
+     * @param {(null|string)} [value = null]
+     */
+    _setParameter(context, key, value = null) {
+        context.setResponseHeader(key, value);
     }
 }
 /**
  * QueryParameterFetch
  * @author Robert R Murrell
  */
-class QueryParameterFetch extends HTTPParameterFetch {
-    constructor(){super("query");}
+class QueryParameter extends HTTPParameter {
+    constructor(){super("query", true);}
     /**
      * @param {HTTPContext} context
      * @param {string} key
-     * @param {null|string} [defaultValue
-     * @return {Promise<null|string>}
+     * @return {(null|string)}
      */
-    async fetch(context, key, defaultValue = null) {
-        return context.getQuery(key, defaultValue);
+    _getParameter(context, key) {
+        return context.getQuery(key);
+    }
+    /**
+     * @param {HTTPContext} context
+     * @param {string} key
+     * @param {(null|string)} [value = null]
+     */
+    _setParameter(context, key, value = null) {
+        throw CelastrinaError.newError("QueryParameter.setParameter not supported.", 501);
     }
 }
 /**
  * BodyParameterFetch
  * @author Robert R Murrell
  */
-class BodyParameterFetch extends HTTPParameterFetch {
+class BodyParameter extends HTTPParameter {
     constructor(key){super("body");}
     /**
      * @param {HTTPContext} context
      * @param {string} key
-     * @param {null|string} [defaultValue
-     * @return {Promise<null|string>}
+     * @return {(null|string)}
      */
-    async fetch(context, key, defaultValue = null) {
-        let body = context.requestBody;
-        let value = body[key];
-        if(typeof value === "undefined" || value == null) value = defaultValue;
-        return value;
+    _getParameter(context, key) {
+        let _value = context.requestBody;
+        /**@type{Array<string>}*/let _attrs = key.split(".");
+        for(const _attr of _attrs) {
+            _value = _value[_attr];
+        }
+        return _value;
+    }
+    /**
+     * @param {HTTPContext} context
+     * @param {string} key
+     * @param {(null|string)} [value = null]
+     */
+    _setParameter(context, key, value = null) {
+        let _value = context.responseBody;
+        /**@type{Array<string>}*/let _attrs = key.split(".");
+        for(let idx = 0; idx < _attrs.length - 2; ++idx) {
+            _value = _value[_attrs[idx]];
+            if(typeof _value === "undefined" || _value == null)
+                throw CelastrinaError.newError("Invalid object path '" + key + "'.");
+        }
+        _value[_attrs[_attrs.length - 1]] = value;
     }
 }
 /**
@@ -631,13 +683,21 @@ class BodyParameterFetch extends HTTPParameterFetch {
  * @author Robert R Murrell
  */
 class Session {
-    constructor() {
-        this._values = {};
-        /**@type{boolean}*/this._dirty = false;
-    }
     /**
-     * @param name
-     * @param defaultValue
+     * @param {boolean} [isNew = false]
+     * @param {(null|string)} [id = null]
+     */
+    constructor(isNew = false, id = null) {
+        if(typeof id === "undefined" || id == null) id = uuidv4();
+        this._values = {id: id};
+        /**@type{boolean}*/this._dirty = isNew;
+        /**@type{boolean}*/this._new = isNew;
+    }
+    /**@return{string}*/get id() {return this._values.id;}
+    /**@return{boolean}*/get isNew() {return this._new;}
+    /**
+     * @param {string} name
+     * @param {*} defaultValue
      * @return {Promise<*>}
      */
     async getProperty(name, defaultValue = null) {
@@ -664,23 +724,163 @@ class Session {
     /**@type{boolean}*/get doWriteSession() {return this._dirty;}
 }
 /**
+ * SessionFetch
+ * @author Robert R Murrell
+ * @abstract
+ */
+class SessionParameter {
+    constructor() {}
+    /**
+     * @param {HTTPContext} context
+     * @return {Promise<Session>}
+     * @abstract
+     */
+    async getSession(context) {throw CelastrinaError.newError("Not Implemented", 501);}
+    /**@return{boolean}*/get isSetSession() {return true;}
+    /**
+     * @param {HTTPContext} context
+     * @param {string} session
+     * @return {Promise<Session>}
+     */
+    async setSession(context, session) {throw CelastrinaError.newError("Not Implemented", 501);}
+}
+/**
+ * HeaderSessionFetch
+ * @author Robert R Murrell
+ */
+class HeaderSession extends SessionParameter {
+    constructor(header = "x-celastrinajs-session") {
+        super();
+        this._header = header;
+        this._param = new HeaderParameter();
+    }
+    /**
+     * @param {HTTPContext} context
+     * @return {Promise<Session>}
+     */
+    async getSession(context) {
+        return this._param.fetch(context, this._header);
+    }
+    /**
+     * @param {HTTPContext} context
+     * @param {string} session
+     * @return {Promise<Session>}
+     */
+    async setSession(context, session) {}
+}
+/**
+ * BodySessionFetch
+ * @author Robert R Murrell
+ */
+class BodySession extends SessionParameter {
+    constructor(attr = "xCelastrinajsSettings.session.value") {
+        super();
+        this._attr = attr;
+        this._param = new BodyParameter();
+    }
+    /**
+     * @param {HTTPContext} context
+     * @return {Promise<Session>}
+     */
+    async getSession(context) {
+        return this._param.fetch(context, this._attr);
+    }
+    /**
+     * @param {HTTPContext} context
+     * @param {string} session
+     * @return {Promise<Session>}
+     */
+    async setSession(context, session) {}
+}
+/**
+ * CookieSessionFetch
+ * @author Robert R Murrell
+ */
+class CookieSession extends SessionParameter {
+    constructor(attr = "CELASTRINAJS_SESSION") {
+        super();
+        this._attr = attr;
+    }
+    /**
+     * @param {HTTPContext} context
+     * @return {Promise<Session>}
+     */
+    async getSession(context) {
+        //return context.cookies.get()
+    }
+    /**
+     * @param {HTTPContext} context
+     * @param {string} session
+     * @return {Promise<Session>}
+     */
+    async setSession(context, session) {
+        //
+    }
+}
+/**
  * SessionManager
  * @author Robert R Murrell
  */
 class SessionManager {
-    constructor() {}
+    /**
+     * @param {SessionParameter} [fetch = new CookieSessionFetch()]
+     * @param {boolean} [createNew = true]
+     */
+    constructor(fetch = new CookieSession(), createNew = true) {
+        this._parameter = fetch;
+        this._createNew = createNew;
+        /**@type{Session}*/this._session = null;
+    }
     /**
      * @return {Promise<Session>}
      */
-    async getSession() {
-        return new Session();
-    }
+    async newSession() {return new Session();}
+    /**@return{Session}*/get session() {return this._session;}
     /**
-     * @param {Session} session
+     * @param {*} session
+     * @param {HTTPContext} context
+     * @return {(null|string)}
+     */
+    _loadSession(session, context) {return session;}
+    /**
+     * @param {HTTPContext} context
      * @return {Promise<void>}
      */
-    async setSession(session) {
-        //
+    async loadSession(context) {
+        let _session = await this._parameter.getSession(context);
+        if((typeof _session === "undefined" || _session == null) && this._createNew)
+            this._session = await this.newSession();
+        else
+            this._session = this._loadSession(_session, context);
+    }
+    /**
+     * @param {string} session
+     * @param {HTTPContext} context
+     * @return {(null|string)}
+     */
+    _saveSession(session, context) {return session;}
+    /**
+     * @param {Session} [session = null]
+     * @param {HTTPContext} context
+     * @return {Promise<void>}
+     */
+    async saveSession(session = null, context) {
+        if(typeof session !== "undefined" && session != null && session instanceof Session)
+            this._session = session;
+        if(this._session.doWriteSession && this._parameter.isSetSession)
+            await this._parameter.setSession(context, this._saveSession(JSON.stringify(this._session), context));
+    }
+}
+/**
+ * SecureSessionManager
+ * @author Robert R Murrell
+ */
+class SecureSessionManager extends SessionManager {
+    /**
+     * @param {boolean} [createNew = true]
+     */
+    constructor(createNew = true) {
+        super(createNew);
     }
 }
 /**
@@ -720,11 +920,11 @@ class HTTPConfiguration extends Configuration {
 class JwtToken {
     /**
      * @param {string} name
-     * @param {HTTPParameterFetch} fetch
+     * @param {HTTPParameter} param
      */
-    constructor(name, fetch) {
+    constructor(name, param) {
         this._name = name;
-        this._fetch = fetch;
+        this._param = param;
     }
     /**@return{string}*/get name() {return this._name;}
     /**
@@ -732,7 +932,7 @@ class JwtToken {
      * @return {Promise<(null|string)>}
      */
     async get(context) {
-        return this._fetch.get(/**@type{HTTPContext}*/context, this._name, null);
+        return this._param.getParameter(/**@type{HTTPContext}*/context, this._name, null);
     }
 }
 /**
@@ -744,7 +944,7 @@ class JwtHeaderToken extends JwtToken {
      * @param {string} [name="Authorization"]
      */
     constructor(name = "Authorization") {
-        super(name, new HeaderParameterFetch());
+        super(name, new HeaderParameter());
     }
 }
 /**
@@ -756,7 +956,7 @@ class JwtQueryToken extends JwtToken {
      * @param {string} [name="Authorization"]
      */
     constructor(name = "auth_token") {
-        super(name, new QueryParameterFetch());
+        super(name, new QueryParameter());
     }
 }
 /**
@@ -768,7 +968,7 @@ class JwtBodyToken extends JwtToken {
      * @param {string} [name="Authorization"]
      */
     constructor(name = "auth_token") {
-        super(name, new BodyParameterFetch());
+        super(name, new BodyParameter());
     }
 }
 /**
@@ -859,9 +1059,9 @@ class HTTPContext extends BaseContext {
      */
     constructor(context, config) {
         super(context, config);
-        this._azfunccontext.res = {status: 200,
-                                   headers:{"Content-Type": "text/html; charset=ISO-8859-1"},
-                                   body:"<html lang=\"en\"><head><title>" + config.name + "</title></head><body>200, Success</body></html>"};
+        this._azfunccontext.res.status = 200;
+        this._azfunccontext.res.headers["Content-Type"] = "text/html; charset=ISO-8859-1";
+        this._azfunccontext.res.body = "<html lang=\"en\"><head><title>" + config.name + "</title></head><body>200, Success</body></html>";
         /**@type{string}*/this._action = this._azfunccontext.req.method.toLowerCase();
         /**@type{Object}*/this._cookies = {};
         /**@type{Session}*/this._session = null;
@@ -883,16 +1083,24 @@ class HTTPContext extends BaseContext {
      * @return {null|*}
      */
     getSessionProperty(name, defaultValue = null) {
-        let prop = this._session[name];
-        if(typeof prop === "undefined" || prop == null) return defaultValue;
-        else return prop;
+        if(this._session != null) {
+            let prop = this._session[name];
+            if (typeof prop === "undefined" || prop == null) return defaultValue;
+            else return prop;
+        }
+        else return defaultValue;
     }
     /**
      * @param {string} name
      * @param {*} value
      * @return {BaseContext}
      */
-    setSessionProperty(name, value) {this._session[name] = value; return this;}
+    setSessionProperty(name, value) {
+        if(this._session != null) {
+            this._session[name] = value;
+            return this;
+        }
+    }
     /**
      * @return {Promise<void>}
      * @private
@@ -908,8 +1116,7 @@ class HTTPContext extends BaseContext {
      */
     async _setMonitorMode() {
         let monitor;
-        if(this.method === "trace")
-            monitor = true;
+        if(this.method === "trace") monitor = true;
         else {
             monitor = this._azfunccontext.req.query["monitor"];
             if (typeof monitor === "undefined" || monitor == null) monitor = this._azfunccontext.req.headers["x-celastrina-monitor"];
@@ -926,7 +1133,7 @@ class HTTPContext extends BaseContext {
         for(let prop in cookies) {
             if(cookies.hasOwnProperty(prop)) {
                 let local = cookies[prop];
-                if (typeof local !== "undefined" && local != null)
+                if(typeof local !== "undefined" && local != null)
                     this._cookies.unshift(new Cookie(prop, local));
             }
         }
@@ -936,9 +1143,7 @@ class HTTPContext extends BaseContext {
      * @private
      */
     async _setSession() {
-        let _config = /**@type{HTTPConfiguration}*/this.config;
-        let _sm = _config.sessionManager;
-        this._session = await _sm.getSession();
+        await this._config.sessionManager.loadSession(this);
     }
     /**
      * @return {Promise<void>}
@@ -950,7 +1155,6 @@ class HTTPContext extends BaseContext {
         await this._parseCookies();
         await this._setSession();
     }
-
     /**
      * @param {string} name
      * @param {null|string} [defaultValue=null]
@@ -963,12 +1167,13 @@ class HTTPContext extends BaseContext {
     }
     /**
      * @param {string} name
+     * @param {Cookie} [defaultValue=null]
      * @return {Cookie}
      */
-    getCookie(name) {
+    getCookie(name, defaultValue = null) {
         let cookie = this._cookies[name];
-        if(typeof cookie === "undefined")
-            return null;
+        if(typeof cookie === "undefined" || cookie == null)
+            return defaultValue;
         else
             return cookie;
     }
@@ -1037,8 +1242,6 @@ class HTTPContext extends BaseContext {
     }
     /**@param{null|Error|CelastrinaError|*}[error=null]*/
     sendValidationError(error = null) {
-        if(!(error instanceof CelastrinaValidationError))
-            error = CelastrinaValidationError.newValidationError("Bad request.", this._requestId);
         this.send(error, error.code);
     }
     /**
@@ -1301,10 +1504,9 @@ class JSONHTTPFunction extends HTTPFunction {
      */
     async createContext(context, config) {
         let _context = new HTTPContext(context, config);
-        _context._azfunccontext.res = {status: 200,
-                                       headers: {"Content-Type": "application/json; charset=utf-8",
-                                                 "X-celastrina-requestId": this._requestId},
-                                       body: {name: this._config.name, code: 200, message:"success"}};
+        _context._azfunccontext.res.status = 200;
+        _context._azfunccontext.res.headers["Content-Type"] = "application/json; charset=utf-8";
+        _context._azfunccontext.res.body = {name: this._config.name, code: 200, message:"success"};
         return _context;
     }
 }
@@ -1313,6 +1515,8 @@ module.exports = {
     JwtSubject: JwtSubject,
     HTTPContext: HTTPContext,
     BaseIssuer: BaseIssuer,
-    HTTPParameterFetch: HTTPParameterFetch,
-    HeaderParameterFetch: HeaderParameterFetch
+    HTTPParameter: HTTPParameter,
+    HeaderParameter: HeaderParameter,
+    QueryParameter: QueryParameter,
+    BodyParameter: BodyParameter
 };

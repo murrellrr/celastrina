@@ -131,8 +131,9 @@ class CelastrinaValidationError extends CelastrinaError {
      * @param {string} [tag=""]
      * @param {Error} [cause=null]
      */
-    constructor(message, code = 500, drop = false, tag = "", cause = null) {
+    constructor(message, code = 400, drop = false, tag = "", cause = null) {
         super(message, code, drop, cause);
+        //Object.setPrototypeOf(this, CelastrinaValidationError.prototype);
         this.tag = tag;
     }
     /**@return{string}*/toString(){return "[" + this.tag + "]" + super.toString();}
@@ -153,7 +154,7 @@ class CelastrinaValidationError extends CelastrinaError {
      * @return {CelastrinaValidationError}
      */
     static newValidationError(message, tag = "", drop = false, code = 400, cause = null) {
-        return new CelastrinaValidationError(message, code, drop, tag);
+        return new CelastrinaValidationError(message, code, drop, tag, cause);
     }
     /**
      * @param {*} error

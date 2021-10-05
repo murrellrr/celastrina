@@ -70,6 +70,7 @@ class CelastrinaError extends Error {
      */
     constructor(message, code = 500, drop = false, cause = null) {
         super(message);
+        Object.setPrototypeOf(this, CelastrinaError.prototype);
         /**@type{Error}*/this.cause = cause;
         this.code = code;
         this.drop = drop;
@@ -82,12 +83,6 @@ class CelastrinaError extends Error {
         if(typeof this.cause !== "undefined" && this.cause != null)
             _tostring += " Caused by " + this.cause.toString();
         return _tostring;
-    }
-    /**
-     * @return {Object}
-     */
-    toJSON() {
-        return {message: this.message, code: this.code, drop: this.drop};
     }
     /**
      * @param {string} message
@@ -133,18 +128,10 @@ class CelastrinaValidationError extends CelastrinaError {
      */
     constructor(message, code = 400, drop = false, tag = "", cause = null) {
         super(message, code, drop, cause);
-        //Object.setPrototypeOf(this, CelastrinaValidationError.prototype);
+        Object.setPrototypeOf(this, CelastrinaValidationError.prototype);
         this.tag = tag;
     }
     /**@return{string}*/toString(){return "[" + this.tag + "]" + super.toString();}
-    /**
-     * @return {Object}
-     */
-    toJSON() {
-        let _object = super.toJSON();
-        _object.tag = this.tag;
-        return _object;
-    }
     /**
      * @param {string} message
      * @param {int} [code=400]

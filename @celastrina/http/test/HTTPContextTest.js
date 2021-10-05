@@ -136,29 +136,40 @@ describe("HTTPContext", () => {
         });
     });
     describe("Sending", () => {
-        let _context = new MockHTTPContext();
         it("Sends default 204 response", () => {
+            let _context = new MockHTTPContext();
             _context.send();
             assert.strictEqual(_context.azureFunctionContext.res.status, 204, "Expected status code 204.");
             assert.strictEqual(_context.azureFunctionContext.res.body, null, "Expected null body.");
         });
         it("Sends response+200", () => {
+            let _context = new MockHTTPContext();
             let _response = {code: 1234};
             _context.send(_response, 200);
             assert.strictEqual(_context.azureFunctionContext.res.status, 200, "Expected status code 200.");
             assert.strictEqual(_context.azureFunctionContext.res.body, _response, "Expected _response body.");
         });
         it("Sends response default 200", () => {
+            let _context = new MockHTTPContext();
             let _response = {code: 1234};
             _context.send(_response);
             assert.strictEqual(_context.azureFunctionContext.res.status, 200, "Expected status code 200.");
             assert.deepStrictEqual(_context.azureFunctionContext.res.body, _response, "Expected _response body.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.headers["X-celastrina-request-uuid"], _context.requestId, "Expected request header 'X-celastrina-request-uuid' to be set.");
         });
         it("Sends validation error", () => {
+            let _context = new MockHTTPContext();
             let _response = CelastrinaValidationError.newValidationError("Invalid Message", "test.message");
             _context.sendValidationError(_response);
-            assert.strictEqual(_context.azureFunctionContext.res.status, 400, "Expected status code 200.");
+            assert.strictEqual(_context.azureFunctionContext.res.status, 400, "Expected status code 400.");
             assert.deepStrictEqual(_context.azureFunctionContext.res.body, _response, "Expected _response body.");
+        });
+        it("Sends validation error, null error", () => {
+            let _context = new MockHTTPContext();
+            let _response = CelastrinaValidationError.newValidationError("bad request");
+            _context.sendValidationError();
+            assert.strictEqual(_context.azureFunctionContext.res.status, 400, "Expected status code 400.");
+            assert.deepStrictEqual(JSON.stringify(_context.azureFunctionContext.res.body), JSON.stringify(_response), "Expected _response body.");
         });
     });
 });

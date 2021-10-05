@@ -180,11 +180,10 @@ describe("CelastrinaError", () => {
         });
     });
 });
-
-
 describe("CelastrinaValidationError", () => {
     describe("#constructor(message, code, drop, tag, cause)", () => {
         let error = new CelastrinaValidationError("test", 999, true, "sample.message", new Error("TestError"));
+        let _error = CelastrinaValidationError.newValidationError("test", "sample.tag", true, 999, new Error("TestError"));
         it("should set message", () => {
             assert.strictEqual(error.message, "test");
         });
@@ -209,6 +208,15 @@ describe("CelastrinaValidationError", () => {
         });
         it("Instanceof CelastrinaValidationError", () => {
             assert.strictEqual(error instanceof CelastrinaValidationError, true,"Instance of CelastrinaValidationError");
+        });
+        it("Instanceof Error", () => {
+            assert.strictEqual(_error instanceof Error, true,"Instance of Error");
+        });
+        it("Instanceof CelastrinaError", () => {
+            assert.strictEqual(_error instanceof CelastrinaError, true,"Instance of CelastrinaError");
+        });
+        it("Instanceof CelastrinaValidationError", () => {
+            assert.strictEqual(_error instanceof CelastrinaValidationError, true,"Instance of CelastrinaValidationError");
         });
     });
     describe("#constructor(message)", () => {

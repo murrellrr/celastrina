@@ -1240,8 +1240,9 @@ class HTTPContext extends BaseContext {
         this._azfunccontext.res.headers["X-celastrina-request-uuid"] = this._requestId;
         this._azfunccontext.res.body = body;
     }
-    /**@param{null|Error|CelastrinaError|*}[error=null]*/
+    /**@param{*}[error=null]*/
     sendValidationError(error = null) {
+        if(error == null) error = CelastrinaValidationError.newValidationError("bad request");
         this.send(error, error.code);
     }
     /**

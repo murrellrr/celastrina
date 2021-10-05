@@ -70,19 +70,13 @@ class CelastrinaError extends Error {
      */
     constructor(message, code = 500, drop = false, cause = null) {
         super(message);
-        Object.setPrototypeOf(this, CelastrinaError.prototype);
+        /**@type{string}*/this.name = this.constructor.name;
         /**@type{Error}*/this.cause = cause;
-        this.code = code;
-        this.drop = drop;
+        /**@type{number}*/this.code = code;
+        /**@type{boolean}*/this.drop = drop;
     }
-    /**
-     * @return {string}
-     */
-    toString() {
-        let _tostring = "[" + this.code + "][" + this.drop + "]: " + this.message;
-        if(typeof this.cause !== "undefined" && this.cause != null)
-            _tostring += " Caused by " + this.cause.toString();
-        return _tostring;
+    /**@return {string}*/toString() {
+        return "[" + this.name + "][" + this.code + "][" + this.drop + "]: " + this.message;
     }
     /**
      * @param {string} message
@@ -128,10 +122,11 @@ class CelastrinaValidationError extends CelastrinaError {
      */
     constructor(message, code = 400, drop = false, tag = "", cause = null) {
         super(message, code, drop, cause);
-        Object.setPrototypeOf(this, CelastrinaValidationError.prototype);
-        this.tag = tag;
+        /**@type{string}*/this.tag = tag;
     }
-    /**@return{string}*/toString(){return "[" + this.tag + "]" + super.toString();}
+    /**@return {string}*/toString() {
+        return "[" + this.name + "][" + this.code + "][" + this.drop + "][" + this.tag + "]: " + this.message;
+    }
     /**
      * @param {string} message
      * @param {int} [code=400]

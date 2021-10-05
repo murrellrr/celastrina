@@ -42,19 +42,7 @@ describe("CelastrinaError", () => {
     describe("#toString(): display only code, drop, message.", () => {
         let error = new CelastrinaError("test");
         it("should be '[500][false]: test'", () => {
-            assert.strictEqual(error.toString(), "[500][false]: test");
-        });
-    });
-    describe("#toString(): code, drop, message and Error cause.", () => {
-        let error = new CelastrinaError("test", 999, true, new Error("TestError"));
-        it("should be '[999][true]: test Caused by Error: TestError'", () => {
-            assert.strictEqual(error.toString(), "[999][true]: test Caused by Error: TestError");
-        });
-    });
-    describe("#toString(): code, drop, message and CelastrinaError cause.", () => {
-        let error = new CelastrinaError("test", 999, true, new CelastrinaError("TestError"));
-        it("should be '[999][true]: test Caused by [500][false]: TestError'", () => {
-            assert.strictEqual(error.toString(), "[999][true]: test Caused by [500][false]: TestError");
+            assert.strictEqual(error.toString(), "[CelastrinaError][500][false]: test");
         });
     });
     describe("CelastrinaError#newError(message, code, drop, cause)", () => {
@@ -240,25 +228,13 @@ describe("CelastrinaValidationError", () => {
     describe("#toString(): display only code, drop, message.", () => {
         let error = new CelastrinaValidationError("test");
         it("should be '[][400][false]: test'", () => {
-            assert.strictEqual(error.toString(), "[][400][false]: test");
+            assert.strictEqual(error.toString(), "[CelastrinaValidationError][400][false][]: test");
         });
     });
     describe("#toString(): display only tag, code, drop, message.", () => {
         let error = new CelastrinaValidationError("test", 400, false, "sample.tag");
         it("should be '[sample.tag][400][false]: test'", () => {
-            assert.strictEqual(error.toString(), "[sample.tag][400][false]: test");
-        });
-    });
-    describe("#toString(): code, drop, message and Error cause.", () => {
-        let error = new CelastrinaValidationError("test", 999, true, "sample.tag", new Error("TestError"));
-        it("should be '[999][true]: test Caused by Error: TestError'", () => {
-            assert.strictEqual(error.toString(), "[sample.tag][999][true]: test Caused by Error: TestError");
-        });
-    });
-    describe("#toString(): code, drop, message and CelastrinaError cause.", () => {
-        let error = new CelastrinaValidationError("test", 999, true, "sample.tag", new CelastrinaError("TestError"));
-        it("should be '[999][true]: test Caused by [500][false]: TestError'", () => {
-            assert.strictEqual(error.toString(), "[sample.tag][999][true]: test Caused by [500][false]: TestError");
+            assert.strictEqual(error.toString(), "[CelastrinaValidationError][400][false][sample.tag]: test");
         });
     });
     describe("CelastrinaValidationError#newValidationError(message, tag, drop, code, cause)", () => {

@@ -1235,7 +1235,7 @@ class HTTPContext extends BaseContext {
      * @param {number} [status] The HTTP status code, default is 200.
      */
     send(body = null, status = 200) {
-        if(status !== 204 && body == null) status = 204;
+        if((status >= 200 && status <= 299) && body == null) status = 204;
         this._azfunccontext.res.status = status;
         this._azfunccontext.res.headers["X-celastrina-request-uuid"] = this._requestId;
         this._azfunccontext.res.body = body;
@@ -1255,21 +1255,21 @@ class HTTPContext extends BaseContext {
     }
     /**@param{string}url*/
     sendRedirectForwardBody(url) {this.sendRedirect(url, this._azfunccontext.req.body);}
-    /**@param{null|Error|CelastrinaError|*}[error=null]*/
+    /**@param{*}[error=null]*/
     sendServerError(error = null) {
         if(error == null) error = CelastrinaError.newError("Internal Server Error.");
         else if(!(error instanceof CelastrinaError)) error = CelastrinaError.wrapError(error, 500);
         this.send(error, error.code);
     }
-    /**@param{null|CelastrinaError}[error=null]*/
+    /**@param{*}[error=null]*/
     sendNotAuthorizedError(error= null) {
         if(error == null) error = CelastrinaError.newError("Not Authorized.", 401);
         else if(!(error instanceof CelastrinaError)) error = CelastrinaError.wrapError(error, 401);
         this.send(error, 401);
     }
-    /**@param{null|CelastrinaError}[error=null]*/
+    /**@param{*}[error=null]*/
     sendForbiddenError(error = null) {
-        if(error == null) error = CelastrinaError.newError("Forbidden", 401);
+        if(error == null) error = CelastrinaError.newError("Forbidden.", 403);
         else if(!(error instanceof CelastrinaError)) error = CelastrinaError.wrapError(error, 403);
         this.send(error, 403);
     }

@@ -169,7 +169,92 @@ describe("HTTPContext", () => {
             let _response = CelastrinaValidationError.newValidationError("bad request");
             _context.sendValidationError();
             assert.strictEqual(_context.azureFunctionContext.res.status, 400, "Expected status code 400.");
-            assert.deepStrictEqual(JSON.stringify(_context.azureFunctionContext.res.body), JSON.stringify(_response), "Expected _response body.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.body.toString(), _response.toString(), "Expected _response body.");
+        });
+        it("Sends redirect, body null", () => {
+            let _context = new MockHTTPContext();
+            _context.sendRedirect("https://www.google.com");
+            assert.strictEqual(_context.azureFunctionContext.res.status, 302, "Expected status code 302.");
+            assert.deepStrictEqual(_context.getResponseHeader("Location"), "https://www.google.com", "Expected location header 'https://www.google.com'.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.body, null, "Expected null body.");
+        });
+        it("Sends redirect", () => {
+            let _context = new MockHTTPContext();
+            _context.sendRedirect("https://www.google.com", {code: 1234});
+            assert.strictEqual(_context.azureFunctionContext.res.status, 302, "Expected status code 302.");
+            assert.deepStrictEqual(_context.getResponseHeader("Location"), "https://www.google.com", "Expected location header 'https://www.google.com'.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.body, {code: 1234}, "Expected {code: 1234} body.");
+        });
+        it("Sends redirect forward request body", () => {
+            let _context = new MockHTTPContext();
+            _context.azureFunctionContext.req.body = {code: 1234};
+            _context.sendRedirectForwardBody("https://www.google.com");
+            assert.strictEqual(_context.azureFunctionContext.res.status, 302, "Expected status code 302.");
+            assert.deepStrictEqual(_context.getResponseHeader("Location"), "https://www.google.com", "Expected location header 'https://www.google.com'.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.body, {code: 1234}, "Expected {code: 1234} body.");
+        });
+        it("Sends server error, error null", () => {
+            let _context = new MockHTTPContext();
+            let _response = CelastrinaError.newError("Internal Server Error.");
+            _context.sendServerError();
+            assert.strictEqual(_context.azureFunctionContext.res.status, 500, "Expected status code 500.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.body.toString(), _response.toString(), "Expected _response body.");
+        });
+        it("Sends server error, error not Celastrina", () => {
+            let _context = new MockHTTPContext();
+            let _response = CelastrinaError.newError("New Error");
+            _context.sendServerError(new Error("New Error"));
+            assert.strictEqual(_context.azureFunctionContext.res.status, 500, "Expected status code 500.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.body.toString(), _response.toString(), "Expected _response body.");
+        });
+        it("Sends server error, error Celastrina", () => {
+            let _context = new MockHTTPContext();
+            let _response = CelastrinaError.newError("New Error");
+            _context.sendServerError(CelastrinaError.newError("New Error"));
+            assert.strictEqual(_context.azureFunctionContext.res.status, 500, "Expected status code 500.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.body.toString(), _response.toString(), "Expected _response body.");
+        });
+        it("Sends not authorized error, error null", () => {
+            let _context = new MockHTTPContext();
+            let _response = CelastrinaError.newError("Not Authorized.", 401);
+            _context.sendNotAuthorizedError();
+            assert.strictEqual(_context.azureFunctionContext.res.status, 401, "Expected status code 401.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.body.toString(), _response.toString(), "Expected _response body.");
+        });
+        it("Sends not authorized error, error not Celastrina", () => {
+            let _context = new MockHTTPContext();
+            let _response = CelastrinaError.newError("New Error", 401);
+            _context.sendNotAuthorizedError(new Error("New Error"));
+            assert.strictEqual(_context.azureFunctionContext.res.status, 401, "Expected status code 401.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.body.toString(), _response.toString(), "Expected _response body.");
+        });
+        it("Sends not authorized error, error Celastrina", () => {
+            let _context = new MockHTTPContext();
+            let _response = CelastrinaError.newError("New Error", 401);
+            _context.sendNotAuthorizedError(CelastrinaError.newError("New Error"));
+            assert.strictEqual(_context.azureFunctionContext.res.status, 401, "Expected status code 401.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.body.toString(), _response.toString(), "Expected _response body.");
+        });
+        it("Sends Forbidden error, error null", () => {
+            let _context = new MockHTTPContext();
+            let _response = CelastrinaError.newError("Forbidden.", 403);
+            _context.sendForbiddenError();
+            assert.strictEqual(_context.azureFunctionContext.res.status, 403, "Expected status code 403.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.body.toString(), _response.toString(), "Expected _response body.");
+        });
+        it("Sends Forbidden error, error not Celastrina", () => {
+            let _context = new MockHTTPContext();
+            let _response = CelastrinaError.newError("New Error", 403);
+            _context.sendForbiddenError(new Error("New Error"));
+            assert.strictEqual(_context.azureFunctionContext.res.status, 403, "Expected status code 403.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.body.toString(), _response.toString(), "Expected _response body.");
+        });
+        it("Sends Forbidden error, error Celastrina", () => {
+            let _context = new MockHTTPContext();
+            let _response = CelastrinaError.newError("New Error", 403);
+            _context.sendForbiddenError(CelastrinaError.newError("New Error"));
+            assert.strictEqual(_context.azureFunctionContext.res.status, 403, "Expected status code 403.");
+            assert.deepStrictEqual(_context.azureFunctionContext.res.body.toString(), _response.toString(), "Expected _response body.");
         });
     });
 });

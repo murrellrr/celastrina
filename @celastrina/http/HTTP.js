@@ -594,6 +594,8 @@ class HTTPParameter {
      * @return {Promise<void>}
      */
     async setParameter(context, key, value = null) {
+        if(this._readOnly)
+            throw CelastrinaError.newError("Set Parameter not supported.");
         this._setParameter(context, key, value);
     }
 }
@@ -900,18 +902,18 @@ class HTTPConfiguration extends Configuration {
 
     /**@return{boolean}*/get allowAnonymous() {return this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS];}
     /**
-     * @param {SessionManager} sm
+     * @param {SessionManager} [sm=null]
      * @return {HTTPConfiguration}
      */
-    setSessionManager(sm) {
+    setSessionManager(sm = null) {
         this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER] = sm;
         return this;
     }
     /**
-     * @param {boolean} anon
+     * @param {boolean} [anon=false]
      * @return {HTTPConfiguration}
      */
-    setAllowAnonymous(anon) {this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS] = anon; return this;}
+    setAllowAnonymous(anon = false) {this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS] = anon; return this;}
 }
 /**
  * JwtToken
@@ -929,10 +931,11 @@ class JwtToken {
     /**@return{string}*/get name() {return this._name;}
     /**
      * @param {HTTPContext} context
+     * @param {*} [defaultValue=null]
      * @return {Promise<(null|string)>}
      */
-    async get(context) {
-        return this._param.getParameter(/**@type{HTTPContext}*/context, this._name, null);
+    async get(context, defaultValue = null) {
+        return this._param.getParameter(/**@type{HTTPContext}*/context, this._name, defaultValue);
     }
 }
 /**
@@ -941,9 +944,9 @@ class JwtToken {
  */
 class JwtHeaderToken extends JwtToken {
     /**
-     * @param {string} [name="Authorization"]
+     * @param {string} [name="authorization"]
      */
-    constructor(name = "Authorization") {
+    constructor(name = "authorization") {
         super(name, new HeaderParameter());
     }
 }
@@ -1008,11 +1011,15 @@ class JwtConfiguration extends HTTPConfiguration {
         this._config[JwtConfiguration.CONFIG_JWT_TOKEN] = new JwtHeaderToken();
         this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME] = "Bearer ";
         this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME_REMOVE] = true;
-        this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS] = false;
-        this._config[JwtConfiguration.CONFIG_JWT_TOKEN_ANON_CONFIG] = new JwtAnonymousTokenConfig(_anonname, _anonname,
-                                                                                                  _anonname);
+        this._config[JwtConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS] = false;
+        this._config[JwtConfiguration.CONFIG_JWT_TOKEN_ANON_CONFIG] = new JwtAnonymousTokenConfig(_anonname, _anonname, _anonname);
     }
     /**@return{Array.<BaseIssuer>}*/get issuers(){return this._config[JwtConfiguration.CONFIG_JWT_ISSUERS];}
+    /**@param{Array.<BaseIssuer>} issuers*/
+    set issuers(issuers) {
+        if(typeof issuers === "undefined" || issuers == null) issuers = [];
+        this._config[JwtConfiguration.CONFIG_JWT_ISSUERS] = issuers;
+    }
     /**@return{JwtToken}*/get token() {return this._config[JwtConfiguration.CONFIG_JWT_TOKEN]}
     /**@return{string}*/get scheme() {return this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME];}
     /**@return{boolean}*/get removeScheme() {return this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME_REMOVE];}
@@ -1334,7 +1341,7 @@ class JwtSentry extends HTTPSentry {
     }
     /**
      * @param {BaseContext | HTTPContext} context
-     * @return {Promise<BaseSubject>}
+     * @return {Promise<BaseSubject | JwtSubject>}
      */
     async authenticate(context) {
         /**@type{JwtConfiguration}*/let _config  = /**@type{JwtConfiguration}*/context.config;
@@ -1516,8 +1523,16 @@ module.exports = {
     JwtSubject: JwtSubject,
     HTTPContext: HTTPContext,
     BaseIssuer: BaseIssuer,
+    LocalJwtIssuer: LocalJwtIssuer,
     HTTPParameter: HTTPParameter,
     HeaderParameter: HeaderParameter,
     QueryParameter: QueryParameter,
-    BodyParameter: BodyParameter
+    BodyParameter: BodyParameter,
+    JwtToken: JwtToken,
+    JwtHeaderToken: JwtHeaderToken,
+    SessionManager: SessionManager,
+    HTTPConfiguration: HTTPConfiguration,
+    JwtAnonymousTokenConfig: JwtAnonymousTokenConfig,
+    JwtConfiguration: JwtConfiguration,
+    JwtSentry: JwtSentry
 };

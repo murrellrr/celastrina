@@ -135,6 +135,20 @@ describe("HTTPContext", () => {
             assert.strictEqual(_context.getResponseHeader("header4"), null, "Expected null.");
         });
     });
+    describe("Cookies", () => {
+        it("Sets cookie", () => {
+            let _context = new MockHTTPContext();
+            let _cookie = new Cookie("cookie-name", "cookie-value");
+            _context.setCookie(_cookie);
+            assert.deepStrictEqual(_context._cookies["cookie-name"], _cookie, "Expected cookie 'cookie-name'.");
+        });
+        it("Sets cookie", () => {
+            let _context = new MockHTTPContext();
+            let _cookie = new Cookie("cookie-name", "cookie-value");
+            _context.setCookie(_cookie);
+            assert.deepStrictEqual(_context.getCookie("cookie-name"), _cookie, "Expected cookie 'cookie-name'.");
+        });
+    });
     describe("Sending", () => {
         it("Sends default 204 response", () => {
             let _context = new MockHTTPContext();

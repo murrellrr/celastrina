@@ -7,7 +7,8 @@ const assert = require("assert");
 const moment = require("moment");
 
 class MockBaseIssuer extends BaseIssuer {
-    constructor(issuer, audiences = null, assignments = null,
+    constructor(issuer = "issuer.celastrina.js", audiences = ["celastrina.js"],
+                assignments = ["role1"],
                 validateNonce = false) {
         super(issuer, audiences, assignments, validateNonce);
         this.isGetKeyInvoked = false;
@@ -124,3 +125,7 @@ describe("BaseIssuer", () => {
         });
     });
 });
+
+module.exports = {
+    MockBaseIssuer: MockBaseIssuer
+};

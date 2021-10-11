@@ -22,16 +22,24 @@
  * SOFTWARE.
  */
 "use strict";
-const {Cookie, JwtSubject, HTTPContext, BaseIssuer, HTTPParameter, HeaderParameter, QueryParameter,
-       BodyParameter} = require("./HTTP");
-
+const {Cookie, JwtSubject, HTTPContext, BaseIssuer, LocalJwtIssuer, HTTPParameter, HeaderParameter, QueryParameter,
+       BodyParameter, JwtToken, JwtHeaderToken, HTTPConfiguration, JwtAnonymousTokenConfig, JwtConfiguration, JwtSentry,
+       SessionManager} = require("./HTTP");
 module.exports = {
     Cookie: Cookie,
     JwtSubject: JwtSubject,
     HTTPContext: HTTPContext,
     BaseIssuer: BaseIssuer,
+    LocalJwtIssuer: LocalJwtIssuer,
     HTTPParameter: HTTPParameter,
     HeaderParameter: HeaderParameter,
     QueryParameter: QueryParameter,
-    BodyParameter: BodyParameter
+    BodyParameter: BodyParameter,
+    JwtToken: JwtToken,
+    JwtHeaderToken: JwtHeaderToken,
+    SessionManager: SessionManager,
+    HTTPConfiguration: HTTPConfiguration,
+    JwtAnonymousTokenConfig: JwtAnonymousTokenConfig,
+    JwtConfiguration: JwtConfiguration,
+    JwtSentry: JwtSentry
 };

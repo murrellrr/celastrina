@@ -10,7 +10,6 @@ describe("HTTPConfiguration", () => {
         it("Sets defaults", () => {
             let _cfg = new HTTPConfiguration("HTTPConfigurationTest");
             assert.strictEqual(_cfg.sessionManager, null, "Expected null.");
-            assert.strictEqual(_cfg.allowAnonymous, true, "Expected true.");
         });
     });
     describe("Accessors", () => {
@@ -26,17 +25,6 @@ describe("HTTPConfiguration", () => {
         });
         it("Set session manager returns HTTPConfiguration", () => {
             assert.deepStrictEqual(_cfg.setSessionManager() instanceof HTTPConfiguration, true, "Expected 'HTTPConfiguration'.");
-        });
-        it("Sets anon access", () => {
-            _cfg.setAllowAnonymous(true);
-            assert.deepStrictEqual(_cfg.allowAnonymous, true, "Expected true.");
-        });
-        it("Sets anon access default", () => {
-            _cfg.setAllowAnonymous();
-            assert.deepStrictEqual(_cfg.allowAnonymous, false, "Expected false.");
-        });
-        it("Set anon access returns HTTPConfiguration", () => {
-            assert.deepStrictEqual(_cfg.setAllowAnonymous() instanceof HTTPConfiguration, true, "Expected 'HTTPConfiguration'.");
         });
     });
 });

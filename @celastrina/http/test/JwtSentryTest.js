@@ -6,10 +6,8 @@ const assert = require("assert");
 const jwt = require("jsonwebtoken");
 const {MockPropertyManager} = require("../../core/test/PropertyManagerTest");
 
-
 describe("JwtSentry", () => {
     describe("#authenticate(context)", () => {
-
         it("authenticates a valid user", async () => {
             let _mockpayload = {iss: "@celastrinajs/issuer/mock", aud: "aefff932-5d4e-4216-a117-0d42e47b06b7"};
             let _mocktoken = jwt.sign(_mockpayload, "celastrinajsmocktoken");
@@ -72,6 +70,23 @@ describe("JwtSentry", () => {
             let _mocktoken = jwt.sign(_mockpayload, "celastrinajsmocktoken");
             let _azctx  = new MockAzureFunctionContext();
             _azctx.req.headers["authorization"] = "Bearer " + _mocktoken;
+            /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("JwtSentryTest");
+            let _pm = new MockPropertyManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _pm.mockProperty("celastrinajsmocktoken_prop", "celastrinajsmocktoken");
+            _config.addIssuer(new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken_prop", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]));
+            let _mctx = new MockHTTPContext(_azctx, _config);
+            let _jwts = new JwtSentry();
+            try {
+                /**@type{JwtSubject}*/let result = await _jwts.authenticate(_mctx);
+                assert.fail("Expected 401, not authorized CelastrinaException.");
+            }
+            catch(exception) {
+                // do nothing
+            }
+        });
+        it("fails an invalid user due to no token", async () => {
+            let _azctx  = new MockAzureFunctionContext();
             /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("JwtSentryTest");
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);

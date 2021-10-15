@@ -31,6 +31,7 @@ const axios  = require("axios").default;
 const {v4: uuidv4} = require("uuid");
 const moment = require("moment");
 const jwt = require("jsonwebtoken");
+const jwkToPem = require("jwk-to-pem");
 const cookie = require("cookie");
 const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL, Configuration,
        PermissionManager, BaseSubject, BaseSentry, Algorithm, AES256Algorithm, Cryptography, RoleResolver, BaseContext,
@@ -57,12 +58,25 @@ const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL,
  * @property {string} issuer
  */
 /**
- * @typedef {Object} JWKS
- * @property {(null|string)} [issuer]
- * @property {string} type
+ * @typedef {Object} JWKSKEY
+ * @property {string} [kid]
+ * @property {string} [kty]
  * @property {string} [x5c]
  * @property {string} [e]
  * @property {string} [n]
+ * @property {string} [x]
+ * @property {string} [y]
+ * @property {string} [crv]
+ */
+/**
+ * @typedef {Object} JWKS
+ * @property {(null|string)} [issuer]
+ * @property {string} type
+ * @property {JWKSKEY} key
+ */
+/**
+ * Cookie
+ * @author Robert R Murrell
  */
 class Cookie {
     /**
@@ -314,7 +328,7 @@ class BaseIssuer {
     async verify(context, _subject) {
         if(_subject.issuer === this._issuer) {
             try {
-                let decoded = jwt.verify(_subject.token, await this.getKey(context, _subject));
+                let decoded = jwt.verify(_subject.token, await this.getKey(context, _subject), {algorithm: "RSA"});
                 if(typeof decoded === "undefined" || decoded == null) return false;
                 if(this._audiences != null) {
                     if(!this._audiences.includes(_subject.audience)) return false;
@@ -330,7 +344,7 @@ class BaseIssuer {
             }
             catch (exception) {
                 context.log("Exception authenticating JWT:" + exception, LOG_LEVEL.ERROR, "THREAT");
-                throw CelastrinaError.newError("Exception authenticating subject " + _subject.id);
+                return false;
             }
         }
         else return false;
@@ -372,7 +386,6 @@ class LocalJwtIssuer extends BaseIssuer {
  *              </ul>
  *              All values in curly-brace {} will be replaced with a value from the claim name {claim} in the decoded JWT.
  * @author Robert R Murrell
- * @abstract
  */
 class OpenIDJwtIssuer extends BaseIssuer {
     /**
@@ -390,11 +403,11 @@ class OpenIDJwtIssuer extends BaseIssuer {
     }
     /**
      * @param {HTTPContext} context
-     * @param {JwtSubject} subject
+     * @param {JwtSubject} _subject
      * @param {string} url
      * @return {Promise<string>}
      */
-    static async _replaceURLEndpoint(context, subject, url) {
+    static async _replaceURLEndpoint(context, _subject, url) {
         /**@type {RegExp}*/let regex = RegExp(/{([^}]*)}/g);
         let match;
         let matches = new Set();
@@ -402,9 +415,9 @@ class OpenIDJwtIssuer extends BaseIssuer {
             matches.add(match[1]);
         }
         for(const match of matches) {
-            let value = await subject.getClaim(match);
+            let value = await _subject.getClaim(match);
             if(value == null) {
-                context.log("No claim'" + value + "' not found for subject '" + context.subject.id + "'.",
+                context.log("No claim'" + value + "' not found for subject '" + _subject.id + "'.",
                                     LOG_LEVEL.ERROR, "BaseIssuer._replaceURLEndpoint(context, subject, url)");
                 throw CelastrinaError.newError("Not Authorized.", 401);
             }
@@ -415,16 +428,16 @@ class OpenIDJwtIssuer extends BaseIssuer {
     }
     /**
      * @param {HTTPContext} context
+     * @param {JwtSubject} _subject
      * @param {string} configUrl
      * @return {Promise<(null|JWKS)>}
      * @private
      */
-    static async _getKey(context, configUrl) {
-        if(!(context.subject instanceof JwtSubject)) {
+    static async _getKey(context, _subject, configUrl) {
+        if(!(_subject instanceof JwtSubject)) {
             context.log("HTTPFunction not configured for JWT.", LOG_LEVEL.ERROR, "OpenIDJwtIssuer._getKey(context, configUrl)");
             throw CelastrinaError.newError("Not Authorized.", 401);
         }
-        /**@type{JwtSubject}*/let _subject = context.subject;
         let _endpoint = await OpenIDJwtIssuer._replaceURLEndpoint(context, _subject, configUrl);
         try {
             let _response = await axios.get(_endpoint);
@@ -434,17 +447,16 @@ class OpenIDJwtIssuer extends BaseIssuer {
             /**@type{(null|JWKS)}*/let _key = null;
             for (const key of _response.data.keys) {
                 if(key.kid === _subject.header.kid) {
-                    _key = {issuer: null, type: key.kty, e: key.e, n: key.n};
+                    _key = {issuer: _issuer, type: key.kty, key: key};
                     break;
                 }
             }
-            if(_key != null) _key.issuer = _issuer;
             return _key;
         }
         catch(exception) {
-            context.log("Exception getting OpenID configuration: " + exception, LOG_LEVEL.ERROR,
-                         "OpenIDJwtIssuer._getKey(subject, context)");
-            CelastrinaError.newError("Exception authenticating user.")
+            context.log("Exception getting OpenID configuration for subject " + _subject.id + ": " + exception,
+                                LOG_LEVEL.ERROR, "OpenIDJwtIssuer._getKey(subject, context)");
+            CelastrinaError.newError("Exception authenticating user.", 401);
         }
     }
     /**
@@ -454,82 +466,7 @@ class OpenIDJwtIssuer extends BaseIssuer {
      * @private
      */
     async _getPemX5C(key, context) {
-        return "-----BEGIN CERTIFICATE-----\n" + key.x5c + "\n-----END CERTIFICATE-----\n";
-    }
-    /**
-     * @param {(null|JWKS)} key
-     * @param {HTTPContext} context
-     * @return {Promise<string>}
-     * @private
-     */
-    async _getPemModExp(key, context) {
-        return this._rsaPublicKeyPem(key.n, key.e);
-    }
-    /**
-     * @param {string} modulus_b64
-     * @param {string} exponent_b64
-     * @return {string}
-     * @private
-     */
-    _rsaPublicKeyPem(modulus_b64, exponent_b64) {
-        let modulus = new Buffer(modulus_b64, "base64");
-        let exponent = new Buffer(exponent_b64, "base64");
-        let modulus_hex = modulus.toString("hex")
-        let exponent_hex = exponent.toString("hex")
-        modulus_hex = this._prepadSigned(modulus_hex)
-        exponent_hex = this._prepadSigned(exponent_hex)
-        let modlen = modulus_hex.length / 2
-        let explen = exponent_hex.length / 2
-        let encoded_modlen = this._encodeLengthHex(modlen)
-        let encoded_explen = this._encodeLengthHex(explen)
-        let encoded_pubkey = "30" +
-            this._encodeLengthHex(
-                modlen +
-                explen +
-                encoded_modlen.length / 2 +
-                encoded_explen.length / 2 + 2
-            ) +
-            "02" + encoded_modlen + modulus_hex +
-            "02" + encoded_explen + exponent_hex;
-        let der_b64 = new Buffer(encoded_pubkey, "hex").toString("base64");
-        return "-----BEGIN RSA PUBLIC KEY-----\n" + der_b64.match(/.{1,64}/g).join('\n') +
-            "\n-----END RSA PUBLIC KEY-----\n";
-    }
-    /**
-     * @param {string} hexStr
-     * @return {string|*}
-     * @private
-     */
-    _prepadSigned(hexStr) {
-        let msb = hexStr[0]
-        if(msb < "0" || msb > "7")
-            return "00" + hexStr;
-        else
-            return hexStr;
-    }
-    /**
-     * @param {Number} number
-     * @return {string}
-     * @private
-     */
-    _toHex(number) {
-        let nstr = number.toString(16);
-        if (nstr.length % 2) return "0" + nstr;
-        return nstr;
-    }
-    /**
-     * @param n
-     * @return {string}
-     * @private
-     */
-    _encodeLengthHex(n) {
-        if (n <= 127)
-            return this._toHex(n);
-        else {
-            let n_hex = this._toHex(n)
-            let length_of_length_byte = 128 + n_hex.length / 2 // 0x80+numbytes
-            return this._toHex(length_of_length_byte) + n_hex
-        }
+        return "-----BEGIN PUBLIC KEY-----\n" + key.key.x5c + "\n-----END PUBLIC KEY-----\n";
     }
     /**
      * @param {HTTPContext} context
@@ -538,17 +475,17 @@ class OpenIDJwtIssuer extends BaseIssuer {
      * @private
      */
     async getKey(context, subject) {
-        /**@type{(null|JWKS)}*/let key = await OpenIDJwtIssuer._getKey(context, this._configUrl);
+        /**@type{(null|JWKS)}*/let key = await OpenIDJwtIssuer._getKey(context, subject, this._configUrl);
         let pem;
-        if(typeof key.x5c === "undefined" || key.x5c == null)
-            pem = await this._getPemModExp(key, context);
+        if(typeof key.key.x5c === "undefined" || key.key.x5c == null)
+            pem = jwkToPem(key.key);
         else
             pem = await this._getPemX5C(key, context);
         return pem;
     }
 }
 /**
- * HTTPParameterFetch
+ * HTTPParameter
  * @abstract
  * @author Robert R Murrell
  */
@@ -563,7 +500,7 @@ class HTTPParameter {
     /**
      * @param {HTTPContext} context
      * @param {string} key
-     * @return {(null|string)}
+     * @return {*}
      * @abstract
      */
     _getParameter(context, key) {
@@ -572,8 +509,8 @@ class HTTPParameter {
     /**
      * @param {HTTPContext} context
      * @param {string} key
-     * @param {null|string} [defaultValue]
-     * @return {Promise<null|string>}
+     * @param {*} [defaultValue]
+     * @return {Promise<*>}
      */
     async getParameter(context, key, defaultValue = null) {
         let _value = this._getParameter(context, key);
@@ -583,14 +520,14 @@ class HTTPParameter {
     /**
      * @param {HTTPContext} context
      * @param {string} key
-     * @param {(null|string)} [value = null]
+     * @param {*} [value = null]
      * @abstract
      */
     _setParameter(context, key, value = null) {}
     /**
      * @param {HTTPContext} context
      * @param {string} key
-     * @param {(null|string)} [value = null]
+     * @param {*} [value = null]
      * @return {Promise<void>}
      */
     async setParameter(context, key, value = null) {
@@ -600,11 +537,11 @@ class HTTPParameter {
     }
 }
 /**
- * HeaderParameterFetch
+ * HeaderParameter
  * @author Robert R Murrell
  */
 class HeaderParameter extends HTTPParameter {
-    constructor(){super("header");}
+    constructor(type = "header"){super(type);}
     /**
      * @param {HTTPContext} context
      * @param {string} key
@@ -623,11 +560,34 @@ class HeaderParameter extends HTTPParameter {
     }
 }
 /**
- * QueryParameterFetch
+ * CookieParameter
+ * @author Robert R Murrell
+ */
+class CookieParameter extends HTTPParameter {
+    constructor(type = "cookie"){super(type);}
+    /**
+     * @param {HTTPContext} context
+     * @param {string} key
+     * @return {Cookie}
+     */
+    _getParameter(context, key) {
+        return context.getCookie(key);
+    }
+    /**
+     * @param {HTTPContext} context
+     * @param {string} key
+     * @param {Cookie} [value = null]
+     */
+    _setParameter(context, key, value = null) {
+        context.setCookie(value);
+    }
+}
+/**
+ * QueryParameter
  * @author Robert R Murrell
  */
 class QueryParameter extends HTTPParameter {
-    constructor(){super("query", true);}
+    constructor(type = "query"){super(type, true);}
     /**
      * @param {HTTPContext} context
      * @param {string} key
@@ -646,7 +606,7 @@ class QueryParameter extends HTTPParameter {
     }
 }
 /**
- * BodyParameterFetch
+ * BodyParameter
  * @author Robert R Murrell
  */
 class BodyParameter extends HTTPParameter {
@@ -654,7 +614,7 @@ class BodyParameter extends HTTPParameter {
     /**
      * @param {HTTPContext} context
      * @param {string} key
-     * @return {(null|string)}
+     * @return {*}
      */
     _getParameter(context, key) {
         let _value = context.requestBody;
@@ -667,11 +627,11 @@ class BodyParameter extends HTTPParameter {
     /**
      * @param {HTTPContext} context
      * @param {string} key
-     * @param {(null|string)} [value = null]
+     * @param {*} [value = null]
      */
     _setParameter(context, key, value = null) {
         let _value = context.responseBody;
-        /**@type{Array<string>}*/let _attrs = key.split(".");
+        /**@type{Array<string>}*/let _attrs = key.trim().split(".");
         for(let idx = 0; idx < _attrs.length - 2; ++idx) {
             _value = _value[_attrs[idx]];
             if(typeof _value === "undefined" || _value == null)
@@ -725,111 +685,21 @@ class Session {
     async deleteProperty(name) {delete this._values[name]; this._dirty = true;}
     /**@type{boolean}*/get doWriteSession() {return this._dirty;}
 }
-/**
- * SessionFetch
- * @author Robert R Murrell
- * @abstract
- */
-class SessionParameter {
-    constructor() {}
-    /**
-     * @param {HTTPContext} context
-     * @return {Promise<Session>}
-     * @abstract
-     */
-    async getSession(context) {throw CelastrinaError.newError("Not Implemented", 501);}
-    /**@return{boolean}*/get isSetSession() {return true;}
-    /**
-     * @param {HTTPContext} context
-     * @param {string} session
-     * @return {Promise<Session>}
-     */
-    async setSession(context, session) {throw CelastrinaError.newError("Not Implemented", 501);}
-}
-/**
- * HeaderSessionFetch
- * @author Robert R Murrell
- */
-class HeaderSession extends SessionParameter {
-    constructor(header = "x-celastrinajs-session") {
-        super();
-        this._header = header;
-        this._param = new HeaderParameter();
-    }
-    /**
-     * @param {HTTPContext} context
-     * @return {Promise<Session>}
-     */
-    async getSession(context) {
-        return this._param.fetch(context, this._header);
-    }
-    /**
-     * @param {HTTPContext} context
-     * @param {string} session
-     * @return {Promise<Session>}
-     */
-    async setSession(context, session) {}
-}
-/**
- * BodySessionFetch
- * @author Robert R Murrell
- */
-class BodySession extends SessionParameter {
-    constructor(attr = "xCelastrinajsSettings.session.value") {
-        super();
-        this._attr = attr;
-        this._param = new BodyParameter();
-    }
-    /**
-     * @param {HTTPContext} context
-     * @return {Promise<Session>}
-     */
-    async getSession(context) {
-        return this._param.fetch(context, this._attr);
-    }
-    /**
-     * @param {HTTPContext} context
-     * @param {string} session
-     * @return {Promise<Session>}
-     */
-    async setSession(context, session) {}
-}
-/**
- * CookieSessionFetch
- * @author Robert R Murrell
- */
-class CookieSession extends SessionParameter {
-    constructor(attr = "CELASTRINAJS_SESSION") {
-        super();
-        this._attr = attr;
-    }
-    /**
-     * @param {HTTPContext} context
-     * @return {Promise<Session>}
-     */
-    async getSession(context) {
-        //return context.cookies.get()
-    }
-    /**
-     * @param {HTTPContext} context
-     * @param {string} session
-     * @return {Promise<Session>}
-     */
-    async setSession(context, session) {
-        //
-    }
-}
+
 /**
  * SessionManager
  * @author Robert R Murrell
  */
 class SessionManager {
     /**
-     * @param {SessionParameter} [fetch = new CookieSessionFetch()]
+     * @param {HTTPParameter} [parameter = new CookieSessionFetch()]
+     * @param {string} [name = "celastrinajs_session"]
      * @param {boolean} [createNew = true]
      */
-    constructor(fetch = new CookieSession(), createNew = true) {
-        this._parameter = fetch;
+    constructor(parameter = new CookieParameter(), name = "celastrinajs_session",
+                createNew = true) {
+        this._parameter = parameter;
+        this._name = name;
         this._createNew = createNew;
         /**@type{Session}*/this._session = null;
     }
@@ -849,7 +719,7 @@ class SessionManager {
      * @return {Promise<void>}
      */
     async loadSession(context) {
-        let _session = await this._parameter.getSession(context);
+        let _session = await this._parameter.getParameter(context, this._name);
         if((typeof _session === "undefined" || _session == null) && this._createNew)
             this._session = await this.newSession();
         else
@@ -869,8 +739,8 @@ class SessionManager {
     async saveSession(session = null, context) {
         if(typeof session !== "undefined" && session != null && session instanceof Session)
             this._session = session;
-        if(this._session.doWriteSession && this._parameter.isSetSession)
-            await this._parameter.setSession(context, this._saveSession(JSON.stringify(this._session), context));
+        if(this._session.doWriteSession && !this._parameter.readOnly)
+            await this._parameter.setParameter(context, this._saveSession(JSON.stringify(this._session), context));
     }
 }
 /**
@@ -884,6 +754,22 @@ class SecureSessionManager extends SessionManager {
     constructor(createNew = true) {
         super(createNew);
     }
+    /**
+     * @param {*} session
+     * @param {HTTPContext} context
+     * @return {(null|string)}
+     */
+    _loadSession(session, context) {
+        return session;
+    }
+    /**
+     * @param {string} session
+     * @param {HTTPContext} context
+     * @return {(null|string)}
+     */
+    _saveSession(session, context) {
+        return session;
+    }
 }
 /**
  * HTTPConfiguration
@@ -891,16 +777,12 @@ class SecureSessionManager extends SessionManager {
  */
 class HTTPConfiguration extends Configuration {
     static CONFIG_HTTP_SESSION_MANAGER = "celastrinajs.http.session";
-    static CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS = "celastrinajs.http.permissions.anonymous";
     /**@param{string} name*/
     constructor(name) {
         super(name);
         this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER] = null;
-        this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS] = true;
     }
     /**@return{SessionManager}*/get sessionManager() {return this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER];}
-
-    /**@return{boolean}*/get allowAnonymous() {return this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS];}
     /**
      * @param {SessionManager} [sm=null]
      * @return {HTTPConfiguration}
@@ -909,89 +791,6 @@ class HTTPConfiguration extends Configuration {
         this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER] = sm;
         return this;
     }
-    /**
-     * @param {boolean} [anon=false]
-     * @return {HTTPConfiguration}
-     */
-    setAllowAnonymous(anon = false) {this._config[HTTPConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS] = anon; return this;}
-}
-/**
- * JwtToken
- * @author Robert R Murrell
- */
-class JwtToken {
-    /**
-     * @param {string} name
-     * @param {HTTPParameter} param
-     */
-    constructor(name, param) {
-        this._name = name;
-        this._param = param;
-    }
-    /**@return{string}*/get name() {return this._name;}
-    /**
-     * @param {HTTPContext} context
-     * @param {*} [defaultValue=null]
-     * @return {Promise<(null|string)>}
-     */
-    async get(context, defaultValue = null) {
-        return this._param.getParameter(/**@type{HTTPContext}*/context, this._name, defaultValue);
-    }
-}
-/**
- * JwtHeaderToken
- * @author Robert R Murrell
- */
-class JwtHeaderToken extends JwtToken {
-    /**
-     * @param {string} [name="authorization"]
-     */
-    constructor(name = "authorization") {
-        super(name, new HeaderParameter());
-    }
-}
-/**
- * JwtHeaderToken
- * @author Robert R Murrell
- */
-class JwtQueryToken extends JwtToken {
-    /**
-     * @param {string} [name="Authorization"]
-     */
-    constructor(name = "auth_token") {
-        super(name, new QueryParameter());
-    }
-}
-/**
- * JwtHeaderToken
- * @author Robert R Murrell
- */
-class JwtBodyToken extends JwtToken {
-    /**
-     * @param {string} [name="Authorization"]
-     */
-    constructor(name = "auth_token") {
-        super(name, new BodyParameter());
-    }
-}
-/**
- * JwtAnonymousTokenConfig
- * @author Robert R Murrell
- */
-class JwtAnonymousTokenConfig {
-    /**
-     * @param {string} [issuer="@celastrinajs/http/anonymous"]
-     * @param {string} [audience="@celastrinajs/http/anonymous"]
-     * @param {string} [secret="@celastrinajs/http/anonymous"]
-     * @param {number} [expires=300]
-     */
-    constructor(issuer = "@celastrinajs/http/anonymous", audience = "@celastrinajs/http/anonymous",
-                secret = "@celastrinajs/http/anonymous", expires = 300) {
-        this.iss = issuer;
-        this.aud = audience;
-        this.exp = expires;
-        this.secret = secret;
-    }
 }
 /**
  * JwtConfiguration
@@ -999,8 +798,8 @@ class JwtAnonymousTokenConfig {
  */
 class JwtConfiguration extends HTTPConfiguration {
     static CONFIG_JWT_ISSUERS = "celastrinajs.http.jwt.issuers";
-    static CONFIG_JWT_TOKEN = "celastrinajs.http.jwt.authorization.token";
-    static CONFIG_JWT_TOKEN_ANON_CONFIG = "celastrinajs.http.jwt.authorization.token.anon.config";
+    static CONFIG_JWT_TOKEN_PARAMETER = "celastrinajs.http.jwt.authorization.token.parameter";
+    static CONFIG_JWT_TOKEN_NAME = "celastrinajs.http.jwt.authorization.token.name";
     static CONFIG_JWT_TOKEN_SCHEME = "celastrinajs.http.jwt.authorization.token.scheme";
     static CONFIG_JWT_TOKEN_SCHEME_REMOVE = "celastrinajs.http.jwt.authorization.token.scheme.remove";
     /**@param{string} name*/
@@ -1008,11 +807,10 @@ class JwtConfiguration extends HTTPConfiguration {
         super(name);
         let _anonname = "@celastrinajs/http/anonymous/" + name;
         this._config[JwtConfiguration.CONFIG_JWT_ISSUERS] = [];
-        this._config[JwtConfiguration.CONFIG_JWT_TOKEN] = new JwtHeaderToken();
-        this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME] = "Bearer ";
+        this._config[JwtConfiguration.CONFIG_JWT_TOKEN_PARAMETER] = new HeaderParameter();
+        this._config[JwtConfiguration.CONFIG_JWT_TOKEN_NAME] = "authorization";
+        this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME] = "Bearer";
         this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME_REMOVE] = true;
-        this._config[JwtConfiguration.CONFIG_HTTP_PERMISSIONS_ALLOW_ANONYMOUS] = false;
-        this._config[JwtConfiguration.CONFIG_JWT_TOKEN_ANON_CONFIG] = new JwtAnonymousTokenConfig(_anonname, _anonname, _anonname);
     }
     /**@return{Array.<BaseIssuer>}*/get issuers(){return this._config[JwtConfiguration.CONFIG_JWT_ISSUERS];}
     /**@param{Array.<BaseIssuer>} issuers*/
@@ -1020,10 +818,10 @@ class JwtConfiguration extends HTTPConfiguration {
         if(typeof issuers === "undefined" || issuers == null) issuers = [];
         this._config[JwtConfiguration.CONFIG_JWT_ISSUERS] = issuers;
     }
-    /**@return{JwtToken}*/get token() {return this._config[JwtConfiguration.CONFIG_JWT_TOKEN]}
+    /**@return{HTTPParameter}*/get parameter() {return this._config[JwtConfiguration.CONFIG_JWT_TOKEN_PARAMETER]}
+    /**@return{string}*/get token() {return this._config[JwtConfiguration.CONFIG_JWT_TOKEN_NAME];}
     /**@return{string}*/get scheme() {return this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME];}
     /**@return{boolean}*/get removeScheme() {return this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME_REMOVE];}
-    /**@return{JwtAnonymousTokenConfig}*/get anonymousConfig() {return this._config[JwtConfiguration.CONFIG_JWT_TOKEN_ANON_CONFIG];};
     /**
      * @param {Array.<BaseIssuer>} [issuers=[]]
      * @return {JwtConfiguration}
@@ -1035,10 +833,15 @@ class JwtConfiguration extends HTTPConfiguration {
      */
     addIssuer(issuer){this._config[JwtConfiguration.CONFIG_JWT_ISSUERS].unshift(issuer); return this;}
     /**
-     * @param {JwtToken} token
+     * @param {HTTPParameter} token
      * @return {JwtConfiguration}
      */
-    setToken(token) {this._config[JwtConfiguration.CONFIG_JWT_TOKEN] = token; return this;}
+    setParameter(token) {this._config[JwtConfiguration.CONFIG_JWT_TOKEN_PARAMETER] = token; return this;}
+    /**
+     * @param {string} token
+     * @return {JwtConfiguration}
+     */
+    setToken(token) {this._config[JwtConfiguration.CONFIG_JWT_TOKEN_NAME] = token; return this;}
     /**
      * @param {string} scheme
      * @return {JwtConfiguration}
@@ -1049,11 +852,6 @@ class JwtConfiguration extends HTTPConfiguration {
      * @return {JwtConfiguration}
      */
     setRemoveScheme(remove) {this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME_REMOVE] = remove; return this;}
-    /**
-     * @param {JwtAnonymousTokenConfig} config
-     * @return {JwtConfiguration}
-     */
-    setAnonymousConfig(config) {this._config[JwtConfiguration.CONFIG_JWT_TOKEN_ANON_CONFIG] = config; return this;}
 }
 /**
  * HTTPContext
@@ -1323,9 +1121,10 @@ class JwtSentry extends HTTPSentry {
      * @private
      */
     async _getToken(context, _config) {
-        /**@type{string}*/let _token = await _config.token.get(context);
+        /**@type{string}*/let _token = await _config.parameter.getParameter(context, _config.token);
         if(typeof _token !== "string") {
-            context.log("Expected JWT token but none was found.", LOG_LEVEL.WARN, "JwtSentry._getToken(context)");
+            context.log("JWT " + _config.parameter.type + " token " + _config.token + " but none was found.",
+                        LOG_LEVEL.WARN, "JwtSentry._getToken(context)");
             return null;
         }
         let _scheme = _config.scheme;
@@ -1335,7 +1134,7 @@ class JwtSentry extends HTTPSentry {
                              "JwtSentry._getToken(context)");
                 return null;
             }
-            if(_config.removeScheme) _token = _token.slice(_scheme.length);
+            if(_config.removeScheme) _token = _token.slice(_scheme.length).trim();
         }
         return _token;
     }
@@ -1348,56 +1147,29 @@ class JwtSentry extends HTTPSentry {
         let _token = await this._getToken(context, _config);
         if(_token != null) {
             let _subject = await JwtSubject.decode(_token);
+            let _subjectid = _subject.id;
+            if(typeof _subjectid === "undefined" || _subjectid == null) _subjectid = context.requestId;
             if (_subject.isExpired()) {
-                context.log(_subject.id + " token expired.", LOG_LEVEL.WARN,
-                             "JwtSentry.authenticate(context)");
+                context.log(_subjectid + " token expired.", LOG_LEVEL.WARN, "JwtSentry.authenticate(context)");
                 throw CelastrinaError.newError("Not Authorized.", 401);
             }
             /**@type{Array.<Promise<boolean>>}*/let promises = [];
             /**@type{Array.<BaseIssuer>}*/let _issuers = _config.issuers;
-            for (const _issuer of _issuers) {
+            for(const _issuer of _issuers) {
                 promises.unshift(_issuer.verify(context, _subject)); // Performs the role escalations too.
             }
             /**type{Array.<boolean>}*/let results = await Promise.all(promises);
             if(!results.includes(true)) {
-                if(!_config.allowAnonymous) {
-                    context.log(_subject.id + " not verified by any issuers and anonymous access is disabled.",
-                                        LOG_LEVEL.WARN, "JwtSentry.authenticate(context)");
-                    throw CelastrinaError.newError("Not Authorized.", 401);
-                }
-                else {
-                    context.log(_subject.id + " issuer " + _subject.issuer +
-                                        " could not be verified, de-escalating privillages to 'anonymous'.",
-                                        LOG_LEVEL.WARN, "JwtSentry.authenticate(context)");
-                    return this._createAnonymousSubject(_config);
-                }
+                context.log(_subjectid + " not verified by any issuers.", LOG_LEVEL.WARN, "JwtSentry.authenticate(context)");
+                throw CelastrinaError.newError("Not Authorized.", 401);
             }
             else
                 return _subject;
         }
-        else if(_config.allowAnonymous) {
-            context.log("No token found. De-escalating request to 'anonymous'.", LOG_LEVEL.WARN,
-                         "JwtSentry.authenticate(context)");
-            return this._createAnonymousSubject(_config);
-        }
         else {
-            context.log("No token found and anonymous access is disabled.", LOG_LEVEL.WARN,
-                         "JwtSentry.authenticate(context)");
+            context.log("No token found.", LOG_LEVEL.WARN,"JwtSentry.authenticate(context)");
             throw CelastrinaError.newError("Not Authorized.", 401);
         }
-    }
-    /**
-     * @param {JwtConfiguration} _config
-     * @return {Promise<JwtSubject>}
-     * @private
-     */
-    async _createAnonymousSubject(_config) {
-        let _now = moment().utc();
-        let _exp = moment(_now).utc();
-        let _anon = _config.anonymousConfig;
-        _exp.set({seconds: _anon.exp});
-        let _payload = {name: "anonymous", iss: _anon.iss, aud: _anon.aud, iat: _now.unix(), exp: _exp.unix()}
-        return JwtSubject.wrap(jwt.sign(_payload, _anon.secret));
     }
 }
 /**
@@ -1524,15 +1296,13 @@ module.exports = {
     HTTPContext: HTTPContext,
     BaseIssuer: BaseIssuer,
     LocalJwtIssuer: LocalJwtIssuer,
+    OpenIDJwtIssuer: OpenIDJwtIssuer,
     HTTPParameter: HTTPParameter,
     HeaderParameter: HeaderParameter,
     QueryParameter: QueryParameter,
     BodyParameter: BodyParameter,
-    JwtToken: JwtToken,
-    JwtHeaderToken: JwtHeaderToken,
     SessionManager: SessionManager,
     HTTPConfiguration: HTTPConfiguration,
-    JwtAnonymousTokenConfig: JwtAnonymousTokenConfig,
     JwtConfiguration: JwtConfiguration,
     JwtSentry: JwtSentry
 };

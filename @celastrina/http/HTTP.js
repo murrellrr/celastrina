@@ -88,7 +88,7 @@ class Cookie {
     constructor(name, value = null, options = {}) {
         if(typeof name !== "string" || name.trim().length === 0)
             throw CelastrinaValidationError.newValidationError("Invalid String. Attribute 'name' cannot be undefined, null, or zero length.", "cookie.name");
-        this._name = name;
+        this._name = name.trim();
         this._value = value;
         this._options = options;
         this._dirty = false;
@@ -579,10 +579,15 @@ class CookieParameter extends HTTPParameter {
     /**
      * @param {HTTPContext} context
      * @param {string} key
-     * @param {Cookie} [value = null]
+     * @param {null|string} [value = null]
      */
     _setParameter(context, key, value = null) {
-        context.setCookie(value);
+        let cookie = context.getCookie(key, null);
+        if(cookie == null)
+            cookie = new Cookie(key, value)
+        else
+            cookie.value = value;
+        context.setCookie(cookie);
     }
 }
 /**
@@ -716,8 +721,17 @@ class SessionManager {
     /**
      * @return {Promise<Session>}
      */
-    async newSession() {return new Session();}
+    async newSession() {return new Session({}, true);}
     /**@return{Session}*/get session() {return this._session;}
+    /**
+     * Gets session, creates new if null or undefined AND createNew true.
+     * @return {Promise<Session>}
+     */
+    async getSession() {
+        if((typeof this._session === "undefined" || this._session == null) && this._createNew)
+            this._session = await this.newSession();
+        return this._session;
+    }
     /**
      * @param {*} session
      * @param {HTTPContext} context
@@ -756,7 +770,8 @@ class SessionManager {
         if(typeof session !== "undefined" && session != null && session instanceof Session)
             this._session = session;
         if(this._session.doWriteSession && !this._parameter.readOnly)
-            await this._parameter.setParameter(context, this._saveSession(JSON.stringify(this._session), context));
+            await this._parameter.setParameter(context, this._name, this._saveSession(JSON.stringify(this._session),
+                                                                                      context));
     }
 }
 /**
@@ -803,6 +818,8 @@ class SecureSessionManager extends SessionManager {
      * @return {(null|string)}
      */
     _saveSession(session, context) {
+        let _session = this._cipher.update(session, "utf8", "base64");
+        _session += this._cipher.final("base64");
         return session;
     }
 }
@@ -981,7 +998,7 @@ class HTTPContext extends BaseContext {
      * @private
      */
     async _parseCookies() {
-        let cookies = cookie.parse(this.getRequestHeader("cookie"), "");
+        let cookies = cookie.parse(this.getRequestHeader("cookie", ""), "");
         for(let prop in cookies) {
             if(cookies.hasOwnProperty(prop)) {
                 let local = cookies[prop];

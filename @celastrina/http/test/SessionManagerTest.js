@@ -15,19 +15,9 @@ class MockSessionManager extends SessionManager {
     }
 }
 
-// describe("SessionManager", () => {
-//     describe("", () => {
-//
-//     });
-// });
-// describe("SecureSessionManager", () => {
-//     describe("", () => {
-//
-//     });
-// });
 describe("AESSessionManager", () => {
     describe("#loadSession(context)", () => {
-        it("Decrypts valid cookie", async () =>{
+        it("Decrypts valid cookie to Session", async () =>{
             let _encookie = JSON.stringify({keyA: "valueA", keyB: "valueB"});
             let _encrypt = AES256Algorithm.create({
                 key: "c2f9dab0ceae47d99c7bf4537fbb0c3a",
@@ -59,6 +49,28 @@ describe("AESSessionManager", () => {
             assert.strictEqual(_session.doWriteSession, false, "Expectde false.");
             assert.deepStrictEqual(await _session.getProperty("keyA"), "valueA", "Expected 'valueA'.");
             assert.deepStrictEqual(await _session.getProperty("keyB"), "valueB", "Expected 'valueB'.");
+        });
+        it("Encrypts sesstion to cookie", async () => {
+            let _azctx = new MockAzureFunctionContext();
+
+            /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("JwtSentryTest");
+            let _pm = new MockPropertyManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            let _mctx = new MockHTTPContext(_azctx, _config);
+            await _mctx._parseCookies();
+
+            let _sm = new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"});
+            await _sm.initialize(_mctx);
+
+            /**@type{Session}*/let _session = await _sm.getSession();
+            await _session.setProperty("keyA", "valueA");
+            await _session.setProperty("keyB", "valueB");
+            await _sm.saveSession(_session, _mctx);
+
+            assert.strictEqual(_session instanceof Session, true, "Expected instance of Session.");
+            assert.strictEqual(_session.isNew, true, "Expected true.");
+            assert.strictEqual(_session.doWriteSession, true, "Expectde true.");
+            assert.strictEqual(_mctx.getCookie("celastrinajs_session") == null, false, "Expected false.");
         });
     });
 });

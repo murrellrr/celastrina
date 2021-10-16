@@ -33,6 +33,7 @@ const moment = require("moment");
 const jwt = require("jsonwebtoken");
 const jwkToPem = require("jwk-to-pem");
 const cookie = require("cookie");
+const {Decipher, Cipher} = require("crypto");
 const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL, Configuration,
        PermissionManager, BaseSubject, BaseSentry, Algorithm, AES256Algorithm, Cryptography, RoleResolver, BaseContext,
        BaseFunction, MatchAll, MatchNone} = require("@celastrina/core");
@@ -571,7 +572,9 @@ class CookieParameter extends HTTPParameter {
      * @return {Cookie}
      */
     _getParameter(context, key) {
-        return context.getCookie(key);
+        let cookie = context.getCookie(key, null);
+        if(cookie != null) cookie = cookie.value;
+        return cookie;
     }
     /**
      * @param {HTTPContext} context
@@ -646,12 +649,13 @@ class BodyParameter extends HTTPParameter {
  */
 class Session {
     /**
+     * @param {Object} [values = {}]
      * @param {boolean} [isNew = false]
      * @param {(null|string)} [id = null]
      */
-    constructor(isNew = false, id = null) {
-        if(typeof id === "undefined" || id == null) id = uuidv4();
-        this._values = {id: id};
+    constructor(values = {}, isNew = false, id = uuidv4()) {
+        if(typeof values.id === "undefined" || values.id == null) values.id = id;
+        this._values = values;
         /**@type{boolean}*/this._dirty = isNew;
         /**@type{boolean}*/this._new = isNew;
     }
@@ -684,15 +688,20 @@ class Session {
      */
     async deleteProperty(name) {delete this._values[name]; this._dirty = true;}
     /**@type{boolean}*/get doWriteSession() {return this._dirty;}
+    /**
+     * @param {Object} values
+     */
+    static load(values) {
+        return new Session(values);
+    }
 }
-
 /**
  * SessionManager
  * @author Robert R Murrell
  */
 class SessionManager {
     /**
-     * @param {HTTPParameter} [parameter = new CookieSessionFetch()]
+     * @param {HTTPParameter} [parameter = new CookieSession()]
      * @param {string} [name = "celastrinajs_session"]
      * @param {boolean} [createNew = true]
      */
@@ -703,6 +712,7 @@ class SessionManager {
         this._createNew = createNew;
         /**@type{Session}*/this._session = null;
     }
+    async initialize(context) {}
     /**
      * @return {Promise<Session>}
      */
@@ -722,8 +732,14 @@ class SessionManager {
         let _session = await this._parameter.getParameter(context, this._name);
         if((typeof _session === "undefined" || _session == null) && this._createNew)
             this._session = await this.newSession();
-        else
-            this._session = this._loadSession(_session, context);
+        else {
+            /**@type{string}*/let _obj = this._loadSession(_session, context);
+            if(typeof _obj == "undefined" || _obj == null || _obj.trim().length === 0) {
+                if(this._createNew) this._session = await this.newSession();
+            }
+            else
+                this._session = Session.load(JSON.parse(_obj));
+        }
     }
     /**
      * @param {string} session
@@ -749,10 +765,27 @@ class SessionManager {
  */
 class SecureSessionManager extends SessionManager {
     /**
+     * @param {Algorithm} algorithm
+     * @param {HTTPParameter} [parameter = new CookieSession()]
+     * @param {string} [name = "celastrinajs_session"]
      * @param {boolean} [createNew = true]
      */
-    constructor(createNew = true) {
-        super(createNew);
+    constructor(algorithm, parameter = new CookieParameter(), name = "celastrinajs_session",
+                createNew = true) {
+        super(parameter, name, createNew);
+        this._algorithm = algorithm;
+        /**@type{Cipher}*/this._cipher = null;
+        /**@type{Decipher}*/this._decipher = null;
+    }
+    /**
+     * @param context
+     * @return {Promise<void>}
+     */
+    async initialize(context) {
+        await super.initialize(context);
+        await this._algorithm.initialize();
+        /**@type{Cipher}*/this._cipher = await this._algorithm.createCipher();
+        /**@type{Decipher}*/this._decipher = await this._algorithm.createDecipher();
     }
     /**
      * @param {*} session
@@ -760,7 +793,9 @@ class SecureSessionManager extends SessionManager {
      * @return {(null|string)}
      */
     _loadSession(session, context) {
-        return session;
+        let decrypted = this._decipher.update(session, "base64", "utf8");
+        decrypted += this._decipher.final("utf8");
+        return decrypted;
     }
     /**
      * @param {string} session
@@ -769,6 +804,18 @@ class SecureSessionManager extends SessionManager {
      */
     _saveSession(session, context) {
         return session;
+    }
+}
+class AESSessionManager extends SecureSessionManager {
+    /**
+     * @param {{key:string,iv:string}} options
+     * @param {HTTPParameter} [parameter = new CookieSession()]
+     * @param {string} [name = "celastrinajs_session"]
+     * @param {boolean} [createNew = true]
+     */
+    constructor(options, parameter = new CookieParameter(),
+                name = "celastrinajs_session", createNew = true) {
+        super(AES256Algorithm.create(options), parameter, name, createNew);
     }
 }
 /**
@@ -939,7 +986,7 @@ class HTTPContext extends BaseContext {
             if(cookies.hasOwnProperty(prop)) {
                 let local = cookies[prop];
                 if(typeof local !== "undefined" && local != null)
-                    this._cookies.unshift(new Cookie(prop, local));
+                    this._cookies[prop] = new Cookie(prop, local);
             }
         }
     }
@@ -1301,7 +1348,10 @@ module.exports = {
     HeaderParameter: HeaderParameter,
     QueryParameter: QueryParameter,
     BodyParameter: BodyParameter,
+    Session: Session,
     SessionManager: SessionManager,
+    SecureSessionManager: SecureSessionManager,
+    AESSessionManager: AESSessionManager,
     HTTPConfiguration: HTTPConfiguration,
     JwtConfiguration: JwtConfiguration,
     JwtSentry: JwtSentry

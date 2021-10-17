@@ -23,7 +23,7 @@
  */
 "use strict";
 const {Cookie, JwtSubject, HTTPContext, BaseIssuer, LocalJwtIssuer, OpenIDJwtIssuer, HTTPParameter, HeaderParameter,
-       QueryParameter, BodyParameter, HTTPConfiguration, JwtConfiguration, JwtSentry, Session, SessionManager,
+       QueryParameter, BodyParameter, CookieParameter, HTTPConfiguration, JwtConfiguration, JwtSentry, Session, SessionManager,
        SecureSessionManager, AESSessionManager} = require("./HTTP");
 module.exports = {
     Cookie: Cookie,
@@ -36,6 +36,7 @@ module.exports = {
     HeaderParameter: HeaderParameter,
     QueryParameter: QueryParameter,
     BodyParameter: BodyParameter,
+    CookieParameter: CookieParameter,
     Session: Session,
     SessionManager: SessionManager,
     SecureSessionManager: SecureSessionManager,

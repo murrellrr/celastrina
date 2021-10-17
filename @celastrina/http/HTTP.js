@@ -706,14 +706,18 @@ class Session {
  */
 class SessionManager {
     /**
-     * @param {HTTPParameter} [parameter = new CookieSession()]
+     * @param {HTTPParameter} parameter
      * @param {string} [name = "celastrinajs_session"]
      * @param {boolean} [createNew = true]
      */
-    constructor(parameter = new CookieParameter(), name = "celastrinajs_session",
+    constructor(parameter, name = "celastrinajs_session",
                 createNew = true) {
+        if(typeof parameter === "undefined" || parameter == null)
+            throw CelastrinaValidationError.newValidationError("Argument 'parameter' cannot be null.", "parameter");
+        if(typeof name !== "string" || name == null || name.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Argument 'name' cannot be null or empty.", "name");
         this._parameter = parameter;
-        this._name = name;
+        this._name = name.trim();
         this._createNew = createNew;
         /**@type{Session}*/this._session = null;
     }
@@ -721,7 +725,7 @@ class SessionManager {
     /**
      * @return {Promise<Session>}
      */
-    async newSession() {return new Session({}, true);}
+    async newSession() {this._session = new Session({}, true); return this._session;}
     /**@return{Session}*/get session() {return this._session;}
     /**
      * Gets session, creates new if null or undefined AND createNew true.
@@ -729,7 +733,7 @@ class SessionManager {
      */
     async getSession() {
         if((typeof this._session === "undefined" || this._session == null) && this._createNew)
-            this._session = await this.newSession();
+            await this.newSession();
         return this._session;
     }
     /**
@@ -740,20 +744,28 @@ class SessionManager {
     _loadSession(session, context) {return session;}
     /**
      * @param {HTTPContext} context
-     * @return {Promise<void>}
+     * @return {Promise<Session>}
      */
     async loadSession(context) {
         let _session = await this._parameter.getParameter(context, this._name);
-        if((typeof _session === "undefined" || _session == null) && this._createNew)
-            this._session = await this.newSession();
+        if((typeof _session === "undefined" || _session == null)) {
+            if(this._createNew)
+                this._session = await this.newSession();
+            else
+                return null;
+        }
         else {
             /**@type{string}*/let _obj = this._loadSession(_session, context);
             if(typeof _obj == "undefined" || _obj == null || _obj.trim().length === 0) {
-                if(this._createNew) this._session = await this.newSession();
+                if(this._createNew)
+                    this._session = await this.newSession();
+                else
+                    return null;
             }
             else
                 this._session = Session.load(JSON.parse(_obj));
         }
+        return this._session;
     }
     /**
      * @param {string} session
@@ -1365,6 +1377,7 @@ module.exports = {
     HeaderParameter: HeaderParameter,
     QueryParameter: QueryParameter,
     BodyParameter: BodyParameter,
+    CookieParameter: CookieParameter,
     Session: Session,
     SessionManager: SessionManager,
     SecureSessionManager: SecureSessionManager,

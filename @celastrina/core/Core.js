@@ -1108,6 +1108,21 @@ class Configuration {
             return _manager;
         }
     }
+
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     */
+    async _preInitialize(azcontext) {
+        // do nothing
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param {PropertyManager} pm
+     * @param {ResourceManager} rm
+     */
+    async _postInitialize(azcontext, pm, rm) {
+        // do nothing
+    }
     /**
      * @param {_AzureFunctionContext} azcontext
      * @return {Promise<void>}
@@ -1117,6 +1132,9 @@ class Configuration {
         this._config[Configuration.CONFIG_CONTEXT] = azcontext;
         if(!this._loaded) {
             azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration not loaded, initializing.");
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Running pre-initialization lifecycle...");
+            await this._preInitialize(azcontext);
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Pre Initialization Successful.");
             /**@type{PropertyManager}*/let _pm = this._getPropertyManager(azcontext);
             /**@type{ResourceManager}*/let _rm = this._getResourceManager(azcontext);
             /**@type{PermissionManager}*/let _prm = this._getPermissionManager(azcontext);
@@ -1129,14 +1147,12 @@ class Configuration {
             azcontext.log.info("[Configuration.load(azcontext)]: PropertyManager Initialized.");
             await _pm.ready(azcontext, this._config);
             azcontext.log.info("[Configuration.initialize(azcontext)]: PropertyManager Ready.");
-
             let _loader = this._config[ConfigurationLoader.CONFIG_CONFIGRATION_LOADER];
             if(_loader instanceof ConfigurationLoader) {
                 azcontext.log.info("[Configuration.load(azcontext)]: ConfigurationLoader found, loading from external JSON configuration.");
                 await _loader.load(azcontext, this._config);
                 azcontext.log.info("[Configuration.load(azcontext)]: ConfigurationLoader completed, configuration loaded.");
             }
-
             await _prm.initialize(azcontext, this._config);
             azcontext.log.info("[Configuration.load(azcontext)]: PermissionManager Initialized.");
             await _prm.ready(azcontext, this._config);
@@ -1145,6 +1161,9 @@ class Configuration {
             azcontext.log.info("[Configuration.load(azcontext)]: ResourceManager Initialized.");
             await _rm.ready(azcontext, this._config);
             azcontext.log.info("[Configuration.initialize(azcontext)]: ResourceManager Ready.");
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Running post initialization.");
+            await this._postInitialize(azcontext, _pm, _rm);
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Post initialization successful.");
             azcontext.log.info("[Configuration.initialize(azcontext)]: Initialization successful.");
         }
         else
@@ -1158,7 +1177,14 @@ class Configuration {
 
 /**@abstract*/
 class Algorithm {
-    constructor(name){this._name = name;}
+    /**
+     * @param {string} name
+     */
+    constructor(name) {
+        if(typeof name === "undefined" || name == null || name.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Argument 'name' cannot be undefined, null, or zero length.", "name");
+        this._name = name;
+    }
     /**@return{string}*/get name(){return this._name;}
     /**@return{Promise<void>}*/
     async initialize() {}
@@ -1175,30 +1201,30 @@ class AES256Algorithm extends Algorithm {
      */
     constructor(key, iv) {
         super("aes-256-cbc");
+        if(typeof key !== "string" || key == null || key.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Argement 'key' cannot be undefined, null or zero length.", "key");
+        if(typeof iv !== "string" || iv == null || iv.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Argement 'iv' cannot be undefined, null or zero length.", "iv");
         this._key = key;
         this._iv  = iv;
     }
     /**@return{Promise<Cipher>}*/
     async createCipher() {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(crypto.createCipheriv(this._name, this._key, this._iv));
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        try {
+            return crypto.createCipheriv(this._name, this._key, this._iv);
+        }
+        catch(exception) {
+            throw CelastrinaError.wrapError(exception);
+        }
     }
     /**@return{Promise<Decipher>}*/
     async createDecipher() {
-        return new Promise((resolve, reject) => {
-            try {
-                resolve(crypto.createDecipheriv(this._name, this._key, this._iv));
-            }
-            catch(exception) {
-                reject(exception);
-            }
-        });
+        try {
+            return crypto.createDecipheriv(this._name, this._key, this._iv);
+        }
+        catch(exception) {
+            throw CelastrinaError.wrapError(exception);
+        }
     }
     /**
      * @param {{key:string,iv:string}} options
@@ -1221,22 +1247,32 @@ class Cryptography {
      * @return {Promise<string>}
      */
     async encrypt(value) {
-        let cryp = await this._algorithm.createCipher();
-        let encrypted = cryp.update(value, "utf8", "hex");
-        encrypted += cryp.final("hex");
-        encrypted  = Buffer.from(encrypted, "hex").toString("base64");
-        return encrypted;
+        try {
+            let cryp = await this._algorithm.createCipher();
+            let encrypted = cryp.update(value, "utf8", "hex");
+            encrypted += cryp.final("hex");
+            encrypted = Buffer.from(encrypted, "hex").toString("base64");
+            return encrypted;
+        }
+        catch(exception) {
+            throw CelastrinaError.wrapError(exception);
+        }
     }
     /**
      * @param {string} value Base64 encded HEX string.
      * @return {Promise<string>}
      */
     async decrypt(value) {
-        let cryp = await this._algorithm.createDecipher();
-        let encrypted = Buffer.from(value, "base64").toString("hex");
-        let decrypted = cryp.update(encrypted, "hex", "utf8");
-        decrypted += cryp.final("utf8");
-        return decrypted;
+        try {
+            let cryp = await this._algorithm.createDecipher();
+            let encrypted = Buffer.from(value, "base64").toString("hex");
+            let decrypted = cryp.update(encrypted, "hex", "utf8");
+            decrypted += cryp.final("utf8");
+            return decrypted;
+        }
+        catch(exception) {
+            throw CelastrinaError.wrapError(exception);
+        }
     }
 }
 /**

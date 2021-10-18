@@ -209,15 +209,27 @@ describe("SecureSessionManager", () => {
     });
 });
 describe("AESSessionManager", () => {
+    let _mockparam = new MockHTTPParameter();
     describe("#constructor(options, parameter, name, createNew)", () => {
         it("Should fail with bad iv", () => {
-            //
+            let _error = CelastrinaValidationError.newValidationError("Argement 'iv' cannot be undefined, null or zero length.", "options.iv");
+            assert.throws(() => {
+                let _sm = new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a"}, _mockparam);
+            }, _error,"Expected exception.");
         });
         it("Should fail with bad secret", () => {
-            //
+            let _error = CelastrinaValidationError.newValidationError("Argement 'key' cannot be undefined, null or zero length.", "options.key");
+            assert.throws(() => {
+                let _sm = new AESSessionManager({iv: "1234567890123456"}, _mockparam);
+            }, _error,"Expected exception.");
         });
-        it("Should do defaults", () => {
-            //
+        it("Should not fail", () => {
+            assert.doesNotThrow(() => {
+                let _sm = new AESSessionManager({
+                    key: "c2f9dab0ceae47d99c7bf4537fbb0c3a",
+                    iv: "1234567890123456"
+                }, _mockparam);
+            }, "No exception.");
         });
     });
     describe("#loadSession(context)", () => {
@@ -239,7 +251,7 @@ describe("AESSessionManager", () => {
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             let _mctx = new MockHTTPContext(_azctx, _config);
             await _mctx._parseCookies();
-            let _sm = new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"});
+            let _sm = new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter());
             await _sm.initialize(_mctx);
             await _sm.loadSession(_mctx);
             /**@type{Session}*/let _session = _sm.session;
@@ -258,7 +270,7 @@ describe("AESSessionManager", () => {
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             let _mctx = new MockHTTPContext(_azctx, _config);
             await _mctx._parseCookies();
-            let _sm = new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"});
+            let _sm = new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter());
             await _sm.initialize(_mctx);
             /**@type{Session}*/let _session = await _sm.getSession();
             await _session.setProperty("keyA", "valueA");

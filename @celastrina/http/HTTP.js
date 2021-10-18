@@ -710,8 +710,7 @@ class SessionManager {
      * @param {string} [name = "celastrinajs_session"]
      * @param {boolean} [createNew = true]
      */
-    constructor(parameter, name = "celastrinajs_session",
-                createNew = true) {
+    constructor(parameter, name = "celastrinajs_session", createNew = true) {
         if(typeof parameter === "undefined" || parameter == null)
             throw CelastrinaValidationError.newValidationError("Argument 'parameter' cannot be null.", "parameter");
         if(typeof name !== "string" || name == null || name.trim().length === 0)
@@ -721,7 +720,7 @@ class SessionManager {
         this._createNew = createNew;
         /**@type{Session}*/this._session = null;
     }
-    async initialize(context) {}
+    async initialize(azcontext, pm, rm) {}
     /**
      * @return {Promise<Session>}
      */
@@ -741,7 +740,7 @@ class SessionManager {
      * @param {HTTPContext} context
      * @return {(null|string)}
      */
-    _loadSession(session, context) {return session;}
+    async _loadSession(session, context) {return session;}
     /**
      * @param {HTTPContext} context
      * @return {Promise<Session>}
@@ -755,7 +754,7 @@ class SessionManager {
                 return null;
         }
         else {
-            /**@type{string}*/let _obj = this._loadSession(_session, context);
+            /**@type{string}*/let _obj = await this._loadSession(_session, context);
             if(typeof _obj == "undefined" || _obj == null || _obj.trim().length === 0) {
                 if(this._createNew)
                     this._session = await this.newSession();
@@ -772,7 +771,7 @@ class SessionManager {
      * @param {HTTPContext} context
      * @return {(null|string)}
      */
-    _saveSession(session, context) {return session;}
+    async _saveSession(session, context) {return session;}
     /**
      * @param {Session} [session = null]
      * @param {HTTPContext} context
@@ -782,8 +781,8 @@ class SessionManager {
         if(typeof session !== "undefined" && session != null && session instanceof Session)
             this._session = session;
         if(this._session.doWriteSession && !this._parameter.readOnly)
-            await this._parameter.setParameter(context, this._name, this._saveSession(JSON.stringify(this._session),
-                                                                                      context));
+            await this._parameter.setParameter(context, this._name, await this._saveSession(JSON.stringify(this._session),
+                                                                                            context));
     }
 }
 /**
@@ -793,57 +792,59 @@ class SessionManager {
 class SecureSessionManager extends SessionManager {
     /**
      * @param {Algorithm} algorithm
-     * @param {HTTPParameter} [parameter = new CookieSession()]
+     * @param {HTTPParameter} parameter
      * @param {string} [name = "celastrinajs_session"]
      * @param {boolean} [createNew = true]
      */
-    constructor(algorithm, parameter = new CookieParameter(), name = "celastrinajs_session",
-                createNew = true) {
+    constructor(algorithm, parameter, name = "celastrinajs_session", createNew = true) {
         super(parameter, name, createNew);
-        this._algorithm = algorithm;
-        /**@type{Cipher}*/this._cipher = null;
-        /**@type{Decipher}*/this._decipher = null;
+        this._crypto = new Cryptography(algorithm);
     }
     /**
-     * @param context
+     * @param azcontext
+     * @param pm
+     * @param rm
      * @return {Promise<void>}
      */
-    async initialize(context) {
-        await super.initialize(context);
-        await this._algorithm.initialize();
-        /**@type{Cipher}*/this._cipher = await this._algorithm.createCipher();
-        /**@type{Decipher}*/this._decipher = await this._algorithm.createDecipher();
+    async initialize(azcontext, pm, rm) {
+        await super.initialize(azcontext, pm, rm);
+        await this._crypto.initialize();
     }
     /**
      * @param {*} session
      * @param {HTTPContext} context
      * @return {(null|string)}
      */
-    _loadSession(session, context) {
-        let decrypted = this._decipher.update(session, "base64", "utf8");
-        decrypted += this._decipher.final("utf8");
-        return decrypted;
+    async _loadSession(session, context) {
+        return this._crypto.decrypt(session);
     }
     /**
      * @param {string} session
      * @param {HTTPContext} context
      * @return {(null|string)}
      */
-    _saveSession(session, context) {
-        let _session = this._cipher.update(session, "utf8", "base64");
-        _session += this._cipher.final("base64");
-        return session;
+    async _saveSession(session, context) {
+        return this._crypto.encrypt(session);
     }
 }
+/**
+ * AESSessionManager
+ * @author Robert R Murrell
+ */
 class AESSessionManager extends SecureSessionManager {
     /**
      * @param {{key:string,iv:string}} options
-     * @param {HTTPParameter} [parameter = new CookieSession()]
+     * @param {HTTPParameter} parameter
      * @param {string} [name = "celastrinajs_session"]
      * @param {boolean} [createNew = true]
      */
-    constructor(options, parameter = new CookieParameter(),
-                name = "celastrinajs_session", createNew = true) {
+    constructor(options, parameter, name = "celastrinajs_session", createNew = true) {
+        if(typeof options === "undefined" || options == null)
+            throw CelastrinaValidationError.newValidationError("Argement 'options' cannot be undefined or null", "options");
+        if(typeof options.key !== "string" || options.key == null || options.key.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Argement 'key' cannot be undefined, null or zero length.", "options.key");
+        if(typeof options.iv !== "string" || options.iv == null || options.iv.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Argement 'iv' cannot be undefined, null or zero length.", "options.iv");
         super(AES256Algorithm.create(options), parameter, name, createNew);
     }
 }
@@ -866,6 +867,20 @@ class HTTPConfiguration extends Configuration {
     setSessionManager(sm = null) {
         this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER] = sm;
         return this;
+    }
+    /**
+     * @param {Object} azcontext
+     * @param {PropertyManager} pm
+     * @param {ResourceManager} rm
+     * @return {Promise<void>}
+     * @private
+     */
+    async _postInitialize(azcontext, pm, rm) {
+        await super._postInitialize(azcontext, pm, rm);
+        /**@type{SessionManager}*/let _sm = this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER];
+        if(typeof _sm !== "undefined" && _sm != null) {
+            await _sm.initialize(azcontext, pm, rm);
+        }
     }
 }
 /**

@@ -3,42 +3,11 @@ const {OpenIDJwtIssuer, HTTPContext, Cookie, JwtSubject, JwtConfiguration, JwtSe
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockHTTPContext} = require("./HTTPContextTest");
 const {MockPropertyManager} = require("../../core/test/PropertyManagerTest");
+const {MockMicrosoftOpenIDIDPServer} = require("./AzureOpenIDIPDMock");
 const assert = require("assert");
 const jwt = require("jsonwebtoken");
-const fs = require("fs");
-const axios  = require("axios");
-const MockAdapter = require("axios-mock-adapter");
 
 describe("OpenIDJwtIssuer", () => {
-    let mock = null;
-    let token = null;
-
-    before(() => {
-        mock = new MockAdapter(axios);
-        let privateKey = fs.readFileSync("./test/private.pem");
-        let jwk_token = JSON.parse(fs.readFileSync("./test/jkw.json").toString());
-        let jwkx5c_token = JSON.parse(fs.readFileSync("./test/jkwx5c.json").toString());
-        token = jwt.sign({sub: "0bcadc72-e895-4219-b352-d754459f53f3", iat: 946684800, exmp: 4070908800, nbf: 946684800,
-                                 iss: "https://login.microsoftonline.com/7354014b-4eb7-48c6-ba0c-420dbde2c8df/v2.0",
-                                 aud: "05f3520b-4cd1-472a-92e2-a3acd538e7ae"}, privateKey,
-                          {algorithm: "RS256", header: {kid: "l3sQ-50cCH4xBVZLHTGwnSR7680"}});
-        mock.onGet("https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration").reply((config) => {
-            return [200, {issuer: "https://login.microsoftonline.com/7354014b-4eb7-48c6-ba0c-420dbde2c8df/v2.0", jwks_uri: "https://login.microsoftonline.com/common/discovery/v2.0/keys"}];
-        });
-        mock.onGet("https://login.microsoftonline.com/common/v2.0/x5c/.well-known/openid-configuration").reply((config) => {
-            return [200, {issuer: "https://login.microsoftonline.com/7354014b-4eb7-48c6-ba0c-420dbde2c8df/v2.0", jwks_uri: "https://login.microsoftonline.com/common/discovery/v2.0/x5c/keys"}];
-        });
-        mock.onGet("https://login.microsoftonline.com/common/discovery/v2.0/keys").reply((config) => {
-            return [200, {keys: [jwk_token]}];
-        });
-        mock.onGet("https://login.microsoftonline.com/common/discovery/v2.0/x5c/keys").reply((config) => {
-            return [200, {keys: [jwkx5c_token]}];
-        });
-    });
-    after(() => {
-        mock.restore();
-        mock = null;
-    });
     describe("#constructor(issuer, keyProperty, audiences = null, assignments = null, validateNonce = false)", () => {
         it("Constructs defaults", () => {
             let _openidjwt = new OpenIDJwtIssuer("@celastrinajs/issuer/mock", "https://mockhost:9999/mock/v2.0/.well-known/openid-configuration");
@@ -59,55 +28,70 @@ describe("OpenIDJwtIssuer", () => {
     });
     describe("#verify(context, _subject)", () => {
         it("Verifies valid token, non x5c", async () => {
-            let _mocktoken = token;
             let _azctx  = new MockAzureFunctionContext();
-            _azctx.req.headers["authorization"] = "Bearer " + _mocktoken;
+            let _mockopenid = new MockMicrosoftOpenIDIDPServer();
+            let _response = await _mockopenid.setHeader(_azctx.req.headers);
+
+            await _mockopenid.start();
             /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("OpenIDJwtIssuerTest");
-            let _openidjwt = new OpenIDJwtIssuer("https://login.microsoftonline.com/7354014b-4eb7-48c6-ba0c-420dbde2c8df/v2.0", "https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration", ["05f3520b-4cd1-472a-92e2-a3acd538e7ae"], ["mock_user_role"]);
+            let _openidjwt = await _mockopenid.createOpenIDIssuer([_response.aud]);
             let _mctx = new MockHTTPContext(_azctx, _config);
-            let _subject = await JwtSubject.decode(_mocktoken);
+            let _subject = await JwtSubject.decode(_response.access_token);
             assert.strictEqual(await _openidjwt.verify(_mctx, _subject), true, "Expected true.");
+            await _mockopenid.stop();
         });
         it("Verifies valid token, x5c", async () => {
-            let _mocktoken = token;
             let _azctx  = new MockAzureFunctionContext();
-            _azctx.req.headers["authorization"] = "Bearer " + _mocktoken;
+            let _mockopenid = new MockMicrosoftOpenIDIDPServer();
+            let _response = await _mockopenid.setHeader(_azctx.req.headers);
+
+            await _mockopenid.start(true);
             /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("OpenIDJwtIssuerTest");
-            let _openidjwt = new OpenIDJwtIssuer("https://login.microsoftonline.com/7354014b-4eb7-48c6-ba0c-420dbde2c8df/v2.0", "https://login.microsoftonline.com/common/v2.0/x5c/.well-known/openid-configuration", ["05f3520b-4cd1-472a-92e2-a3acd538e7ae"], ["mock_user_role"]);
+            let _openidjwt = await _mockopenid.createOpenIDIssuer([_response.aud]);
             let _mctx = new MockHTTPContext(_azctx, _config);
-            let _subject = await JwtSubject.decode(_mocktoken);
+            let _subject = await JwtSubject.decode(_response.access_token);
             assert.strictEqual(await _openidjwt.verify(_mctx, _subject), true, "Expected true.");
+            await _mockopenid.stop();
         });
         it("Does not verify invalid issuer", async () => {
-            let _mocktoken = token;
             let _azctx  = new MockAzureFunctionContext();
-            _azctx.req.headers["authorization"] = "Bearer " + _mocktoken + "_invalid";
+            let _mockopenid = new MockMicrosoftOpenIDIDPServer();
+            let _response = await _mockopenid.setHeader(_azctx.req.headers);
+
+            await _mockopenid.start(true);
             /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("OpenIDJwtIssuerTest");
-            let _openidjwt = new OpenIDJwtIssuer("https://login.microsoftonline.com/7354014b-4eb7-48c6-ba0c-420dbde2c8df_invalid/v2.0", "https://login.microsoftonline.com/common/v2.0/x5c/.well-known/openid-configuration", ["05f3520b-4cd1-472a-92e2-a3acd538e7ae"], ["mock_user_role"]);
+            let _openidjwt = await _mockopenid.createOpenIDIssuer([_response.aud], true);
             let _mctx = new MockHTTPContext(_azctx, _config);
-            let _subject = await JwtSubject.decode(_mocktoken);
+            let _subject = await JwtSubject.decode(_response.access_token);
             assert.strictEqual(await _openidjwt.verify(_mctx, _subject), false, "Expected false.");
+            await _mockopenid.stop();
         });
         it("Does not verify invalid audience", async () => {
-            let _mocktoken = token;
             let _azctx  = new MockAzureFunctionContext();
-            _azctx.req.headers["authorization"] = "Bearer " + _mocktoken + "_invalid";
+            let _mockopenid = new MockMicrosoftOpenIDIDPServer();
+            let _response = await _mockopenid.setHeader(_azctx.req.headers);
+
+            await _mockopenid.start(true);
             /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("OpenIDJwtIssuerTest");
-            let _openidjwt = new OpenIDJwtIssuer("https://login.microsoftonline.com/7354014b-4eb7-48c6-ba0c-420dbde2c8df/v2.0", "https://login.microsoftonline.com/common/v2.0/x5c/.well-known/openid-configuration", ["05f3520b-4cd1-472a-92e2-a3acd538e7ae_invalid"], ["mock_user_role"]);
+            let _openidjwt = await _mockopenid.createOpenIDIssuer([_response.aud + "_foozled"]);
             let _mctx = new MockHTTPContext(_azctx, _config);
-            let _subject = await JwtSubject.decode(_mocktoken);
+            let _subject = await JwtSubject.decode(_response.access_token);
             assert.strictEqual(await _openidjwt.verify(_mctx, _subject), false, "Expected false.");
+            await _mockopenid.stop();
         });
         it("Does not verify invalid token", async () => {
-            let _mocktoken = token;
             let _azctx  = new MockAzureFunctionContext();
-            _azctx.req.headers["authorization"] = "Bearer " + _mocktoken + "_invalid";
+            let _mockopenid = new MockMicrosoftOpenIDIDPServer();
+            let _response = await _mockopenid.setHeader(_azctx.req.headers, true);
+
+            await _mockopenid.start(true);
             /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("OpenIDJwtIssuerTest");
-            let _openidjwt = new OpenIDJwtIssuer("https://login.microsoftonline.com/7354014b-4eb7-48c6-ba0c-420dbde2c8df/v2.0", "https://login.microsoftonline.com/common/v2.0/x5c/.well-known/openid-configuration", ["05f3520b-4cd1-472a-92e2-a3acd538e7ae"], ["mock_user_role"]);
+            let _openidjwt = new OpenIDJwtIssuer(_response.iss, _mockopenid.configPath, [_response.aud], ["mock_user_role"]);
             let _mctx = new MockHTTPContext(_azctx, _config);
-            let _subject = await JwtSubject.decode(_mocktoken);
-            _subject._token = _mocktoken + "_invalid";
+            let _subject = await JwtSubject.decode(_response.access_token);
+            _subject._token = _response + "_foozled";
             assert.strictEqual(await _openidjwt.verify(_mctx, _subject), false, "Expected false.");
+            await _mockopenid.stop();
         });
     });
 });

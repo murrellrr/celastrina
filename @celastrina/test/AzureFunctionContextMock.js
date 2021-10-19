@@ -55,7 +55,8 @@ class MockAzureFunctionContext {
                                  },
                                  body: {},
                                  rawBody: {},
-                                 status: 500
+                                 status: 500,
+                                 cookies: null
                              },
                              mockBindingTwo: {key: "mock_key", value: "mock_value"}};
         this.bindingData  = {invocationId: "mock_invocation_id"};

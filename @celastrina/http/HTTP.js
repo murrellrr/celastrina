@@ -36,7 +36,7 @@ const cookie = require("cookie");
 const {Decipher, Cipher} = require("crypto");
 const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL, Configuration,
        PermissionManager, BaseSubject, BaseSentry, Algorithm, AES256Algorithm, Cryptography, RoleResolver, BaseContext,
-       BaseFunction, MatchAll, MatchNone} = require("@celastrina/core");
+       BaseFunction, ValueMatch, MatchAny, MatchAll, MatchNone} = require("@celastrina/core");
 /**
  * @typedef _jwtpayload
  * @property {string} aud
@@ -84,14 +84,15 @@ class Cookie {
      * @param {string} name
      * @param {(null|string)} [value=null]
      * @param {Object} [options={}]
+     * @param {boolean} [dirty=false]
      */
-    constructor(name, value = null, options = {}) {
+    constructor(name, value = null, options = {}, dirty = false, ) {
         if(typeof name !== "string" || name.trim().length === 0)
             throw CelastrinaValidationError.newValidationError("Invalid String. Attribute 'name' cannot be undefined, null, or zero length.", "cookie.name");
         this._name = name.trim();
         this._value = value;
         this._options = options;
-        this._dirty = false;
+        this._dirty = dirty;
     }
     /**@return{boolean}*/get doSetCookie() {return this._dirty};
     /**@return{string}*/get name() {return this._name;}
@@ -128,13 +129,12 @@ class Cookie {
         return cookie.serialize(this._name, this.parseValue, this._options);
     }
     /**
-     * @param {Array.<string>} value
-     * @returns {Array.<string>}
+     * @return {Promise<{name: string, value: string}>}
      */
-    doSerializeCookie(value = []) {
-        if(this.doSetCookie)
-            value.unshift(this.serialize());
-        return value;
+    async toAzureCookie() {
+        let _obj = {name: this._name, value: this.parseValue};
+        Object.assign(_obj, this._options);
+        return _obj;
     }
     /**@param{number}age*/set maxAge(age) {this.setOption("maxAge", age);}
     /**@param{Date}date*/set expires(date) {this.setOption("expires", date);}
@@ -163,14 +163,11 @@ class Cookie {
      * @param {string} name
      * @param {(null|string)} [value=null]
      * @param {Object} [options={}]
-     * @returns {Promise<Cookie>} A new cookie whos dirty marker is set to 'true', such that doSerializeCookie will generte a value to
+     * @returns {Cookie} A new cookie whos dirty marker is set to 'true', such that doSerializeCookie will generte a value to
      *                   the Set-Cookie header.
      */
-    static async newCookie(name, value = null, options = {}) {
-        let _cookie = new Cookie(name);
-        _cookie.value = value;
-        _cookie.options = options;
-        return _cookie;
+    static newCookie(name, value = null, options = {}) {
+        return new Cookie(name, value, options, true);
     }
     /**
      * @param {string} name
@@ -584,7 +581,7 @@ class CookieParameter extends HTTPParameter {
     _setParameter(context, key, value = null) {
         let cookie = context.getCookie(key, null);
         if(cookie == null)
-            cookie = new Cookie(key, value)
+            cookie = Cookie.newCookie(key, value);
         else
             cookie.value = value;
         context.setCookie(cookie);
@@ -718,23 +715,12 @@ class SessionManager {
         this._parameter = parameter;
         this._name = name.trim();
         this._createNew = createNew;
-        /**@type{Session}*/this._session = null;
     }
     async initialize(azcontext, pm, rm) {}
     /**
      * @return {Promise<Session>}
      */
     async newSession() {this._session = new Session({}, true); return this._session;}
-    /**@return{Session}*/get session() {return this._session;}
-    /**
-     * Gets session, creates new if null or undefined AND createNew true.
-     * @return {Promise<Session>}
-     */
-    async getSession() {
-        if((typeof this._session === "undefined" || this._session == null) && this._createNew)
-            await this.newSession();
-        return this._session;
-    }
     /**
      * @param {*} session
      * @param {HTTPContext} context
@@ -749,7 +735,7 @@ class SessionManager {
         let _session = await this._parameter.getParameter(context, this._name);
         if((typeof _session === "undefined" || _session == null)) {
             if(this._createNew)
-                this._session = await this.newSession();
+                _session = this.newSession();
             else
                 return null;
         }
@@ -757,14 +743,14 @@ class SessionManager {
             /**@type{string}*/let _obj = await this._loadSession(_session, context);
             if(typeof _obj == "undefined" || _obj == null || _obj.trim().length === 0) {
                 if(this._createNew)
-                    this._session = await this.newSession();
+                    _session = await this.newSession();
                 else
                     return null;
             }
             else
-                this._session = Session.load(JSON.parse(_obj));
+                _session = Session.load(JSON.parse(_obj));
         }
-        return this._session;
+        return _session;
     }
     /**
      * @param {string} session
@@ -778,11 +764,10 @@ class SessionManager {
      * @return {Promise<void>}
      */
     async saveSession(session = null, context) {
-        if(typeof session !== "undefined" && session != null && session instanceof Session)
-            this._session = session;
-        if(this._session.doWriteSession && !this._parameter.readOnly)
-            await this._parameter.setParameter(context, this._name, await this._saveSession(JSON.stringify(this._session),
-                                                                                            context));
+        if(typeof session !== "undefined" && session != null && session instanceof Session) {
+            if(session.doWriteSession && !this._parameter.readOnly)
+                await this._parameter.setParameter(context, this._name, await this._saveSession(JSON.stringify(session), context));
+        }
     }
 }
 /**
@@ -974,30 +959,6 @@ class HTTPContext extends BaseContext {
     /**@return{Object}*/get responseBody(){return this._azfunccontext.res.body;}
     /**@return{Session}*/get session(){return this._session;}
     /**
-     * @param {string} name
-     * @param {*} [defaultValue=null]
-     * @return {null|*}
-     */
-    getSessionProperty(name, defaultValue = null) {
-        if(this._session != null) {
-            let prop = this._session[name];
-            if (typeof prop === "undefined" || prop == null) return defaultValue;
-            else return prop;
-        }
-        else return defaultValue;
-    }
-    /**
-     * @param {string} name
-     * @param {*} value
-     * @return {BaseContext}
-     */
-    setSessionProperty(name, value) {
-        if(this._session != null) {
-            this._session[name] = value;
-            return this;
-        }
-    }
-    /**
      * @return {Promise<void>}
      * @private
      */
@@ -1039,7 +1000,7 @@ class HTTPContext extends BaseContext {
      * @private
      */
     async _setSession() {
-        await this._config.sessionManager.loadSession(this);
+        this._session = await this._config.sessionManager.loadSession(this);
     }
     /**
      * @return {Promise<void>}
@@ -1125,49 +1086,152 @@ class HTTPContext extends BaseContext {
      * @param {string} name
      * @param {string|Array.<string>} value
      */
-    setResponseHeader(name, value){this._azfunccontext.res.headers[name] = value;}
+    setResponseHeader(name, value) {
+        this._azfunccontext.res.headers[name] = value;
+    }
     /**
      * @param {*} [body=null]
      * @param {number} [status] The HTTP status code, default is 200.
      */
     send(body = null, status = 200) {
-        if((status >= 200 && status <= 299) && body == null) status = 204;
+        if((status >= 200 && status <= 299) && (body == null || (typeof body === "string" && body.length === 0))) status = 204;
         this._azfunccontext.res.status = status;
         this._azfunccontext.res.headers["X-celastrina-request-uuid"] = this._requestId;
         this._azfunccontext.res.body = body;
     }
-    /**@param{*}[error=null]*/
-    sendValidationError(error = null) {
+    /**
+     * @param {CelastrinaValidationError} [error=null]
+     * @param {*} [body=null]
+     */
+    sendValidationError(error = null, body = null) {
         if(error == null) error = CelastrinaValidationError.newValidationError("bad request");
-        this.send(error, error.code);
+        if(body == null) body = "<html lang=\"en\"><head><title>" + this._config.name + "</title></head><body><header>400 - Bad Request</header><main><p><h2>" + error.message + "</h2><br />" + error.tag + "</p></main><footer>celastrinajs</footer></body></html>";
+        this.send(body, error.code);
     }
     /**
      * @param {string} url
-     * @param {null|Object} [body]
+     * @param {*} [body=null]
      */
     sendRedirect(url, body = null) {
         this._azfunccontext.res.headers["Location"] = url;
+        if(body == null) body = "<html lang=\"en\"><head><title>" + this._config.name + "</title></head><body><header>302 - Redirect</header><main><p><h2>" + url + "</h2></main><footer>celastrinajs</footer></body></html>";
         this.send(body, 302);
     }
     /**@param{string}url*/
     sendRedirectForwardBody(url) {this.sendRedirect(url, this._azfunccontext.req.body);}
-    /**@param{*}[error=null]*/
-    sendServerError(error = null) {
+    /**
+     * @param {*} [error=null]
+     * @param {*} [body=null]
+     */
+    sendServerError(error = null, body = null) {
         if(error == null) error = CelastrinaError.newError("Internal Server Error.");
         else if(!(error instanceof CelastrinaError)) error = CelastrinaError.wrapError(error, 500);
-        this.send(error, error.code);
+        switch(error.code) {
+            case 403:
+                this.sendForbiddenError(error);
+                break;
+            case 401:
+                this.sendNotAuthorizedError(error);
+                break;
+            case 400:
+                this.sendValidationError(error);
+                break;
+            default:
+                if(body == null) body = "<html lang=\"en\"><head><title>" + this._config.name + "</title></head><body><header>" + error.code + " - Internal Server Error</header><main><p><h2>" + error.message + "</h2></main><footer>celastrinajs</footer></body></html>";
+                this.send(body, error.code);
+        }
     }
-    /**@param{*}[error=null]*/
-    sendNotAuthorizedError(error= null) {
+    /**
+     * @param {*} [error=null]
+     * @param {*} [body=null]
+     */
+    sendNotAuthorizedError(error= null, body = null) {
         if(error == null) error = CelastrinaError.newError("Not Authorized.", 401);
         else if(!(error instanceof CelastrinaError)) error = CelastrinaError.wrapError(error, 401);
-        this.send(error, 401);
+        if(body == null) body = "<html lang=\"en\"><head><title>" + this._config.name + "</title></head><body><header>401 - Not Authorized</header><main><p><h2>" + error.message + "</h2></main><footer>celastrinajs</footer></body></html>";
+        this.send(body, error.code);
     }
-    /**@param{*}[error=null]*/
-    sendForbiddenError(error = null) {
+    /**
+     * @param {*} [error=null]
+     * @param {*} [body=null]
+     */
+    sendForbiddenError(error = null, body = null) {
         if(error == null) error = CelastrinaError.newError("Forbidden.", 403);
         else if(!(error instanceof CelastrinaError)) error = CelastrinaError.wrapError(error, 403);
-        this.send(error, 403);
+        if(body == null) body = "<html lang=\"en\"><head><title>" + this._config.name + "</title></head><body><header>403 - Forbidden</header><main><p><h2>" + error.message + "</h2></main><footer>celastrinajs</footer></body></html>";
+        this.send(body, error.code);
+    }
+}
+/**
+ * JSONHTTPContext
+ * @author Robert R Murrell
+ */
+class JSONHTTPContext extends HTTPContext {
+    /**
+     * @param {_AzureFunctionContext} context
+     * @param {Configuration} config
+     */
+    constructor(context, config) {
+        super(context, config);
+        this._azfunccontext.res.status = 200;
+        this._azfunccontext.res.headers["Content-Type"] = "application/json; charset=utf-8";
+        this._azfunccontext.res.body = {name: config.name, code: 200, message: "Success! Welcome to celastrinajs."};
+    }
+    /**
+     * @param {CelastrinaValidationError} [error=null]
+     * @param {Object} [body=null]
+     */
+    sendValidationError(error = null, body = null) {
+        if(error == null) error = CelastrinaValidationError.newValidationError("bad request");
+        if(body == null)
+            this.send(error, error.code);
+        else
+            this.send(body, 400);
+    }
+    /**
+     * @param {string} url
+     * @param {Object} [body=null]
+     */
+    sendRedirect(url, body = null) {
+        this._azfunccontext.res.headers["Location"] = url;
+        if(body == null) body = {code: 302, url: url};
+        this.send(body, 302);
+    }
+    /**
+     * @param {*} [error=null]
+     * @param {Object} [body=null]
+     */
+    sendServerError(error = null, body = null) {
+        if(error == null) error = CelastrinaError.newError("Internal Server Error.");
+        else if(!(error instanceof CelastrinaError)) error = CelastrinaError.wrapError(error, 500);
+        if(body == null)
+            this.send(error, error.code);
+        else
+            this.send(body, 500);
+    }
+    /**
+     * @param {*} [error=null]
+     * @param {Object} [body=null]
+     */
+    sendNotAuthorizedError(error= null, body = null) {
+        if(error == null) error = CelastrinaError.newError("Not Authorized.", 401);
+        else if(!(error instanceof CelastrinaError)) error = CelastrinaError.wrapError(error, 401);
+        if(body == null)
+            this.send(error, error.code);
+        else
+            this.send(body, 401);
+    }
+    /**
+     * @param {*} [error=null]
+     * @param {Object} [body=null]
+     */
+    sendForbiddenError(error = null, body = null) {
+        if(error == null) error = CelastrinaError.newError("Forbidden.", 403);
+        else if(!(error instanceof CelastrinaError)) error = CelastrinaError.wrapError(error, 403);
+        if(body == null)
+            this.send(error, error.code);
+        else
+            this.send(body, 403);
     }
 }
 /**
@@ -1177,24 +1241,23 @@ class HTTPContext extends BaseContext {
 class HTTPSentry extends BaseSentry {
     constructor() {
         super();
-        /**@type{PermissionManager}*/this._permissions = null;
+    }
+}
+/**
+ * HTTPSentry
+ * @author Robert R Murrell
+ */
+class OptimisticHTTPSentry extends HTTPSentry {
+    constructor() {
+        super();
     }
     /**
      * @param {Configuration | HTTPConfiguration} config
      * @return {Promise<void>}
      */
     async initialize(config) {
-        this._permissions = config.permissions;
-    }
-    /**
-     * @param {BaseContext} context
-     * @param {BaseSubject} subject
-     * @return {Promise<void>}
-     */
-    async authorize(context, subject) {
-        for(/**@type{Permission}*/let _permission of this._permissions) {
-            await _permission.authorize(subject);
-        }
+        config.setAuthorizationOptimistic(true);
+        return super.initialize(config);
     }
 }
 /**
@@ -1265,7 +1328,6 @@ class JwtSentry extends HTTPSentry {
 }
 /**
  * @type {BaseFunction}
- * @abstract
  */
 class HTTPFunction extends BaseFunction {
     /**@param{Configuration}configuration*/
@@ -1275,7 +1337,9 @@ class HTTPFunction extends BaseFunction {
      * @param {Configuration} config
      * @return {Promise<BaseContext & HTTPContext>}
      */
-    async createContext(context, config) {return new HTTPContext(context, config);}
+    async createContext(context, config) {
+        return new HTTPContext(context, config);
+    }
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Configuration} config
@@ -1342,28 +1406,46 @@ class HTTPFunction extends BaseFunction {
             await _handler(context);
     }
     /**
+     * @param {HTTPContext} context
+     * @return {Promise<void>}
+     */
+    static async _rewriteSession(context) {
+        if(context.session != null && context.session.doWriteSession) {
+            /**@type{HTTPConfiguration}*/let _config = /**@type{HTTPConfiguration}*/context.config;
+            /**@type{SessionManager}*/let _sm = _config.sessionManager;
+            await _sm.saveSession(context.session, context);
+        }
+    }
+    /**
+     * @param {HTTPContext} context
+     * @return {Promise<void>}
+     */
+    static async _setCookies(context) {
+        let _cookies = context.cookies;
+        let _setcookies = [];
+        for(/**@type{Cookie}*/const _param in _cookies) {
+            if(_cookies.hasOwnProperty(_param)) {
+                let _cookie = _cookies[_param];
+                if(_cookie instanceof Cookie)
+                    _setcookies.unshift(_cookie.toAzureCookie());
+            }
+        }
+        _setcookies = await Promise.all(_setcookies);
+        if(_setcookies.length > 0)
+            context.azureFunctionContext.res.cookies = _setcookies;
+    }
+    /**
      * @param {BaseContext | HTTPContext} context
      * @return {Promise<void>}
      */
     async terminate(context) {
-        // Re-write session if we need to.
-        if(context.session.doWriteSession) {
-            /**@type{HTTPConfiguration}*/let _config = /**@type{HTTPConfiguration}*/context.config;
-            /**@type{SessionManager}*/let _sm = _config.sessionManager;
-            await _sm.setSession(context.session);
-        }
-        // Set any cookies that have changed.
-        let _cookies = context.cookies;
-        /**@type{Array.<string>}*/let _cookieHeaders = [];
-        for(/**@type{Cookie}*/const _cookie of _cookies) {
-            _cookie.doSerializeCookie(_cookieHeaders);
-        }
-        context.setResponseHeader("Set-Cookie", _cookieHeaders);
+        await HTTPFunction._rewriteSession(context);
+        await HTTPFunction._setCookies(context);
     }
 }
 /**
- * @type {HTTPFunction}
- * @abstract
+ * JSONHTTPFunction
+ * @author Robert R Murrell
  */
 class JSONHTTPFunction extends HTTPFunction {
     /**@param{Configuration}configuration*/
@@ -1374,17 +1456,32 @@ class JSONHTTPFunction extends HTTPFunction {
      * @return {Promise<HTTPContext>}
      */
     async createContext(context, config) {
-        let _context = new HTTPContext(context, config);
-        _context._azfunccontext.res.status = 200;
-        _context._azfunccontext.res.headers["Content-Type"] = "application/json; charset=utf-8";
-        _context._azfunccontext.res.body = {name: this._config.name, code: 200, message:"success"};
-        return _context;
+        return new JSONHTTPContext(context, config);
+    }
+}
+/**
+ * MatchAlways
+ * @author Robert R Murrell
+ */
+class MatchAlways extends ValueMatch {
+    constructor() {
+        super("MatchAlways");
+    }
+    /**
+     * @param {Array.<string>} assertion
+     * @param {Array.<string>} values
+     * @return {Promise<true>}
+     */
+    async isMatch(assertion, values) {
+        return true;
     }
 }
 module.exports = {
+    MatchAlways: MatchAlways,
     Cookie: Cookie,
     JwtSubject: JwtSubject,
     HTTPContext: HTTPContext,
+    JSONHTTPContext: JSONHTTPContext,
     BaseIssuer: BaseIssuer,
     LocalJwtIssuer: LocalJwtIssuer,
     OpenIDJwtIssuer: OpenIDJwtIssuer,
@@ -1399,5 +1496,8 @@ module.exports = {
     AESSessionManager: AESSessionManager,
     HTTPConfiguration: HTTPConfiguration,
     JwtConfiguration: JwtConfiguration,
-    JwtSentry: JwtSentry
+    HTTPSentry: HTTPSentry,
+    OptimisticHTTPSentry: OptimisticHTTPSentry,
+    JwtSentry: JwtSentry,
+    HTTPFunction: HTTPFunction
 };

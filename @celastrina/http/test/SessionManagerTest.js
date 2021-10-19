@@ -39,10 +39,6 @@ class MockSessionManager extends SessionManager {
         await super.initialize(context);
         this.initializeInvoked = true;
     }
-    async getSession() {
-        this.getSessionInvoked = true;
-        return super.getSession();
-    }
     async loadSession(context) {
         this.loadSessionInvoked = true;
         return super.loadSession(context);
@@ -69,7 +65,6 @@ describe("SessionManager", () => {
             assert.deepStrictEqual(_session._parameter, _mockparam, "Expected _mockparam.");
             assert.strictEqual(_session._name, "celastrinajs_session", "Expected 'celastrinajs_session'.");
             assert.strictEqual(_session._createNew, true, "Expected true.");
-            assert.strictEqual(_session._session, null, "Expected session null.");
         });
         it("sets values", () => {
             let _mockparam = new MockHTTPParameter();
@@ -77,7 +72,6 @@ describe("SessionManager", () => {
             assert.deepStrictEqual(_session._parameter, _mockparam, "Expected MockHTTPParameter.");
             assert.strictEqual(_session._name, "mock_session", "Expected 'mock_session'.");
             assert.strictEqual(_session._createNew, false, "Expected false.");
-            assert.strictEqual(_session._session, null, "Expected session null.");
         });
         it("fails on null name", () => {
             let _mockparam = new MockHTTPParameter();
@@ -112,7 +106,7 @@ describe("SessionManager", () => {
             _mockparam.stageParameter("mock_session", "{\"mockA\": \"valueA\", \"mockB\": \"valueB\"}");
             let _sm = new MockSessionManager(_mockparam, "mock_session", false);
             let _session = await _sm.loadSession(_mctx);
-            assert.strictEqual(_sm.session instanceof Session, true, "Expecte true, not null instance of Session.");
+            assert.strictEqual(_session instanceof Session, true, "Expecte true, not null instance of Session.");
             assert.strictEqual(_session.isNew, false, "Expecte false, not new.");
             assert.strictEqual(_session.doWriteSession, false, "Expecte false, not new, do not write.");
             assert.strictEqual(await _session.getProperty("mockA"), "valueA", "Expecte 'valueA'.");
@@ -121,33 +115,7 @@ describe("SessionManager", () => {
         it("returns null session", async () => {
             let _mockparam = new MockHTTPParameter();
             let _sm = new MockSessionManager(_mockparam, "mock_session", false);
-            await _sm.loadSession(_mctx);
-            assert.strictEqual(_sm.session, null, "Expecte null.");
-        });
-        it("gets existing session", async () => {
-            let _mockparam = new MockHTTPParameter();
-            _mockparam.stageParameter("mock_session", "{\"mockA\": \"valueA\", \"mockB\": \"valueB\"}");
-            let _sm = new MockSessionManager(_mockparam, "mock_session", false);
             let _session = await _sm.loadSession(_mctx);
-            _session = await _sm.getSession();
-            assert.strictEqual(_session instanceof Session, true, "Expecte true, not null instance of Session.");
-            assert.strictEqual(_session.isNew, false, "Expecte false, not new.");
-            assert.strictEqual(_session.doWriteSession, false, "Expecte false, not new, do not write.");
-            assert.strictEqual(await _session.getProperty("mockA"), "valueA", "Expecte 'valueA'.");
-            assert.strictEqual(await _session.getProperty("mockB"), "valueB", "Expecte 'valueB'.");
-        });
-        it("gets new session", async () => {
-            let _mockparam = new MockHTTPParameter();
-            let _sm = new MockSessionManager(_mockparam, "mock_session", true);
-            let _session = await _sm.getSession();
-            assert.strictEqual(_session instanceof Session, true, "Expecte true, not null instance of Session.");
-            assert.strictEqual(_session.isNew, true, "Expecte true, new.");
-            assert.strictEqual(_session.doWriteSession, true, "Expecte true, not, do write.");
-        });
-        it("gets null session create new false", async () => {
-            let _mockparam = new MockHTTPParameter();
-            let _sm = new MockSessionManager(_mockparam, "mock_session", false);
-            let _session = await _sm.getSession();
             assert.strictEqual(_session, null, "Expecte null.");
         });
     });
@@ -253,8 +221,7 @@ describe("AESSessionManager", () => {
             await _mctx._parseCookies();
             let _sm = new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter());
             await _sm.initialize(_mctx);
-            await _sm.loadSession(_mctx);
-            /**@type{Session}*/let _session = _sm.session;
+            /**@type{Session}*/let _session = await _sm.loadSession(_mctx);
             assert.strictEqual(_session instanceof Session, true, "Expected instance of Session.");
             assert.strictEqual(_session.isNew, false, "Expected false.");
             assert.strictEqual(_session.doWriteSession, false, "Expectde false.");
@@ -272,7 +239,7 @@ describe("AESSessionManager", () => {
             await _mctx._parseCookies();
             let _sm = new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter());
             await _sm.initialize(_mctx);
-            /**@type{Session}*/let _session = await _sm.getSession();
+            /**@type{Session}*/let _session = await _sm.newSession();
             await _session.setProperty("keyA", "valueA");
             await _session.setProperty("keyB", "valueB");
             await _sm.saveSession(_session, _mctx);

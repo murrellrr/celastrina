@@ -168,42 +168,6 @@ describe("Cookie", () => {
             assert.deepStrictEqual(_cookie.serialize(), _result, "parseValue should return empty string.");
         });
     });
-    describe("#doSerializeCookie(value = [])", () => {
-        let _now = new Date();
-        let _options = {
-            maxAge: 3600,
-            expires: _now,
-            httpOnly: true,
-            domain: "sample.domain",
-            path: "/path",
-            secure: true,
-            sameSite: true
-        };
-        it("Should return empty Cookie value", () => {
-            let _cookie = new Cookie("COOKIE_1", "VALUE_1", _options);
-            let _result = "COOKIE_1=; Max-Age=3600; Domain=sample.domain; Path=/path; Expires=" + _now.toUTCString() + "; HttpOnly; Secure; SameSite=Strict";
-            let _results = _cookie.doSerializeCookie();
-            assert.deepStrictEqual(_results, [], "Should be empty array.");
-        });
-        it("Should serialize VALUE_1", () => {
-            let _cookie = new Cookie("COOKIE_1", null, _options);
-            _cookie.value = "VALUE_1";
-            let _expected = ["COOKIE_1=VALUE_1; Max-Age=3600; Domain=sample.domain; Path=/path; Expires=" + _now.toUTCString() + "; HttpOnly; Secure; SameSite=Strict"];
-            let _results = _cookie.doSerializeCookie();
-            assert.deepStrictEqual(_results, _expected, "Should have 1 entry.");
-        });
-        it("Should serialize VALUE_1 and VALUE_2", () => {
-            let _cookie1 = new Cookie("COOKIE_1", null, _options);
-            _cookie1.value = "VALUE_1";
-            let _cookie2 = new Cookie("COOKIE_2", null, _options);
-            _cookie2.value = "VALUE_2";
-
-            let _expected = ["COOKIE_2=VALUE_2; Max-Age=3600; Domain=sample.domain; Path=/path; Expires=" + _now.toUTCString() + "; HttpOnly; Secure; SameSite=Strict",
-                             "COOKIE_1=VALUE_1; Max-Age=3600; Domain=sample.domain; Path=/path; Expires=" + _now.toUTCString() + "; HttpOnly; Secure; SameSite=Strict"];
-            let _results = _cookie2.doSerializeCookie(_cookie1.doSerializeCookie());
-            assert.deepStrictEqual(_results, _expected, "Should have 2 entries.");
-        });
-    });
     describe("#delete()", () => {
         it("Should serialize name, value, options to standard", () => {
             let _now = new Date();

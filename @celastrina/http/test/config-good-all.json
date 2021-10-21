@@ -2,7 +2,7 @@
   "configurations": [
     {
       "_content": {
-        "type": "application/celastrinajs.config+json; Core"
+        "type": "application/celastrinajs.config+json;HTTP"
       },
       "resources": {"_content": {
                       "type": "application/celastrinajs.attribute+json;Property+[AppRegistrationResource]"},
@@ -23,8 +23,7 @@
           {"_content": {
               "type": "application/celastrinajs.attribute+json;Property+[Permission]"},
             "key": "mock_permission_expand", "type": "object", "expand": true}
-        ],
-        "roleFactory": {}
+        ]
       }
     }
   ]

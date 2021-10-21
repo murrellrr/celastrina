@@ -422,8 +422,7 @@ class PropertyManager extends ConfigurationItem {
     /**
      * @param {string} key
      * @param {(null|*)} defaultValue
-     * @return {{value: (null|*), defaulted: boolean}}
-     * @private
+     * @return {Promise<{value: (null|*), defaulted: boolean}>}
      */
     async _getPropertyOrDefault(key, defaultValue = null){
         let value = await this._getProperty(key);
@@ -1018,6 +1017,14 @@ class Configuration {
         return this;
     }
     /**
+     * @param {RoleFactory} factory
+     * @return {Configuration}
+     */
+    setRoleFactory(factory) {
+        this._config[Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY] = factory;
+        return this;
+    }
+    /**
      * @param {string} key
      * @param {*} value
      * @return {Configuration}
@@ -1108,17 +1115,59 @@ class Configuration {
             return _manager;
         }
     }
-
     /**
      * @param {_AzureFunctionContext} azcontext
+     * @return {Promise<void>}
      */
     async _preInitialize(azcontext) {
         // do nothing
     }
     /**
      * @param {_AzureFunctionContext} azcontext
+     * @param pm
+     * @return {Promise<void>}
+     */
+    async _initPropertyManager(azcontext, pm) {
+        await pm.initialize(azcontext, this._config);
+        azcontext.log.info("[Configuration._initPropertyManager(azcontext)]: PropertyManager Initialized.");
+        await pm.ready(azcontext, this._config);
+        azcontext.log.info("[Configuration._initPropertyManager(azcontext)]: PropertyManager Ready.");
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param pm
+     * @return {Promise<void>}
+     */
+    async _initLoadConfiguration(azcontext, pm) {
+        // do nothing
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param prm
+     * @return {Promise<void>}
+     */
+    async _initPermissionManager(azcontext, prm) {
+        await prm.initialize(azcontext, this._config);
+        azcontext.log.info("[Configuration._initPermissionManager(azcontext)]: PermissionManager Initialized.");
+        await prm.ready(azcontext, this._config);
+        azcontext.log.info("[Configuration._initPermissionManager(azcontext)]: PermissionManager Ready.");
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param rm
+     * @return {Promise<void>}
+     */
+    async _initResourceManager(azcontext, rm) {
+        await rm.initialize(azcontext, this._config);
+        azcontext.log.info("[Configuration._initResourceManager(azcontext)]: ResourceManager Initialized.");
+        await rm.ready(azcontext, this._config);
+        azcontext.log.info("[Configuration._initResourceManager(azcontext)]: ResourceManager Ready.");
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
      * @param {PropertyManager} pm
      * @param {ResourceManager} rm
+     * @return {Promise<void>}
      */
     async _postInitialize(azcontext, pm, rm) {
         // do nothing
@@ -1132,38 +1181,25 @@ class Configuration {
         this._config[Configuration.CONFIG_CONTEXT] = azcontext;
         if(!this._loaded) {
             azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration not loaded, initializing.");
-            azcontext.log.info("[Configuration.initialize(azcontext)]: Running pre-initialization lifecycle...");
-            await this._preInitialize(azcontext);
-            azcontext.log.info("[Configuration.initialize(azcontext)]: Pre Initialization Successful.");
-            /**@type{PropertyManager}*/let _pm = this._getPropertyManager(azcontext);
-            /**@type{ResourceManager}*/let _rm = this._getResourceManager(azcontext);
-            /**@type{PermissionManager}*/let _prm = this._getPermissionManager(azcontext);
             let _name = this._config[Configuration.CONFIG_NAME];
             if(typeof _name !== "string" || _name.trim().length === 0 || _name.indexOf(' ') >= 0) {
                 azcontext.log.error("[Configuration.load(azcontext)]: Invalid Configuration. Name cannot be undefined, null, or 0 length.");
                 throw CelastrinaValidationError.newValidationError("Name cannot be undefined, null, or 0 length.", Configuration.CONFIG_NAME);
             }
-            await _pm.initialize(azcontext, this._config);
-            azcontext.log.info("[Configuration.load(azcontext)]: PropertyManager Initialized.");
-            await _pm.ready(azcontext, this._config);
-            azcontext.log.info("[Configuration.initialize(azcontext)]: PropertyManager Ready.");
-            let _loader = this._config[ConfigurationLoader.CONFIG_CONFIGRATION_LOADER];
-            if(_loader instanceof ConfigurationLoader) {
-                azcontext.log.info("[Configuration.load(azcontext)]: ConfigurationLoader found, loading from external JSON configuration.");
-                await _loader.load(azcontext, this._config);
-                azcontext.log.info("[Configuration.load(azcontext)]: ConfigurationLoader completed, configuration loaded.");
-            }
-            await _prm.initialize(azcontext, this._config);
-            azcontext.log.info("[Configuration.load(azcontext)]: PermissionManager Initialized.");
-            await _prm.ready(azcontext, this._config);
-            azcontext.log.info("[Configuration.initialize(azcontext)]: PermissionManager Ready.");
-            await _rm.initialize(azcontext, this._config);
-            azcontext.log.info("[Configuration.load(azcontext)]: ResourceManager Initialized.");
-            await _rm.ready(azcontext, this._config);
-            azcontext.log.info("[Configuration.initialize(azcontext)]: ResourceManager Ready.");
-            azcontext.log.info("[Configuration.initialize(azcontext)]: Running post initialization.");
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Pre Initialize.");
+            await this._preInitialize(azcontext);
+            /**@type{PropertyManager}*/let _pm = this._getPropertyManager(azcontext);
+            /**@type{PermissionManager}*/let _prm = this._getPermissionManager(azcontext);
+            /**@type{ResourceManager}*/let _rm = this._getResourceManager(azcontext);
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Initialize Property Manager.");
+            await this._initPropertyManager(azcontext, _pm);
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Load Configuration.");
+            await this._initLoadConfiguration(azcontext, _pm);
+            await this._initPermissionManager(azcontext, _prm);
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Initialize Resource Manager.");
+            await this._initResourceManager(azcontext, _rm);
+            azcontext.log.info("[Configuration.initialize(azcontext)]: Post initialization.");
             await this._postInitialize(azcontext, _pm, _rm);
-            azcontext.log.info("[Configuration.initialize(azcontext)]: Post initialization successful.");
             azcontext.log.info("[Configuration.initialize(azcontext)]: Initialization successful.");
         }
         else
@@ -1201,9 +1237,9 @@ class AES256Algorithm extends Algorithm {
      */
     constructor(key, iv) {
         super("aes-256-cbc");
-        if(typeof key !== "string" || key == null || key.trim().length === 0)
+        if(typeof key !== "string" || key.trim().length === 0)
             throw CelastrinaValidationError.newValidationError("Argement 'key' cannot be undefined, null or zero length.", "key");
-        if(typeof iv !== "string" || iv == null || iv.trim().length === 0)
+        if(typeof iv !== "string"  || iv.trim().length === 0)
             throw CelastrinaValidationError.newValidationError("Argement 'iv' cannot be undefined, null or zero length.", "iv");
         this._key = key;
         this._iv  = iv;
@@ -1574,7 +1610,7 @@ class BaseSentry {
         }
         else {
             if(!(await _permission.authorize(subject))) {
-                context.log(subject.id + "' does not satisfy any permission for action '" + context.action + "', forbidden.",
+                context.log("'" + subject.id + "' does not satisfy any permission for action '" + context.action + "', forbidden.",
                                     LOG_LEVEL.THREAT, "BaseSentry.authorize(context, subject)");
                 throw CelastrinaError.newError("Forbidden.", 403);
             }
@@ -2055,7 +2091,7 @@ class PermissionParser extends AttributeParser {
      * @param {string} version
      * @param {AttributeParser} link
      */
-    constructor(link = null, version = "1.0.0", ) {
+    constructor(link = null, version = "1.0.0") {
         super("Permission", link, version);
     }
     /**
@@ -2212,19 +2248,19 @@ class CoreConfigParser extends ConfigParser {
  * ConfigurationLoader
  * @author Robert R Murrell
  */
-class ConfigurationLoader extends ConfigurationItem {
-    static CONFIG_CONFIGRATION_LOADER = "celastrinajs.core.configuration.loader";
+class ConfigurationLoader extends Configuration {
     /**
+     * @param {string} name
      * @param {string} property
      */
-    constructor(property) {
-        super();
+    constructor(name, property) {
+        super(name);
         if(typeof property !== "string" || property.trim().length === 0)
             throw CelastrinaValidationError.newValidationError(
                 "[ConfigurationLoader][property]: Invalid string. Argument cannot be null or zero length.",
                 "property");
         /**@type{string}*/this._property = property.trim();
-        if(this._property.includes(' '))
+        if(this._property.includes(" "))
             throw CelastrinaValidationError.newValidationError(
                 "[ConfigurationLoader][property]: Invalid string. Argument cannot contain spaces.",
                 "property");
@@ -2292,22 +2328,22 @@ class ConfigurationLoader extends ConfigurationItem {
     }
     /**
      * @param {Object} azcontext
-     * @param {Object} config
+     * @param {Object} pm
      * @return {Promise<void>}
      */
-    async load(azcontext, config) {
-        this._ctp.initialize(azcontext, config);
-        this._cfp.initialize(azcontext, config);
-        let _pm = config[Configuration.CONFIG_PROPERTY];
+    async _initLoadConfiguration(azcontext, pm) {
+        this._ctp.initialize(azcontext, this._config);
+        this._cfp.initialize(azcontext, this._config);
+        let _pm = this._config[Configuration.CONFIG_PROPERTY];
         /**@type{(null|undefined|Object)}*/let _funcconfig = await _pm.getObject(this._property);
         if(_funcconfig == null)
             throw CelastrinaValidationError.newValidationError(
                 "[ConfigurationLoader.load(pm, azcontext, config)][_funcconfig]: Invalid object. Attribute _funcconfig cannot be 'undefined' or null.",
-                        this._property);
+                this._property);
         if(!_funcconfig.hasOwnProperty("configurations") || !Array.isArray(_funcconfig.configurations))
             throw CelastrinaValidationError.newValidationError(
                 "[ConfigurationLoader.load(pm, azcontext, config)][configurations]: Invalid object. Attribute is required and must be an array.",
-                    "configurations");
+                "configurations");
         /**@type{Array.<Object>}*/let _configurations = _funcconfig.configurations;
         await ConfigurationLoader._parseProperties(this._ctp, _configurations);
         let _promises = [];
@@ -2316,7 +2352,6 @@ class ConfigurationLoader extends ConfigurationItem {
         }
         await Promise.all(_promises);
     }
-    /**@return{string}*/get key() {return ConfigurationLoader.CONFIG_CONFIGRATION_LOADER;}
 }
 module.exports = {
     CelastrinaError: CelastrinaError,
@@ -2350,6 +2385,7 @@ module.exports = {
     Permission: Permission,
     PermissionManager: PermissionManager,
     RoleFactory: RoleFactory,
+    BaseRoleFactory: BaseRoleFactory,
     BaseSubject: BaseSubject,
     BaseSentry: BaseSentry,
     BaseContext: BaseContext,

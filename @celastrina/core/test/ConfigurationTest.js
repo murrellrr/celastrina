@@ -14,17 +14,6 @@ class MockConfigurationItem extends ConfigurationItem {
     get value() {return "mock-value";}
 }
 
-class MockConfigLoader extends ConfigurationLoader {
-    constructor(property) {
-        super(property);
-        this.loaded = false;
-    }
-    async load(azcontext, config) {
-        this.loaded = true;
-        return super.load(azcontext, config);
-    }
-}
-
 describe("Configuration", () => {
     describe("#constructor(name)", () => {
         it("must set name", () => {
@@ -152,7 +141,6 @@ describe("Configuration", () => {
             let _config = new Configuration("mock_configuration");
             let _pm = new MockPropertyManager();
             let _am = new MockAuthorizationManager();
-            let _mcl = new MockConfigLoader("mock_property");
             _pm.mockProperty("mock_process-1-roles", "[\"role-1\", \"role-2\", \"role-3\"]");
             _pm.mockProperty("mock_resources", "[{\"id\": \"mock-resource-1\", \"authority\": \"authority1\", \"tenant\":  \"tenant1\", \"secret\": \"secret1\"},{\"id\": \"mock-resource-2\", \"authority\": \"authority2\", \"tenant\":  \"tenant2\", \"secret\": \"secret2\"}]");
             _pm.mockProperty("mock_permission", "{\"action\": \"mock-process-3\", \"roles\": [\"role-7\", \"role-8\", \"role-9\"], \"match\": {\"type\": \"MatchNone\"}}");
@@ -160,11 +148,9 @@ describe("Configuration", () => {
             _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good-all.json", "utf8"));
             _config.setConfigurationItem(_pm);
             _config.setConfigurationItem(_am);
-            _config.setConfigurationItem(_mcl);
             await _config.initialize(_azcontext);
             assert.strictEqual(_config.properties, _pm);
             assert.strictEqual(_config.resources, _am);
-            assert.strictEqual(_mcl.loaded, true, "Should  be loaded.");
             assert.strictEqual(_config.loaded, false, "Should not be loaded yet.");
             assert.strictEqual(_pm.initialized, true, "PropertyManager Initialized.");
             assert.strictEqual(_pm.readied, true, "PropertyManager Readied.");

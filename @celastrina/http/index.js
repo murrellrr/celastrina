@@ -25,7 +25,7 @@
 const {MatchAlways, Cookie, JwtSubject, HTTPContext, JSONHTTPContext, BaseIssuer, LocalJwtIssuer, OpenIDJwtIssuer,
        HTTPParameter, HeaderParameter, QueryParameter, BodyParameter, CookieParameter, HTTPConfiguration,
        JwtConfiguration, HTTPSentry, OptimisticHTTPSentry, JwtSentry, Session, SessionManager, SecureSessionManager,
-       AESSessionManager, HTTPFunction} = require("./HTTP");
+       AESSessionManager, SessionRoleFactory, HTTPFunction, JSONHTTPFunction} = require("./HTTP");
 module.exports = {
     MatchAlways: MatchAlways,
     Cookie: Cookie,
@@ -44,10 +44,12 @@ module.exports = {
     SessionManager: SessionManager,
     SecureSessionManager: SecureSessionManager,
     AESSessionManager: AESSessionManager,
+    SessionRoleFactory: SessionRoleFactory,
     HTTPConfiguration: HTTPConfiguration,
     JwtConfiguration: JwtConfiguration,
     HTTPSentry: HTTPSentry,
     OptimisticHTTPSentry: OptimisticHTTPSentry,
     JwtSentry: JwtSentry,
-    HTTPFunction: HTTPFunction
+    HTTPFunction: HTTPFunction,
+    JSONHTTPFunction: JSONHTTPFunction
 };

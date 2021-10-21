@@ -18,8 +18,7 @@
     "Javascript",
     "Node.js",
     "HTTP",
-    "JWT",
-    "Recaptcha"
+    "JWT"
   ],
   "author": "Robert R Murrell",
   "license": "MIT",
@@ -28,7 +27,7 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/core": "^4.0.7",
+    "@celastrina/core": "^4.0.9",
     "adal-node": "^0.2.2",
     "axios": "^0.21.1",
     "cookie": "^0.4.1",

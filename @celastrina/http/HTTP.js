@@ -35,7 +35,7 @@ const jwkToPem = require("jwk-to-pem");
 const cookie = require("cookie");
 const {Decipher, Cipher} = require("crypto");
 const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL, Configuration,
-       PermissionManager, BaseSubject, BaseSentry, Algorithm, AES256Algorithm, Cryptography, RoleResolver, BaseContext,
+       PermissionManager, BaseSubject, BaseSentry, Algorithm, AES256Algorithm, Cryptography, RoleFactory, BaseContext,
        BaseFunction, ValueMatch, MatchAny, MatchAll, MatchNone} = require("@celastrina/core");
 /**
  * @typedef _jwtpayload
@@ -327,21 +327,34 @@ class BaseIssuer {
         if(_subject.issuer === this._issuer) {
             try {
                 let decoded = jwt.verify(_subject.token, await this.getKey(context, _subject), {algorithm: "RSA"});
-                if(typeof decoded === "undefined" || decoded == null) return false;
+                if(typeof decoded === "undefined" || decoded == null) {
+                    context.log("Failed to verify token.", LOG_LEVEL.THREAT,
+                        "BaseIssuer.verify(context, _subject)");
+                    return false;
+                }
                 if(this._audiences != null) {
-                    if(!this._audiences.includes(_subject.audience)) return false;
+                    if(!this._audiences.includes(_subject.audience)) {
+                        context.log("'" + _subject.id + "' with audience '" + _subject.audience +
+                                     "' failed match audiences.", LOG_LEVEL.THREAT, "BaseIssuer.verify(context, _subject)");
+                        return false;
+                    }
                 }
                 if(this._validateNonce) {
                     let nonce = await this.getNonce(context, _subject);
                     if(typeof nonce === "string" && nonce.trim().length > 0) {
-                        if(_subject.nonce !== nonce) return false;
+                        if(_subject.nonce !== nonce) {
+                            context.log("'" + _subject.id + "' failed to pass nonce validation.", LOG_LEVEL.THREAT,
+                                        "BaseIssuer.verify(context, _subject)");
+                            return false;
+                        }
                     }
                 }
                 if(this._roles != null) _subject.addRoles(this._roles);
                 return true;
             }
-            catch (exception) {
-                context.log("Exception authenticating JWT:" + exception, LOG_LEVEL.ERROR, "THREAT");
+            catch(exception) {
+                context.log("Exception authenticating JWT: " + exception, LOG_LEVEL.THREAT,
+                            "BaseIssuer.verify(context, _subject)");
                 return false;
             }
         }
@@ -415,8 +428,8 @@ class OpenIDJwtIssuer extends BaseIssuer {
         for(const match of matches) {
             let value = await _subject.getClaim(match);
             if(value == null) {
-                context.log("No claim'" + value + "' not found for subject '" + _subject.id + "'.",
-                                    LOG_LEVEL.ERROR, "BaseIssuer._replaceURLEndpoint(context, subject, url)");
+                context.log("Claim '" + match + "' not found for subject '" + _subject.id + "' while building OpenID configuration URL.",
+                                    LOG_LEVEL.THREAT, "OpenIDJwtIssuer._replaceURLEndpoint(context, _subject, url)");
                 throw CelastrinaError.newError("Not Authorized.", 401);
             }
             if(Array.isArray(value)) value = value[0];
@@ -433,7 +446,9 @@ class OpenIDJwtIssuer extends BaseIssuer {
      */
     static async _getKey(context, _subject, configUrl) {
         if(!(_subject instanceof JwtSubject)) {
-            context.log("HTTPFunction not configured for JWT.", LOG_LEVEL.ERROR, "OpenIDJwtIssuer._getKey(context, configUrl)");
+            context.log("OOOOOOPS! Keyboard Driver Error!Function not configured for JWT. Subject '" +
+                         _subject.constructor.name + "' wrong type, expected JwtSubject.", LOG_LEVEL.ERROR,
+                         "OpenIDJwtIssuer._getKey(context, _subject, configUrl)");
             throw CelastrinaError.newError("Not Authorized.", 401);
         }
         let _endpoint = await OpenIDJwtIssuer._replaceURLEndpoint(context, _subject, configUrl);
@@ -710,7 +725,7 @@ class SessionManager {
     constructor(parameter, name = "celastrinajs_session", createNew = true) {
         if(typeof parameter === "undefined" || parameter == null)
             throw CelastrinaValidationError.newValidationError("Argument 'parameter' cannot be null.", "parameter");
-        if(typeof name !== "string" || name == null || name.trim().length === 0)
+        if(typeof name !== "string" || name.trim().length === 0)
             throw CelastrinaValidationError.newValidationError("Argument 'name' cannot be null or empty.", "name");
         this._parameter = parameter;
         this._name = name.trim();
@@ -826,11 +841,34 @@ class AESSessionManager extends SecureSessionManager {
     constructor(options, parameter, name = "celastrinajs_session", createNew = true) {
         if(typeof options === "undefined" || options == null)
             throw CelastrinaValidationError.newValidationError("Argement 'options' cannot be undefined or null", "options");
-        if(typeof options.key !== "string" || options.key == null || options.key.trim().length === 0)
+        if(typeof options.key !== "string" || options.key.trim().length === 0)
             throw CelastrinaValidationError.newValidationError("Argement 'key' cannot be undefined, null or zero length.", "options.key");
-        if(typeof options.iv !== "string" || options.iv == null || options.iv.trim().length === 0)
+        if(typeof options.iv !== "string" || options.iv.trim().length === 0)
             throw CelastrinaValidationError.newValidationError("Argement 'iv' cannot be undefined, null or zero length.", "options.iv");
         super(AES256Algorithm.create(options), parameter, name, createNew);
+    }
+}
+/**
+ * SessionRoleFactory
+ * @author Robert R Murrell
+ */
+class SessionRoleFactory extends RoleFactory {
+    /**
+     * @param {string} [key="roles"]
+     */
+    constructor(key = "roles") {
+        super();
+        this._key = key;
+    }
+    /**
+     * @param {BaseContext|HTTPContext} context
+     * @param {BaseSubject|JwtSubject} subject
+     * @return {Promise<Array.<string>>}
+     */
+    async getSubjectRoles(context, subject) {
+        let _roles = await context.session.getProperty(this._key, []);
+        if(!Array.isArray(_roles)) throw CelastrinaError.newError("Invalid role assignments for session key '" + this._key + "'.");
+        return _roles;
     }
 }
 /**
@@ -1177,6 +1215,14 @@ class JSONHTTPContext extends HTTPContext {
         this._azfunccontext.res.headers["Content-Type"] = "application/json; charset=utf-8";
         this._azfunccontext.res.body = {name: config.name, code: 200, message: "Success! Welcome to celastrinajs."};
     }
+    sendCelastrinaError(error) {
+        let _tag = null;
+        if(typeof error.tag === "string" && error.tag.trim().length > 0) _tag = error.tag;
+        let _causeMessage = null;
+        if(error.cause instanceof Error) _causeMessage = error.cause.message;
+        this.send({name: error.name, message: error.message, tag: _tag, code: error.code, cause: _causeMessage,
+                        drop: error.drop}, error.code);
+    }
     /**
      * @param {CelastrinaValidationError} [error=null]
      * @param {Object} [body=null]
@@ -1184,7 +1230,7 @@ class JSONHTTPContext extends HTTPContext {
     sendValidationError(error = null, body = null) {
         if(error == null) error = CelastrinaValidationError.newValidationError("bad request");
         if(body == null)
-            this.send(error, error.code);
+            this.sendCelastrinaError(error);
         else
             this.send(body, 400);
     }
@@ -1205,7 +1251,7 @@ class JSONHTTPContext extends HTTPContext {
         if(error == null) error = CelastrinaError.newError("Internal Server Error.");
         else if(!(error instanceof CelastrinaError)) error = CelastrinaError.wrapError(error, 500);
         if(body == null)
-            this.send(error, error.code);
+            this.sendCelastrinaError(error);
         else
             this.send(body, 500);
     }
@@ -1217,7 +1263,7 @@ class JSONHTTPContext extends HTTPContext {
         if(error == null) error = CelastrinaError.newError("Not Authorized.", 401);
         else if(!(error instanceof CelastrinaError)) error = CelastrinaError.wrapError(error, 401);
         if(body == null)
-            this.send(error, error.code);
+            this.sendCelastrinaError(error);
         else
             this.send(body, 401);
     }
@@ -1229,7 +1275,7 @@ class JSONHTTPContext extends HTTPContext {
         if(error == null) error = CelastrinaError.newError("Forbidden.", 403);
         else if(!(error instanceof CelastrinaError)) error = CelastrinaError.wrapError(error, 403);
         if(body == null)
-            this.send(error, error.code);
+            this.sendCelastrinaError(error);
         else
             this.send(body, 403);
     }
@@ -1278,33 +1324,43 @@ class JwtSentry extends HTTPSentry {
         /**@type{string}*/let _token = await _config.parameter.getParameter(context, _config.token);
         if(typeof _token !== "string") {
             context.log("JWT " + _config.parameter.type + " token " + _config.token + " but none was found.",
-                        LOG_LEVEL.WARN, "JwtSentry._getToken(context)");
+                        LOG_LEVEL.THREAT, "JwtSentry._getToken(context, _config)");
             return null;
         }
         let _scheme = _config.scheme;
         if(typeof _scheme === "string" && _scheme.length > 0) {
             if(!_token.startsWith(_scheme)) {
-                context.log("Expected token scheme '" + _scheme + "' but none was found.", LOG_LEVEL.WARN,
-                             "JwtSentry._getToken(context)");
+                context.log("Expected JWT token scheme '" + _scheme + "' but none was found.", LOG_LEVEL.THREAT,
+                             "JwtSentry._getToken(context, _config)");
                 return null;
             }
             if(_config.removeScheme) _token = _token.slice(_scheme.length).trim();
         }
         return _token;
     }
+
     /**
-     * @param {BaseContext | HTTPContext} context
-     * @return {Promise<BaseSubject | JwtSubject>}
+     * @param {(BaseContext | HTTPContext)} context
+     * @return {Promise<JwtSubject>}
      */
-    async authenticate(context) {
+    async createSubject(context) {
         /**@type{JwtConfiguration}*/let _config  = /**@type{JwtConfiguration}*/context.config;
         let _token = await this._getToken(context, _config);
         if(_token != null) {
-            let _subject = await JwtSubject.decode(_token);
+            let _subject = null;
+            try {
+                _subject = await JwtSubject.decode(_token);
+            }
+            catch(exception) {
+                context.log("JWT Token failed to decode.", LOG_LEVEL.THREAT,
+                            "JwtSentry.createSubject(context)");
+                throw exception;
+            }
             let _subjectid = _subject.id;
             if(typeof _subjectid === "undefined" || _subjectid == null) _subjectid = context.requestId;
-            if (_subject.isExpired()) {
-                context.log(_subjectid + " token expired.", LOG_LEVEL.WARN, "JwtSentry.authenticate(context)");
+            if(_subject.isExpired()) {
+                context.log(_subjectid + " token expired.", LOG_LEVEL.THREAT,
+                            "JwtSentry.createSubject(context)");
                 throw CelastrinaError.newError("Not Authorized.", 401);
             }
             /**@type{Array.<Promise<boolean>>}*/let promises = [];
@@ -1314,14 +1370,15 @@ class JwtSentry extends HTTPSentry {
             }
             /**type{Array.<boolean>}*/let results = await Promise.all(promises);
             if(!results.includes(true)) {
-                context.log(_subjectid + " not verified by any issuers.", LOG_LEVEL.WARN, "JwtSentry.authenticate(context)");
+                context.log(_subjectid + " token did not match any issuers.", LOG_LEVEL.THREAT,
+                            "JwtSentry.createSubject(context)");
                 throw CelastrinaError.newError("Not Authorized.", 401);
             }
             else
                 return _subject;
         }
         else {
-            context.log("No token found.", LOG_LEVEL.WARN,"JwtSentry.authenticate(context)");
+            context.log("No JWT token found.", LOG_LEVEL.THREAT,"JwtSentry.createSubject(context)");
             throw CelastrinaError.newError("Not Authorized.", 401);
         }
     }
@@ -1494,10 +1551,12 @@ module.exports = {
     SessionManager: SessionManager,
     SecureSessionManager: SecureSessionManager,
     AESSessionManager: AESSessionManager,
+    SessionRoleFactory: SessionRoleFactory,
     HTTPConfiguration: HTTPConfiguration,
     JwtConfiguration: JwtConfiguration,
     HTTPSentry: HTTPSentry,
     OptimisticHTTPSentry: OptimisticHTTPSentry,
     JwtSentry: JwtSentry,
-    HTTPFunction: HTTPFunction
+    HTTPFunction: HTTPFunction,
+    JSONHTTPFunction: JSONHTTPFunction
 };

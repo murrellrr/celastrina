@@ -1,6 +1,6 @@
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration, Permission, MatchAny, MatchAll, MatchNone} = require("../../core/Core");
 const {MatchAlways, Cookie, CookieParameter, Session, SessionManager, SecureSessionManager, AESSessionManager,
-       SessionRoleFactory, HTTPConfiguration, LocalJwtIssuer, HTTPContext, HTTPFunction, JwtConfiguration} = require("../index");
+       SessionRoleFactory, HTTPConfiguration, LocalJwtIssuer, HTTPContext, JSONHTTPFunction, JwtConfiguration} = require("../index");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockHTTPContext} = require("./HTTPContextTest");
 const {MockHTTPParameter} = require("./HTTPParameterMock");
@@ -12,7 +12,7 @@ const {AES256Algorithm} = require("@celastrina/core");
 const cookie = require("cookie");
 const {MockMicrosoftOpenIDIDPServer} = require("./AzureOpenIDIPDMock");
 
-class MockHTTPFunction extends HTTPFunction {
+class MockJSONHTTPFunction extends JSONHTTPFunction {
     constructor(config) {
         super(config);
     }
@@ -45,7 +45,7 @@ class MockHTTPFunction extends HTTPFunction {
         return super.initialize(context);
     }
     /**
-     * @param {HTTPContext} context
+     * @param {JSONHTTPContext} context
      * @return {Promise<void>}
      */
     async _get(context) {
@@ -59,14 +59,14 @@ class MockHTTPFunction extends HTTPFunction {
                 await context.session.setProperty("mockB", "valueB");
                 smocka = await context.session.getProperty("mockA");
                 smockb = await context.session.getProperty("mockB");
-                context.send("<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><p>mockA=" + smocka + "<br />mockB=" + smockb + "</p></body></html>");
+                context.send({mockA: smocka, mockB: smockb});
                 context.done();
                 break;
             case "session_test":
                 context.log("session_test GET test case executed.", LOG_LEVEL.INFO, "MockHTTPFunction._get(context)");
                 smocka = await context.session.getProperty("mockA");
                 smockb = await context.session.getProperty("mockB");
-                context.send("<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><p>mockA=" + smocka + "<br />mockB=" + smockb + "</p></body></html>");
+                context.send({mockA: smocka, mockB: smockb});
                 context.done();
                 break;
             case "session_subject":
@@ -74,7 +74,7 @@ class MockHTTPFunction extends HTTPFunction {
                 smocka = await context.session.getProperty("mockA");
                 smockb = await context.session.getProperty("mockB");
                 let subject = context.subject.id;
-                context.send("<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><p>subject=" + subject + "<br />mockA=" + smocka + "<br />mockB=" + smockb + "</p></body></html>");
+                context.send({subject: subject, mockA: smocka, mockB: smockb});
                 context.done();
                 break;
             case "default":
@@ -116,11 +116,11 @@ class MockHTTPFunction extends HTTPFunction {
     }
     async _trace(context) {
         context.azureFunctionContext._traceInvoked = true;
-        context.done();
+        context.done();``
     }
 }
 
-describe("HTTPFunction", () => {
+describe("JSONHTTPFunction", () => {
     let _mockenccookie = null;
     let _mockenccookieroles = null;
     before(async () => {
@@ -148,7 +148,7 @@ describe("HTTPFunction", () => {
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             _config.setAuthorizationOptimistic(true);
             _config.setSessionManager(new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter()));
-            let _function = new MockHTTPFunction(_config);
+            let _function = new MockJSONHTTPFunction(_config);
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
@@ -159,7 +159,7 @@ describe("HTTPFunction", () => {
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
             await _function.execute(_azctx);
             assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
-            assert.strictEqual(_azctx.res.body, "<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body>200, Success</body></html>", "Expected default HTML.");
+            assert.deepStrictEqual(_azctx.res.body, {code: 200, message: "Success! Welcome to celastrinajs.", name: "HTTPFunctionTest"}, "Expected default JSON.");
         });
         it("should responed read existing session", async () => {
             let _azctx  = new MockAzureFunctionContext();
@@ -169,7 +169,7 @@ describe("HTTPFunction", () => {
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             _config.setAuthorizationOptimistic(true);
             _config.setSessionManager(new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter()));
-            let _function = new MockHTTPFunction(_config);
+            let _function = new MockJSONHTTPFunction(_config);
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
@@ -180,7 +180,7 @@ describe("HTTPFunction", () => {
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
             await _function.execute(_azctx);
             assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
-            assert.strictEqual(_azctx.res.body, "<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><p>mockA=valueA<br />mockB=valueB</p></body></html>", "Expected default HTML.");
+            assert.deepStrictEqual(_azctx.res.body, {mockA: "valueA", mockB: "valueB"}, "Expected default JSON.");
         });
         it("should fail with 403", async () => {
             let _azctx  = new MockAzureFunctionContext();
@@ -189,7 +189,7 @@ describe("HTTPFunction", () => {
             _pm.mockProperty("celastrinajs_mock_action", "session_test");
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             _config.setSessionManager(new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter()));
-            let _function = new MockHTTPFunction(_config);
+            let _function = new MockJSONHTTPFunction(_config);
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
@@ -200,7 +200,7 @@ describe("HTTPFunction", () => {
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
             await _function.execute(_azctx);
             assert.strictEqual(_azctx.res.status, 403, "Expected 403.");
-            assert.strictEqual(_azctx.res.body, "<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><header>403 - Forbidden</header><main><p><h2>Forbidden.</h2></main><footer>celastrinajs</footer></body></html>", "Expected 403 HTML.");
+            assert.deepStrictEqual(_azctx.res.body, {name:"CelastrinaError", message: "Forbidden.", tag: null, cause: null, code: 403, drop: false}, "Expected 403 JSON.");
         });
         it("should fail with 501, CUSTOM not supported", async () => {
             let _azctx  = new MockAzureFunctionContext();
@@ -211,7 +211,7 @@ describe("HTTPFunction", () => {
             _config.permissions.addPermission(new Permission("get", null, new MatchAlways()))
                                .addPermission(new Permission("custom", null, new MatchAlways()));
             _config.setSessionManager(new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter()));
-            let _function = new MockHTTPFunction(_config);
+            let _function = new MockJSONHTTPFunction(_config);
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
@@ -222,7 +222,7 @@ describe("HTTPFunction", () => {
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
             await _function.execute(_azctx);
             assert.strictEqual(_azctx.res.status, 501, "Expected 501.");
-            assert.strictEqual(_azctx.res.body, "<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><header>501 - Internal Server Error</header><main><p><h2>HTTP Method 'custom' not supported.</h2></main><footer>celastrinajs</footer></body></html>", "Expected 501 HTML.");
+            assert.deepStrictEqual(_azctx.res.body, {name:"CelastrinaError", message: "HTTP Method 'custom' not supported.", tag: null, cause: null, code: 501, drop: false}, "Expected 501 JSON.");
         });
         it("should succeed with GET permission", async () => {
             let _azctx  = new MockAzureFunctionContext();
@@ -232,7 +232,7 @@ describe("HTTPFunction", () => {
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             _config.permissions.addPermission(new Permission("get", null, new MatchAlways()));
             _config.setSessionManager(new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter()));
-            let _function = new MockHTTPFunction(_config);
+            let _function = new MockJSONHTTPFunction(_config);
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
@@ -243,7 +243,7 @@ describe("HTTPFunction", () => {
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
             await _function.execute(_azctx);
             assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
-            assert.strictEqual(_azctx.res.body, "<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><p>mockA=valueA<br />mockB=valueB</p></body></html>", "Expected default HTML.");
+            assert.deepStrictEqual(_azctx.res.body, {mockA: "valueA", mockB: "valueB"}, "Expected default HTML.");
         });
         it("should fail POST with GET permission", async () => {
             let _azctx  = new MockAzureFunctionContext();
@@ -253,7 +253,7 @@ describe("HTTPFunction", () => {
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             _config.permissions.addPermission(new Permission("get", null, new MatchAlways()));
             _config.setSessionManager(new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter()));
-            let _function = new MockHTTPFunction(_config);
+            let _function = new MockJSONHTTPFunction(_config);
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
@@ -264,7 +264,7 @@ describe("HTTPFunction", () => {
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
             await _function.execute(_azctx);
             assert.strictEqual(_azctx.res.status, 403, "Expected 401.");
-            assert.strictEqual(_azctx.res.body, "<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><header>403 - Forbidden</header><main><p><h2>Forbidden.</h2></main><footer>celastrinajs</footer></body></html>", "Expected 403 HTML.");
+            assert.deepStrictEqual(_azctx.res.body, {name:"CelastrinaError", message: "Forbidden.", tag: null, cause: null, code: 403, drop: false}, "Expected 403 HTML.");
         });
         it("should set cookie with new session", async () => {
             let _azctx  = new MockAzureFunctionContext();
@@ -274,7 +274,7 @@ describe("HTTPFunction", () => {
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             _config.setSessionManager(new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter()));
             _config.setAuthorizationOptimistic(true);
-            let _function = new MockHTTPFunction(_config);
+            let _function = new MockJSONHTTPFunction(_config);
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
@@ -285,7 +285,7 @@ describe("HTTPFunction", () => {
             await _function.execute(_azctx);
             assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
             assert.deepStrictEqual(_azctx.res.cookies.length, 1, "Expected session cookie");
-            assert.strictEqual(_azctx.res.body, "<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><p>mockA=valueA<br />mockB=valueB</p></body></html>", "Expected default HTML.");
+            assert.deepStrictEqual(_azctx.res.body, {mockA: "valueA", mockB: "valueB"}, "Expected default HTML.");
         });
     });
     describe("#execute(azcontext) with JWT header", () => {
@@ -309,14 +309,14 @@ describe("HTTPFunction", () => {
             _azctx.req.method = "get";
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
             _config.addIssuer(await _mockopenid.createOpenIDIssuer([_response.aud]));
-            let _function = new MockHTTPFunction(_config);
+            let _function = new MockJSONHTTPFunction(_config);
 
             await _mockopenid.start();
             await _function.execute(_azctx);
             await _mockopenid.stop();
 
             assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
-            assert.strictEqual(_azctx.res.body, "<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><p>subject=" + _response.sub + "<br />mockA=valueA<br />mockB=valueB</p></body></html>", "Expected default HTML.");
+            assert.deepStrictEqual(_azctx.res.body, {mockA: "valueA", mockB: "valueB", subject: _response.sub}, "Expected default HTML.");
         });
         it("should fail jwt, decode issues", async () => {
             let _azctx      = new MockAzureFunctionContext();
@@ -338,14 +338,14 @@ describe("HTTPFunction", () => {
             _azctx.req.method = "get";
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
             _config.addIssuer(await _mockopenid.createOpenIDIssuer([_response.aud]));
-            let _function = new MockHTTPFunction(_config);
+            let _function = new MockJSONHTTPFunction(_config);
 
             await _mockopenid.start();
             await _function.execute(_azctx);
             await _mockopenid.stop();
 
             assert.strictEqual(_azctx.res.status, 401, "Expected 401.");
-            assert.strictEqual(_azctx.res.body, "<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><header>401 - Not Authorized</header><main><p><h2>Not Authorized.</h2></main><footer>celastrinajs</footer></body></html>", "Expected default HTML.");
+            assert.deepStrictEqual(_azctx.res.body, {name:"CelastrinaError", message: "Not Authorized.", tag: null, cause: null, code: 401, drop: false}, "Expected default HTML.");
         });
         it("should fail jwt, issuer", async () => {
             let _azctx      = new MockAzureFunctionContext();
@@ -367,14 +367,14 @@ describe("HTTPFunction", () => {
             _azctx.req.method = "get";
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
             _config.addIssuer(await _mockopenid.createOpenIDIssuer([_response.aud], true));
-            let _function = new MockHTTPFunction(_config);
+            let _function = new MockJSONHTTPFunction(_config);
 
             await _mockopenid.start();
             await _function.execute(_azctx);
             await _mockopenid.stop();
 
             assert.strictEqual(_azctx.res.status, 401, "Expected 401.");
-            assert.strictEqual(_azctx.res.body, "<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><header>401 - Not Authorized</header><main><p><h2>Not Authorized.</h2></main><footer>celastrinajs</footer></body></html>", "Expected default HTML.");
+            assert.deepStrictEqual(_azctx.res.body, {name:"CelastrinaError", message: "Not Authorized.", tag: null, cause: null, code: 401, drop: false}, "Expected default HTML.");
         });
     });
     describe("#execute(azcontext) with JWT header and session roles", () => {
@@ -399,14 +399,14 @@ describe("HTTPFunction", () => {
             _azctx.req.method = "get";
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
             _config.addIssuer(await _mockopenid.createOpenIDIssuer([_response.aud]));
-            let _function = new MockHTTPFunction(_config);
+            let _function = new MockJSONHTTPFunction(_config);
 
             await _mockopenid.start();
             await _function.execute(_azctx);
             await _mockopenid.stop();
 
             assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
-            assert.strictEqual(_azctx.res.body, "<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><p>subject=" + _response.sub + "<br />mockA=valueA<br />mockB=valueB</p></body></html>", "Expected default HTML.");
+            assert.deepStrictEqual(_azctx.res.body, {mockA: "valueA", mockB: "valueB", subject: _response.sub}, "Expected default HTML.");
         });
         it("should fail not authorized", async () => {
             let _azctx      = new MockAzureFunctionContext();
@@ -429,14 +429,14 @@ describe("HTTPFunction", () => {
             _azctx.req.method = "get";
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
             _config.addIssuer(await _mockopenid.createOpenIDIssuer([_response.aud]));
-            let _function = new MockHTTPFunction(_config);
+            let _function = new MockJSONHTTPFunction(_config);
 
             await _mockopenid.start();
             await _function.execute(_azctx);
             await _mockopenid.stop();
 
             assert.strictEqual(_azctx.res.status, 403, "Expected 403.");
-            assert.strictEqual(_azctx.res.body, "<html lang=\"en\"><head><title>HTTPFunctionTest</title></head><body><header>403 - Forbidden</header><main><p><h2>Forbidden.</h2></main><footer>celastrinajs</footer></body></html>", "Expected default HTML.");
+            assert.deepStrictEqual(_azctx.res.body, {name:"CelastrinaError", message: "Forbidden.", tag: null, cause: null, code: 403, drop: false}, "Expected default HTML.");
         });
     });
 });

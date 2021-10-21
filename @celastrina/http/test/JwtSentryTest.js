@@ -20,6 +20,7 @@ describe("JwtSentry", () => {
             _config.addIssuer(new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken_prop", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]));
             let _mctx = new MockHTTPContext(_azctx, _config);
             let _jwts = new JwtSentry();
+            await _jwts.initialize(_config);
             /**@type{JwtSubject}*/let result = await _jwts.authenticate(_mctx);
             assert.strictEqual(result.issuer, "@celastrinajs/issuer/mock", "Expected '@celastrinajs/issuer/mock'.");
             assert.strictEqual(result.audience, "aefff932-5d4e-4216-a117-0d42e47b06b7", "Expected 'aefff932-5d4e-4216-a117-0d42e47b06b7'.");
@@ -37,6 +38,7 @@ describe("JwtSentry", () => {
             _config.addIssuer(new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken_prop", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]));
             let _mctx = new MockHTTPContext(_azctx, _config);
             let _jwts = new JwtSentry();
+            await _jwts.initialize(_config);
             try {
                 /**@type{JwtSubject}*/let result = await _jwts.authenticate(_mctx);
                 assert.fail("Expected 401, not authorized CelastrinaException.");
@@ -57,6 +59,7 @@ describe("JwtSentry", () => {
             _config.addIssuer(new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken_prop", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]));
             let _mctx = new MockHTTPContext(_azctx, _config);
             let _jwts = new JwtSentry();
+            await _jwts.initialize(_config);
             try {
                 /**@type{JwtSubject}*/let result = await _jwts.authenticate(_mctx);
                 assert.fail("Expected 401, not authorized CelastrinaException.");
@@ -77,6 +80,7 @@ describe("JwtSentry", () => {
             _config.addIssuer(new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken_prop", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]));
             let _mctx = new MockHTTPContext(_azctx, _config);
             let _jwts = new JwtSentry();
+            await _jwts.initialize(_config);
             try {
                 /**@type{JwtSubject}*/let result = await _jwts.authenticate(_mctx);
                 assert.fail("Expected 401, not authorized CelastrinaException.");
@@ -94,6 +98,7 @@ describe("JwtSentry", () => {
             _config.addIssuer(new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken_prop", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]));
             let _mctx = new MockHTTPContext(_azctx, _config);
             let _jwts = new JwtSentry();
+            await _jwts.initialize(_config);
             try {
                 /**@type{JwtSubject}*/let result = await _jwts.authenticate(_mctx);
                 assert.fail("Expected 401, not authorized CelastrinaException.");

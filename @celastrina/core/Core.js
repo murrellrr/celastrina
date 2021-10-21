@@ -2332,32 +2332,38 @@ class ConfigurationLoader extends Configuration {
         }
     }
     /**
-     * @param {Object} azcontext
-     * @param {Object} pm
+     * @param {_AzureFunctionContext} azcontext
+     * @param {PropertyManager} pm
+     * @return {Promise<void>}
+     */
+    async _load(azcontext, pm) {
+        this._ctp.initialize(azcontext, this._config);
+        this._cfp.initialize(azcontext, this._config);
+        let _pm = this._config[Configuration.CONFIG_PROPERTY];
+        /**@type{(null|undefined|Object)}*/let _funcconfig = await _pm.getObject(this._property);
+        if (_funcconfig == null)
+            throw CelastrinaValidationError.newValidationError(
+                "[ConfigurationLoader.load(pm, azcontext, config)][_funcconfig]: Invalid object. Attribute _funcconfig cannot be 'undefined' or null.",
+                this._property);
+        if (!_funcconfig.hasOwnProperty("configurations") || !Array.isArray(_funcconfig.configurations))
+            throw CelastrinaValidationError.newValidationError(
+                "[ConfigurationLoader.load(pm, azcontext, config)][configurations]: Invalid object. Attribute is required and must be an array.",
+                "configurations");
+        /**@type{Array.<Object>}*/let _configurations = _funcconfig.configurations;
+        await ConfigurationLoader._parseProperties(this._ctp, _configurations);
+        let _promises = [];
+        for (let _configuration of _configurations) {
+            _promises.unshift(this._cfp.parse(_configuration));
+        }
+        await Promise.all(_promises);
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param {PropertyManager} pm
      * @return {Promise<void>}
      */
     async _initLoadConfiguration(azcontext, pm) {
-        if(this._property != null) {
-            this._ctp.initialize(azcontext, this._config);
-            this._cfp.initialize(azcontext, this._config);
-            let _pm = this._config[Configuration.CONFIG_PROPERTY];
-            /**@type{(null|undefined|Object)}*/let _funcconfig = await _pm.getObject(this._property);
-            if (_funcconfig == null)
-                throw CelastrinaValidationError.newValidationError(
-                    "[ConfigurationLoader.load(pm, azcontext, config)][_funcconfig]: Invalid object. Attribute _funcconfig cannot be 'undefined' or null.",
-                    this._property);
-            if (!_funcconfig.hasOwnProperty("configurations") || !Array.isArray(_funcconfig.configurations))
-                throw CelastrinaValidationError.newValidationError(
-                    "[ConfigurationLoader.load(pm, azcontext, config)][configurations]: Invalid object. Attribute is required and must be an array.",
-                    "configurations");
-            /**@type{Array.<Object>}*/let _configurations = _funcconfig.configurations;
-            await ConfigurationLoader._parseProperties(this._ctp, _configurations);
-            let _promises = [];
-            for (let _configuration of _configurations) {
-                _promises.unshift(this._cfp.parse(_configuration));
-            }
-            await Promise.all(_promises);
-        }
+        if(this._property != null) await this._load(azcontext, pm);
     }
 }
 module.exports = {

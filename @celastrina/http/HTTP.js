@@ -34,7 +34,7 @@ const jwt = require("jsonwebtoken");
 const jwkToPem = require("jwk-to-pem");
 const cookie = require("cookie");
 const {Decipher, Cipher} = require("crypto");
-const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL, Configuration,
+const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL, ConfigurationLoader,
        PermissionManager, BaseSubject, BaseSentry, Algorithm, AES256Algorithm, Cryptography, RoleFactory, BaseContext,
        BaseFunction, ValueMatch, MatchAny, MatchAll, MatchNone} = require("@celastrina/core");
 /**
@@ -875,11 +875,14 @@ class SessionRoleFactory extends RoleFactory {
  * HTTPConfiguration
  * @author Robert R Murrell
  */
-class HTTPConfiguration extends Configuration {
+class HTTPConfiguration extends ConfigurationLoader {
     static CONFIG_HTTP_SESSION_MANAGER = "celastrinajs.http.session";
-    /**@param{string} name*/
-    constructor(name) {
-        super(name);
+    /**
+     * @param{string} name
+     * @param{string} property
+     */
+    constructor(name, property) {
+        super(name, property);
         this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER] = null;
     }
     /**@return{SessionManager}*/get sessionManager() {return this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER];}
@@ -916,9 +919,12 @@ class JwtConfiguration extends HTTPConfiguration {
     static CONFIG_JWT_TOKEN_NAME = "celastrinajs.http.jwt.authorization.token.name";
     static CONFIG_JWT_TOKEN_SCHEME = "celastrinajs.http.jwt.authorization.token.scheme";
     static CONFIG_JWT_TOKEN_SCHEME_REMOVE = "celastrinajs.http.jwt.authorization.token.scheme.remove";
-    /**@param{string} name*/
-    constructor(name) {
-        super(name);
+    /**
+     * @param{string} name
+     * @param{string} property
+     */
+    constructor(name, property) {
+        super(name, property);
         let _anonname = "@celastrinajs/http/anonymous/" + name;
         this._config[JwtConfiguration.CONFIG_JWT_ISSUERS] = [];
         this._config[JwtConfiguration.CONFIG_JWT_TOKEN_PARAMETER] = new HeaderParameter();

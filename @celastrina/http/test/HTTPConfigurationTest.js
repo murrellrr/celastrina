@@ -8,7 +8,7 @@ const assert = require("assert");
 describe("HTTPConfiguration", () => {
     describe("#constructor(name)", () => {
         it("Sets defaults", () => {
-            let _cfg = new HTTPConfiguration("HTTPConfigurationTest");
+            let _cfg = new HTTPConfiguration("HTTPConfigurationTest", "property");
             assert.strictEqual(_cfg.sessionManager, null, "Expected null.");
         });
     });

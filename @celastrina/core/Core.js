@@ -2251,22 +2251,27 @@ class CoreConfigParser extends ConfigParser {
 class ConfigurationLoader extends Configuration {
     /**
      * @param {string} name
-     * @param {string} property
+     * @param {(null|string)} property
      */
-    constructor(name, property) {
+    constructor(name, property = null) {
         super(name);
-        if(typeof property !== "string" || property.trim().length === 0)
-            throw CelastrinaValidationError.newValidationError(
-                "[ConfigurationLoader][property]: Invalid string. Argument cannot be null or zero length.",
-                "property");
-        /**@type{string}*/this._property = property.trim();
-        if(this._property.includes(" "))
-            throw CelastrinaValidationError.newValidationError(
-                "[ConfigurationLoader][property]: Invalid string. Argument cannot contain spaces.",
-                "property");
-        /**@type{AttributeParser}*/this._ctp = new PropertyParser(new PermissionParser(
-                                                                  new AppRegistrationResourceParser()));
-        /**@type{ConfigParser}*/this._cfp = new CoreConfigParser();
+        this._property = property;
+        this._ctp = null;
+        this._cfp = null;
+        if(this._property != null) {
+            if(typeof property !== "string" || property.trim().length === 0)
+                throw CelastrinaValidationError.newValidationError(
+                    "[ConfigurationLoader][property]: Invalid string. Argument cannot be null or zero length.",
+                    "property");
+            /**@type{string}*/this._property = property.trim();
+            if(this._property.includes(" "))
+                throw CelastrinaValidationError.newValidationError(
+                    "[ConfigurationLoader][property]: Invalid string. Argument cannot contain spaces.",
+                    "property");
+            /**@type{AttributeParser}*/this._ctp = new PropertyParser(new PermissionParser(
+                new AppRegistrationResourceParser()));
+            /**@type{ConfigParser}*/this._cfp = new CoreConfigParser();
+        }
     }
     /**@return{AttributeParser}*/get contentParser() {return this._ctp;}
     /**@return{ConfigParser}*/get configParser() {return this._cfp;}
@@ -2332,25 +2337,27 @@ class ConfigurationLoader extends Configuration {
      * @return {Promise<void>}
      */
     async _initLoadConfiguration(azcontext, pm) {
-        this._ctp.initialize(azcontext, this._config);
-        this._cfp.initialize(azcontext, this._config);
-        let _pm = this._config[Configuration.CONFIG_PROPERTY];
-        /**@type{(null|undefined|Object)}*/let _funcconfig = await _pm.getObject(this._property);
-        if(_funcconfig == null)
-            throw CelastrinaValidationError.newValidationError(
-                "[ConfigurationLoader.load(pm, azcontext, config)][_funcconfig]: Invalid object. Attribute _funcconfig cannot be 'undefined' or null.",
-                this._property);
-        if(!_funcconfig.hasOwnProperty("configurations") || !Array.isArray(_funcconfig.configurations))
-            throw CelastrinaValidationError.newValidationError(
-                "[ConfigurationLoader.load(pm, azcontext, config)][configurations]: Invalid object. Attribute is required and must be an array.",
-                "configurations");
-        /**@type{Array.<Object>}*/let _configurations = _funcconfig.configurations;
-        await ConfigurationLoader._parseProperties(this._ctp, _configurations);
-        let _promises = [];
-        for(let _configuration of _configurations) {
-            _promises.unshift(this._cfp.parse(_configuration));
+        if(this._property != null) {
+            this._ctp.initialize(azcontext, this._config);
+            this._cfp.initialize(azcontext, this._config);
+            let _pm = this._config[Configuration.CONFIG_PROPERTY];
+            /**@type{(null|undefined|Object)}*/let _funcconfig = await _pm.getObject(this._property);
+            if (_funcconfig == null)
+                throw CelastrinaValidationError.newValidationError(
+                    "[ConfigurationLoader.load(pm, azcontext, config)][_funcconfig]: Invalid object. Attribute _funcconfig cannot be 'undefined' or null.",
+                    this._property);
+            if (!_funcconfig.hasOwnProperty("configurations") || !Array.isArray(_funcconfig.configurations))
+                throw CelastrinaValidationError.newValidationError(
+                    "[ConfigurationLoader.load(pm, azcontext, config)][configurations]: Invalid object. Attribute is required and must be an array.",
+                    "configurations");
+            /**@type{Array.<Object>}*/let _configurations = _funcconfig.configurations;
+            await ConfigurationLoader._parseProperties(this._ctp, _configurations);
+            let _promises = [];
+            for (let _configuration of _configurations) {
+                _promises.unshift(this._cfp.parse(_configuration));
+            }
+            await Promise.all(_promises);
         }
-        await Promise.all(_promises);
     }
 }
 module.exports = {

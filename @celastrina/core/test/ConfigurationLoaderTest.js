@@ -14,9 +14,10 @@ describe("ConfigurationLoader", () => {
             assert.strictEqual(_loader._ctp instanceof AttributeParser, true, "Content Parser is AttributeParser.");
             assert.strictEqual(_loader._cfp instanceof ConfigParser, true, "Config Parser is ContentParser.");
         });
-        it("Should fail with null", () => {
-            let _err = new CelastrinaValidationError("[ConfigurationLoader][property]: Invalid string. Argument cannot be null or zero length.", 400, false, "property");
-            assert.throws(() => {let _loader = new ConfigurationLoader("ConfigurationLoaderTest", null);}, _err);
+        it("Should load with null.", () => {
+            let _loader = new ConfigurationLoader("ConfigurationLoaderTest");
+            assert.strictEqual(_loader.configParser, null, "Expected configParser to be null.");
+            assert.strictEqual(_loader.contentParser, null, "Expected contentParser to be null.");
         });
         it("Should fail with 0 length string", () => {
             let _err = new CelastrinaValidationError("[ConfigurationLoader][property]: Invalid string. Argument cannot be null or zero length.", 400, false, "property");
@@ -57,7 +58,6 @@ describe("ConfigurationLoader", () => {
         });
     });
     describe("#load(pm, config), full config", () => {
-        let _loader = new ConfigurationLoader("ConfigurationLoaderTest", "mock_property");
         let _pm = new MockPropertyManager();
         _pm.mockProperty("mock_process-1-roles", "[\"role-1\", \"role-2\", \"role-3\"]");
         _pm.mockProperty("mock_resources", "[{\"id\": \"mock-resource-1\", \"authority\": \"authority1\", \"tenant\":  \"tenant1\", \"secret\": \"secret1\"},{\"id\": \"mock-resource-2\", \"authority\": \"authority2\", \"tenant\":  \"tenant2\", \"secret\": \"secret2\"}]");
@@ -66,6 +66,7 @@ describe("ConfigurationLoader", () => {
         _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good-all.json", "utf8"));
         let _azcontext = new MockAzureFunctionContext();
         it("Sets permissions", async () => {
+            let _loader = new ConfigurationLoader("ConfigurationLoaderTest", "mock_property");
             _loader.setValue("celastrinajs.core.permission", new PermissionManager());
             _loader.setValue("celastrinajs.core.resource", new ResourceManager());
             _loader.setValue("celastrinajs.core.property.manager", _pm);
@@ -83,6 +84,7 @@ describe("ConfigurationLoader", () => {
             assert.deepStrictEqual(await _permissions.getPermission("mock-process-3"), _pm3, "mock-process-3 correct via getPermission.");
         });
         it("Sets resource authorizations", async () => {
+            let _loader = new ConfigurationLoader("ConfigurationLoaderTest", "mock_property");
             _loader.setValue("celastrinajs.core.permission", new PermissionManager());
             _loader.setValue("celastrinajs.core.resource", new ResourceManager());
             _loader.setValue("celastrinajs.core.property.manager", _pm);
@@ -95,6 +97,16 @@ describe("ConfigurationLoader", () => {
             assert.deepStrictEqual(_resources._resources["mock-resource-2"], _rm2, "mock-resource-2 set.");
             assert.deepStrictEqual(await _resources.getResource("mock-resource-1"), _rm1, "mock-resource-1 via getResource.");
             assert.deepStrictEqual(await _resources.getResource("mock-resource-2"), _rm2, "mock-resource-2 via getResource.");
+        });
+        it("Should do nothing when property is null.", async () => {
+            let _loader = new ConfigurationLoader("ConfigurationLoaderTest");
+            _loader.setValue("celastrinajs.core.permission", new PermissionManager());
+            _loader.setValue("celastrinajs.core.resource", new ResourceManager());
+            _loader.setValue("celastrinajs.core.property.manager", _pm);
+            await assert.doesNotReject(_loader.initialize(_azcontext));
+            assert.notStrictEqual(_loader.getValue(Configuration.CONFIG_PERMISSION), null, "PermissionManager null.");
+            /**@type{PermissionManager}*/let _permissions = _loader.getValue(Configuration.CONFIG_PERMISSION);
+            assert.deepStrictEqual(_permissions._permissions, {}, "mock-process-1 correct.");
         });
     });
 });

@@ -34,9 +34,33 @@ const jwt = require("jsonwebtoken");
 const jwkToPem = require("jwk-to-pem");
 const cookie = require("cookie");
 const {Decipher, Cipher} = require("crypto");
-const {CelastrinaError, CelastrinaValidationError, ConfigurationItem, LOG_LEVEL, ConfigurationLoader,
-       PermissionManager, BaseSubject, BaseSentry, Algorithm, AES256Algorithm, Cryptography, RoleFactory, BaseContext,
-       BaseFunction, ValueMatch, MatchAny, MatchAll, MatchNone} = require("@celastrina/core");
+const {CelastrinaError, CelastrinaValidationError, PropertyManager, ResourceManager, PermissionManager, ConfigurationItem,
+       LOG_LEVEL, ConfigurationLoader, BaseSubject, BaseSentry, Algorithm, AES256Algorithm, Cryptography, BaseRoleFactory,
+       RoleFactoryParser, BaseContext, BaseFunction, ValueMatch, MatchAny, MatchAll, MatchNone,
+       AttributeParser} = require("@celastrina/core");
+/**
+ * @typedef __AzureRequestBinging
+ * @property {string} originalUrl
+ * @property {string} method
+ * @property {Object} query
+ * @property {Object} headers
+ * @property {Object} params
+ * @property {Object} body
+ * @property {string} rawBody
+ */
+/**
+ * @typedef __AzureResponseBinging
+ * @property {Object} headers
+ * @property {number} status
+ * @property {Object} body
+ * @property {string} rawBody
+ * @property {Array.<Object>} cookies
+ */
+/**
+ * @typedef __AzureFunctionContext
+ * @property {__AzureRequestBinging} req
+ * @property {__AzureResponseBinging} res
+ */
 /**
  * @typedef _jwtpayload
  * @property {string} aud
@@ -630,7 +654,7 @@ class QueryParameter extends HTTPParameter {
  * @author Robert R Murrell
  */
 class BodyParameter extends HTTPParameter {
-    constructor(key){super("body");}
+    constructor(type = "body"){super(type);}
     /**
      * @param {HTTPContext} context
      * @param {string} key
@@ -852,7 +876,7 @@ class AESSessionManager extends SecureSessionManager {
  * SessionRoleFactory
  * @author Robert R Murrell
  */
-class SessionRoleFactory extends RoleFactory {
+class SessionRoleFactory extends BaseRoleFactory {
     /**
      * @param {string} [key="roles"]
      */
@@ -872,16 +896,106 @@ class SessionRoleFactory extends RoleFactory {
     }
 }
 /**
+ * SessionRoleFactoryParser
+ * @author Robert R Murrell
+ */
+class SessionRoleFactoryParser extends RoleFactoryParser {
+    /**
+     * @param {AttributeParser} link
+     * @param {string} version
+     */
+    constructor(link = null, version = "1.0.0") {
+        super("SessionRoleFactory", link, version);
+    }
+    /**
+     * @param {Object} _SessionRoleFactory
+     * @return {Promise<BaseRoleFactory>}
+     */
+    async _create(_SessionRoleFactory) {
+        let _key = "roles";
+        if(_SessionRoleFactory.hasOwnProperty("key") && (typeof _SessionRoleFactory.key === "string"))
+            _key = _SessionRoleFactory.key;
+        return new SessionRoleFactory(_key);
+    }
+}
+/**
+ * AESSessionManagerParser
+ * @author Robert R Murrell
+ */
+class AESSessionManagerParser extends AttributeParser {
+    /**
+     * @param {AttributeParser} [link=null]
+     * @param {string} [version="1.0.0"]
+     */
+    constructor(link = null, version = "1.0.0") {
+        super("AESSessionManager", link, version);
+    }
+    /**
+     * @param {string} name
+     * @return {Promise<HTTPParameter>}
+     * @private
+     */
+    async _createParameter(name) {
+        switch(name) {
+            case "header":
+                return new HeaderParameter();
+            case "cookie":
+                return new CookieParameter();
+            case "query":
+                return new QueryParameter();
+            case "body":
+                return new BodyParameter();
+            default:
+                throw CelastrinaValidationError.newValidationError(
+                    "[AESSessionManagerParser._createParameter(name)][AESSessionManager.parameter]: '" + name + "' is not supported.",
+                    "AESSessionManager.parameter");
+        }
+    }
+    /**
+     * @param {Object} _AESSessionManager
+     * @return {Promise<AESSessionManager>}
+     */
+    async _create(_AESSessionManager) {
+        let _paramtype = "cookie";
+        if(_AESSessionManager.hasOwnProperty("paramter") && (typeof _AESSessionManager.parameter === "string"))
+            _paramtype = _AESSessionManager.parameter;
+        let _paramname = "celastrinajs_session";
+        if(_AESSessionManager.hasOwnProperty("name") && (typeof _AESSessionManager.name === "string"))
+            _paramname = _AESSessionManager.name;
+        let _createnew = true;
+        if(_AESSessionManager.hasOwnProperty("createNew") && (typeof _AESSessionManager.createNew === "boolean"))
+            _createnew = _AESSessionManager.createNew;
+        let _options = null;
+        if(_AESSessionManager.hasOwnProperty("options") && (typeof _AESSessionManager.options === "object") &&
+                _AESSessionManager.options != null)
+            _options = _AESSessionManager.options;
+        else {
+            throw CelastrinaValidationError.newValidationError(
+                "[AESSessionManagerParser._create(_AESSessionManager)][AESSessionManager.options]: Argument 'optiosn' cannot be null or undefined.",
+                "AESSessionManager.options");
+        }
+        if(!(_options.hasOwnProperty("iv")) || !(typeof _options.iv !== "string") || _options.iv.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError(
+                "[AESSessionManagerParser._create(_AESSessionManager)][AESSessionManager.options.iv]: Aregument 'iv' cannot be null or empty.",
+                "AESSessionManager.options.iv");
+        if(!(_options.hasOwnProperty("key")) || !(typeof _options.key !== "string") || _options.key.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError(
+                "[AESSessionManagerParser._create(_AESSessionManager)][AESSessionManager.options.key]: Argument 'key' cannot be null or empty.",
+                "AESSessionManager.options.key");
+        return new AESSessionManager(_options, await this._createParameter(_paramtype), _paramname, _createnew);
+    }
+}
+/**
  * HTTPConfiguration
  * @author Robert R Murrell
  */
 class HTTPConfiguration extends ConfigurationLoader {
     static CONFIG_HTTP_SESSION_MANAGER = "celastrinajs.http.session";
     /**
-     * @param{string} name
-     * @param{string} property
+     * @param {string} name
+     * @param {(null|string)} [property = null]
      */
-    constructor(name, property) {
+    constructor(name, property = null) {
         super(name, property);
         this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER] = null;
     }
@@ -921,9 +1035,9 @@ class JwtConfiguration extends HTTPConfiguration {
     static CONFIG_JWT_TOKEN_SCHEME_REMOVE = "celastrinajs.http.jwt.authorization.token.scheme.remove";
     /**
      * @param{string} name
-     * @param{string} property
+     * @param {(null|string)} [property = null]
      */
-    constructor(name, property) {
+    constructor(name, property = null) {
         super(name, property);
         let _anonname = "@celastrinajs/http/anonymous/" + name;
         this._config[JwtConfiguration.CONFIG_JWT_ISSUERS] = [];
@@ -979,11 +1093,11 @@ class JwtConfiguration extends HTTPConfiguration {
  */
 class HTTPContext extends BaseContext {
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {__AzureFunctionContext} azcontext
      * @param {Configuration} config
      */
-    constructor(context, config) {
-        super(context, config);
+    constructor(azcontext, config) {
+        super(azcontext, config);
         this._azfunccontext.res.status = 200;
         this._azfunccontext.res.headers["Content-Type"] = "text/html; charset=ISO-8859-1";
         this._azfunccontext.res.body = "<html lang=\"en\"><head><title>" + config.name + "</title></head><body>200, Success</body></html>";
@@ -1212,7 +1326,7 @@ class HTTPContext extends BaseContext {
  */
 class JSONHTTPContext extends HTTPContext {
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {__AzureFunctionContext} context
      * @param {Configuration} config
      */
     constructor(context, config) {
@@ -1396,7 +1510,7 @@ class HTTPFunction extends BaseFunction {
     /**@param{Configuration}configuration*/
     constructor(configuration) {super(configuration);}
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {__AzureFunctionContext} context
      * @param {Configuration} config
      * @return {Promise<BaseContext & HTTPContext>}
      */
@@ -1404,7 +1518,7 @@ class HTTPFunction extends BaseFunction {
         return new HTTPContext(context, config);
     }
     /**
-     * @param {_AzureFunctionContext} azcontext
+     * @param {__AzureFunctionContext} azcontext
      * @param {Configuration} config
      * @return {Promise<JwtSentry|BaseSentry>}
      */
@@ -1514,7 +1628,7 @@ class JSONHTTPFunction extends HTTPFunction {
     /**@param{Configuration}configuration*/
     constructor(configuration) {super(configuration);}
     /**
-     * @param {_AzureFunctionContext} context
+     * @param {__AzureFunctionContext} context
      * @param {Configuration} config
      * @return {Promise<HTTPContext>}
      */
@@ -1557,6 +1671,7 @@ module.exports = {
     SessionManager: SessionManager,
     SecureSessionManager: SecureSessionManager,
     AESSessionManager: AESSessionManager,
+    AESSessionManagerParser: AESSessionManagerParser,
     SessionRoleFactory: SessionRoleFactory,
     HTTPConfiguration: HTTPConfiguration,
     JwtConfiguration: JwtConfiguration,

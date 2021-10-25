@@ -27,7 +27,7 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/core": "^4.0.11",
+    "@celastrina/core": "^4.1.12",
     "adal-node": "^0.2.2",
     "axios": "^0.21.1",
     "cookie": "^0.4.1",

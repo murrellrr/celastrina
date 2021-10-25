@@ -1891,7 +1891,7 @@ class ParserChain {
      * @param {ParserChain} [link=null]
      * @param {string} [version="1.0.0"]
      */
-    constructor(mime = "application/celastrinajs+json", type = "Object", link = null,
+    constructor(mime = "celastrinajs", type = "Object", link = null,
                 version = "1.0.0") {
         /**@type{string}*/this._mime = mime;
         /**@type{string}*/this._type = type;
@@ -2035,7 +2035,7 @@ class ParserChain {
  * @author Robert R Murrell
  */
 class AttributeParser extends ParserChain {
-    static _CONFIG_PARSER_ATTRIBUTE_TYPE = "application/celastrinajs.attribute+json";
+    static _CONFIG_PARSER_ATTRIBUTE_TYPE = "attribute";
     /**
      * @param {string} [type="Object"]
      * @param {AttributeParser} [link=null]
@@ -2185,14 +2185,34 @@ class AppRegistrationResourceParser extends AttributeParser {
                                            _AppRegistrationResource.tenant, _AppRegistrationResource.secret);
     }
 }
-
+/**
+ * RoleFactoryParser
+ * @author Robert R Murrell
+ */
+class RoleFactoryParser extends AttributeParser {
+    /**
+     * @param {string} [type="RoleFactory"]
+     * @param {AttributeParser} link
+     * @param {string} version
+     */
+    constructor(type = "RoleFactory", link = null, version = "1.0.0") {
+        super(type, link, version);
+    }
+    /**
+     * @param {Object} _RoleFactory
+     * @return {Promise<BaseRoleFactory>}
+     */
+    async _create(_RoleFactory) {
+        return new BaseRoleFactory();
+    }
+}
 /**
  * ConfigParser
  * @author Robert R Murrell
  * @abstract
  */
 class ConfigParser extends ParserChain {
-    static _CONFIG_PARSER_TYPE = "application/celastrinajs.config+json";
+    static _CONFIG_PARSER_TYPE = "config";
     /**
      * @param {string} [type="Config"]
      * @param {ConfigParser} [link=null]
@@ -2219,16 +2239,28 @@ class CoreConfigParser extends ConfigParser {
      * @return {Promise<void>}
      * @private
      */
-    async _create(_Object) {
-        if(_Object.hasOwnProperty("resources") && Array.isArray(_Object.resources)) {
-            /**@type{ResourceManager}*/let _rm = this._config[Configuration.CONFIG_RESOURCE];
-            /**@type{Array.<ResourceAuthorization>}*/let _Resources = _Object.resources;
-            for(/**@type{ResourceAuthorization}*/let _resource of _Resources) {
-                _rm.addResource(_resource);
+    async _createResources(_Object) {
+        if(_Object.hasOwnProperty("resources") && (typeof _Object.resources === "object") &&
+            _Object.resources != null) {
+            let _resobj = _Object.resources;
+            if(_resobj.hasOwnProperty("authorizations") && Array.isArray(_resobj.authorizations) &&
+                _resobj.authorizations != null) {
+                /**@type{ResourceManager}*/let _rm = this._config[Configuration.CONFIG_RESOURCE];
+                /**@type{Array.<ResourceAuthorization>}*/let _Authorizations = _resobj.authorizations;
+                for (/**@type{ResourceAuthorization}*/let _ra of _Authorizations) {
+                    _rm.addResource(_ra);
+                }
             }
         }
+    }
+    /**
+     * @param _Object
+     * @return {Promise<void>}
+     * @private
+     */
+    async _createAuthentication(_Object) {
         if(_Object.hasOwnProperty("authentication") && (typeof _Object.authentication === "object") &&
-                _Object.authentication != null) {
+            _Object.authentication != null) {
             let _Authentication = _Object.authentication;
             let _optimistic = false;
             if(_Authentication.hasOwnProperty("optimistic") && (typeof _Authentication.optimistic === "boolean"))
@@ -2242,6 +2274,29 @@ class CoreConfigParser extends ConfigParser {
                 }
             }
         }
+    }
+    /**
+     * @param _Object
+     * @return {Promise<void>}
+     * @private
+     */
+    async _createRoleFactory(_Object) {
+        if(_Object.hasOwnProperty("roleFactory") && (typeof _Object.roleFactory === "object") &&
+                _Object.roleFactory != null) {
+            this._config[Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY] = _Object.roleFactory;
+        }
+    }
+    /**
+     * @param _Object
+     * @return {Promise<void>}
+     * @private
+     */
+    async _create(_Object) {
+        let _promises = [];
+        _promises.unshift(this._createResources(_Object));
+        _promises.unshift(this._createAuthentication(_Object));
+        _promises.unshift(this._createRoleFactory(_Object));
+        await Promise.all(_promises);
     }
 }
 /**
@@ -2269,7 +2324,7 @@ class ConfigurationLoader extends Configuration {
                     "[ConfigurationLoader][property]: Invalid string. Argument cannot contain spaces.",
                     "property");
             /**@type{AttributeParser}*/this._ctp = new PropertyParser(new PermissionParser(
-                new AppRegistrationResourceParser()));
+                new AppRegistrationResourceParser(new RoleFactoryParser())));
             /**@type{ConfigParser}*/this._cfp = new CoreConfigParser();
         }
     }
@@ -2363,7 +2418,7 @@ class ConfigurationLoader extends Configuration {
      * @return {Promise<void>}
      */
     async _initLoadConfiguration(azcontext, pm) {
-        if(this._property != null) await this._load(azcontext, pm);
+        if(this._property != null) return this._load(azcontext, pm);
     }
 }
 module.exports = {
@@ -2384,6 +2439,7 @@ module.exports = {
     PropertyManagerFactory: PropertyManagerFactory,
     AppConfigPropertyManagerFactory: AppConfigPropertyManagerFactory,
     AttributeParser: AttributeParser,
+    RoleFactoryParser: RoleFactoryParser,
     ConfigParser: ConfigParser,
     ConfigurationLoader: ConfigurationLoader,
     Configuration: Configuration,

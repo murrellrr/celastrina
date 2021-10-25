@@ -2,29 +2,48 @@
   "configurations": [
     {
       "_content": {
-        "type": "application/celastrinajs.config+json;HTTP"
+        "type": "config;Core"
       },
-      "resources": {"_content": {
-                      "type": "application/celastrinajs.attribute+json;Property+[AppRegistrationResource]"},
-                    "key": "mock_resources", "type": "object"},
+      "resources": {"_content": {"type": "attribute;Property+[AppRegistrationResource]"},
+        "key": "mock_resources", "type": "object"},
       "authentication": {
         "optimistic": true,
         "permissions": [
           {"_content": {
-              "type": "application/celastrinajs.attribute+json;Permission",
-              "version": "1.0.0"},
-            "action": "mock-process-1", "roles": {"_content": {"type": "application/celastrinajs.attribute+json;Property", "version": "1.0.0"}, "key": "mock_process-1-roles", "type": "object"}, "match": {"type": "MatchAny"}},
+            "type": "attribute;Permission",
+            "version": "1.0.0"},
+            "action": "mock-process-1", "roles": {"_content": {"type": "attribute;Property", "version": "1.0.0"},
+                                                  "key": "mock_process-1-roles", "type": "object"}, "match": {"type": "MatchAny"}},
           {"_content": {
-              "type": "application/celastrinajs.attribute+json;Permission"},
+            "type": "attribute;Permission"},
             "action": "mock-process-2", "roles": ["role-4", "role-5", "role-6"], "match": {"type": "MatchAll"}},
           {"_content": {
-              "type": "application/celastrinajs.attribute+json;Property+Permission"},
+            "type": "attribute;Property+Permission"},
             "key": "mock_permission", "type": "object"},
-          {"_content": {
-              "type": "application/celastrinajs.attribute+json;Property+[Permission]"},
+          {"_content": {"type": "attribute;Property+[Permission]"},
             "key": "mock_permission_expand", "type": "object", "expand": true}
-        ]
+        ],
+        "roleFactory": {}
       }
+    },
+    {
+      "_content": {
+        "type": "config;HTTP"
+      },
+      "session": {
+        "manager": {"_content": {"type": "attribute;AESSessionManager"},
+                    "parameter": "cookie", "name":  "celastrinajs_session", "options": {"iv": "", "key": ""},"createNew":  true}
+      }
+    },
+    {
+      "_content": {
+        "type": "config;JWT"
+      },
+      "issuers": {"_content": {"type": "attribute;Property+[Issuer]"}},
+      "parameter": {"_content": {"type": "attribute;HTTPParameter"}},
+      "name": "authorization",
+      "scheme": "Bearer",
+      "removeScheme": true
     }
   ]
 }

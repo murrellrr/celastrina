@@ -2,11 +2,12 @@
   "configurations": [
     {
       "_content": {
-        "type": "application/celastrinajs.config+json;Core"
+        "type": "config;Core"
       },
-      "resources": {"_content": {
-                      "type": "application/celastrinajs.attribute+json;Property+[AppRegistrationResource]"},
-                    "key": "mock_resources", "type": "object"}
+      "resources": {
+        "authorizations": {"_content": {"type": "attribute;Property+[AppRegistrationResource]"},
+                           "key": "mock_resources", "type": "object"}
+      }
     }
   ]
 }

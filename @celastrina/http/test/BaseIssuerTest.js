@@ -106,7 +106,7 @@ describe("BaseIssuer", () => {
             let _token = mockJwtToken(_pld, _iat, _exp);
             /**@type{{payload: *, signature: *, header: *}}*/let _jwt = decodeMockJwtToken(_token);
             let _subject = new JwtSubject(_jwt.header, _jwt.payload, _jwt.signature, _token);
-            _issuer.validatesNonce = true;
+            _issuer.validateNonce = true;
             assert.strictEqual(await _issuer.verify(_context, _subject), true, "Expected verified true.");
             assert.strictEqual(await _subject.isInRole("role1"), true, "Expected subject in role1.");
             assert.strictEqual(_issuer.isGetKeyInvoked, true, "Expected getKey to be invoked.");
@@ -117,7 +117,7 @@ describe("BaseIssuer", () => {
             let _token = mockJwtToken(_pld, _iat, _exp);
             /**@type{{payload: *, signature: *, header: *}}*/let _jwt = decodeMockJwtToken(_token);
             let _subject = new JwtSubject(_jwt.header, _jwt.payload, _jwt.signature, _token);
-            _issuer.validatesNonce = true;
+            _issuer.validateNonce = true;
             assert.strictEqual(await _issuer.verify(_context, _subject), true, "Expected verified true.");
             assert.strictEqual(await _subject.isInRole("role1"), true, "Expected subject in role1.");
             assert.strictEqual(_issuer.isGetKeyInvoked, true, "Expected getKey to be invoked.");

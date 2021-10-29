@@ -16,8 +16,7 @@ describe("JwtSentry", () => {
             /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("JwtSentryTest");
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _pm.mockProperty("celastrinajsmocktoken_prop", "celastrinajsmocktoken");
-            _config.addIssuer(new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken_prop", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]));
+            _config.addIssuer(new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]));
             let _mctx = new MockHTTPContext(_azctx, _config);
             let _jwts = new JwtSentry();
             await _jwts.initialize(_config);

@@ -32,7 +32,7 @@
       },
       "session": {
         "manager": {"_content": {"type": "attribute;AESSessionManager"},
-                    "parameter": "cookie", "name":  "celastrinajs_session", "options": {"iv": "", "key": ""},"createNew":  true}
+                    "parameter": "cookie", "name":  "celastrinajs_session", "options": {"iv": "", "key": ""}, "createNew":  true}
       }
     },
     {

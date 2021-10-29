@@ -37,7 +37,7 @@ const {Decipher, Cipher} = require("crypto");
 const {CelastrinaError, CelastrinaValidationError, PropertyManager, ResourceManager, PermissionManager, ConfigurationItem,
        LOG_LEVEL, ConfigurationLoader, BaseSubject, BaseSentry, Algorithm, AES256Algorithm, Cryptography, BaseRoleFactory,
        RoleFactoryParser, BaseContext, BaseFunction, ValueMatch, MatchAny, MatchAll, MatchNone,
-       AttributeParser} = require("@celastrina/core");
+       AttributeParser, ConfigParser} = require("@celastrina/core");
 /**
  * @typedef __AzureRequestBinging
  * @property {string} originalUrl
@@ -312,23 +312,27 @@ class JwtSubject extends BaseSubject {
  */
 class BaseIssuer {
     /**
-     * @param {string} issuer
+     * @param {null|string} issuer
      * @param {(Array.<string>|null)} [audiences=null]
      * @param {(Array.<string>|null)} [assignments=[]] The roles to escalate to the subject if the JWT token is
      *        valid for this issuer.
      * @param {boolean} [validateNonce=false]
      */
-    constructor(issuer, audiences = null, assignments = null,
+    constructor(issuer = null, audiences = null, assignments = null,
                 validateNonce = false) {
         this._issuer = issuer;
         this._audiences = audiences;
         this._roles = assignments;
         this._validateNonce = validateNonce;
     }
-    /**@return{Array.<string>}*/get audience(){return this._audiences;}
+    /**@return{string}*/get issuer(){return this._issuer;}
+    /**@param{string}issuer*/set issuer(issuer){this._issuer = issuer;}
+    /**@return{Array.<string>}*/get audiences(){return this._audiences;}
+    /**@param{Array.<string>}audience*/set audiences(audience){this._audiences = audience;}
     /**@return{Array<string>}*/get assignments(){return this._roles;}
-    /**@return{boolean}*/get validatesNonce() {return this._validateNonce;}
-    /**@param{boolean}validate*/set validatesNonce(validate) {return this._validateNonce = validate;}
+    /**@param{Array<string>}assignments*/set assignments(assignments){this._roles = assignments;}
+    /**@return{boolean}*/get validateNonce() {return this._validateNonce;}
+    /**@param{boolean}validate*/set validateNonce(validate) {return this._validateNonce = validate;}
     /**
      * @param {HTTPContext} context
      * @param {JwtSubject} subject
@@ -391,17 +395,17 @@ class BaseIssuer {
  */
 class LocalJwtIssuer extends BaseIssuer {
     /**
-     * @param {string} issuer
-     * @param {string} keyProperty
+     * @param {(null|string)} issuer
+     * @param {(null|string)} key
      * @param {(Array.<string>|null)} [audiences=null]
-     * @param {(Array.<string>|null)} [assignments=[]] The roles to escalate to the subject if the JWT token is
+     * @param {(Array.<string>|null)} [assignments=[]] The roles to escalate the subject to if the JWT token is
      *        valid for this issuer.
      * @param {boolean} [validateNonce=false]
      */
-    constructor(issuer, keyProperty, audiences = null,
+    constructor(issuer = null, key = null, audiences = null,
                 assignments = null, validateNonce = false) {
         super(issuer, audiences, assignments, validateNonce);
-        this._keyProperty = keyProperty;
+        this._key = key;
     }
     /**
      * @param {HTTPContext} context
@@ -409,8 +413,10 @@ class LocalJwtIssuer extends BaseIssuer {
      * @return {Promise<*>}
      */
     async getKey(context, subject) {
-        return context.properties.getProperty(this._keyProperty);
+        return this._key;
     }
+    /**@return{string}*/get key() {return this._key;}
+    /**@param{string}key*/set key(key) {this._key = key;}
 }
 /**
  * OpenIDJwtValidator
@@ -424,18 +430,20 @@ class LocalJwtIssuer extends BaseIssuer {
  */
 class OpenIDJwtIssuer extends BaseIssuer {
     /**
-     * @param {string} issuer
-     * @param {string} configUrl
+     * @param {null|string} issuer
+     * @param {null|string} configUrl
      * @param {(Array.<string>|null)} [audiences=null]
      * @param {(Array.<string>|null)} [assignments=[]] The roles to escalate to the subject if the JWT token is
      *        valid for this issuer.
      * @param {boolean} [validateNonce=false]
      */
-    constructor(issuer, configUrl, audiences = null,
+    constructor(issuer = null, configUrl = null, audiences = null,
                 assignments = null, validateNonce = false) {
         super(issuer, audiences, assignments, validateNonce);
         this._configUrl = configUrl;
     }
+    get configURL() {return this._configUrl;}
+    set configURL(url) {this._configUrl = url;}
     /**
      * @param {HTTPContext} context
      * @param {JwtSubject} _subject
@@ -519,6 +527,99 @@ class OpenIDJwtIssuer extends BaseIssuer {
         else
             pem = await this._getPemX5C(key, context);
         return pem;
+    }
+}
+/**
+ * BaseIssuerParser
+ * @author Robert R Murrell
+ * @abstract
+ */
+class BaseIssuerParser extends AttributeParser {
+    /**
+     * @param {string} [type="Object"]
+     * @param {AttributeParser} [link=null]
+     * @param {string} [version="1.0.0"]
+     */
+    constructor(type = "BaseIssuer", link = null, version = "1.0.0") {
+        super(type, link, version);
+    }
+    /**
+     * @param {Object} _BaseIssuer
+     * @param {BaseIssuer} _issuer
+     */
+    _loadIssuer(_BaseIssuer, _issuer) {
+        if(!(_BaseIssuer.hasOwnProperty("issuer")) || (typeof _BaseIssuer.issuer !== "string") || _BaseIssuer.issuer.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError(
+                "[BaseIssuerParser._loadIssuer(_BaseIssuer, _issuer)][_BaseIssuer.issuer]: Issuer cannot be null, undefined, or empty.", "_BaseIssuer.issuer");
+        if(!(_BaseIssuer.hasOwnProperty("audiences")) || !(Array.isArray(_BaseIssuer.audiences)) || _BaseIssuer.audiences.length === 0)
+            throw CelastrinaValidationError.newValidationError(
+                "[BaseIssuerParser._loadIssuer(_BaseIssuer, _issuer)][_BaseIssuer.audiences]: Audiences cannot be null.", "_BaseIssuer.audiences");
+        if(!(_BaseIssuer.hasOwnProperty("roles")) || !(Array.isArray(_BaseIssuer.roles)) || _BaseIssuer.roles.length === 0)
+            throw CelastrinaValidationError.newValidationError(
+                "[BaseIssuerParser._loadIssuer(_BaseIssuer, _issuer)][_BaseIssuer.roles]: ", "_BaseIssuer.roles");
+        let _validate = false;
+        if(_BaseIssuer.hasOwnProperty("validateNonce") && (typeof _BaseIssuer.validateNonce === "boolean"))
+            _validate = _BaseIssuer.validateNonce;
+        _issuer.issuer = _BaseIssuer.issuer.trim();
+        _issuer.audiences = _BaseIssuer.audiences;
+        _issuer.assignments = _BaseIssuer.roles;
+        _issuer.validateNonce = _validate;
+    }
+}
+/**
+ * LocalJwtIssuerParser
+ * @author Robert R Murrell
+ */
+class LocalJwtIssuerParser extends BaseIssuerParser {
+    /**
+     * @param {AttributeParser} [link=null]
+     * @param {string} [version="1.0.0"]
+     */
+    constructor(link = null, version = "1.0.0") {
+        super("LocalJwtIssuer", link, version);
+    }
+    /**
+     * @param {Object} _LocalJwtIssuer
+     * @return {Promise<LocalJwtIssuer>}
+     * @private
+     */
+    async _create(_LocalJwtIssuer) {
+        let _issuer = new LocalJwtIssuer();
+        await this._loadIssuer(_LocalJwtIssuer, _issuer);
+        if(!(_LocalJwtIssuer.hasOwnProperty("key")) || (typeof _LocalJwtIssuer.key !== "string") ||  _LocalJwtIssuer.key.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError(
+                "[LocalJwtIssuerParser._create(_LocalJwtIssuer)][_LocalJwtIssuer.key]: ",
+                    "_LocalJwtIssuer.key");
+        _issuer.key = _LocalJwtIssuer.key.trim();
+        return _issuer;
+    }
+}
+/**
+ * LocalJwtIssuerParser
+ * @author Robert R Murrell
+ */
+class OpenIDJwtIssuerParser extends BaseIssuerParser {
+    /**
+     * @param {AttributeParser} [link=null]
+     * @param {string} [version="1.0.0"]
+     */
+    constructor(link = null, version = "1.0.0") {
+        super("OpenIDJwtIssuer", link, version);
+    }
+    /**
+     * @param {Object} _OpenIDJwtIssuer
+     * @return {Promise<OpenIDJwtIssuer>}
+     * @private
+     */
+    async _create(_OpenIDJwtIssuer) {
+        let _issuer = new OpenIDJwtIssuer();
+        await this._loadIssuer(_OpenIDJwtIssuer, _issuer);
+        if(!(_OpenIDJwtIssuer.hasOwnProperty("configURL")) || (typeof _OpenIDJwtIssuer.configURL !== "string") ||  _OpenIDJwtIssuer.configURL.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError(
+                "[OpenIDJwtIssuerParser._create(_OpenIDJwtIssuer)][_OpenIDJwtIssuer.configURL]: configURL cannot be null or empty.",
+                    "_OpenIDJwtIssuer.configURL");
+        _issuer.configURL = _OpenIDJwtIssuer.configURL.trim();
+        return _issuer;
     }
 }
 /**
@@ -986,6 +1087,30 @@ class AESSessionManagerParser extends AttributeParser {
     }
 }
 /**
+ * HTTPConfigurationParser
+ * @author Robert R Murrell
+ */
+class HTTPConfigurationParser extends ConfigParser {
+    /**
+     * @param {ConfigParser} [link=null]
+     * @param {string} [version="1.0.0"]
+     */
+    constructor(link = null, version = "1.0.0") {
+        super("HTTP", link, version);
+    }
+    /**
+     * @param _Object
+     * @return {Promise<void>}
+     * @private
+     */
+    async _create(_Object) {
+        if(_Object.hasOwnProperty("session") && (typeof _Object.session === "object") && _Object.session != null) {
+            if(_Object.hasOwnProperty("manager") && (_Object.manager instanceof SessionManager))
+                this._config["celastrinajs.http.session"] = _Object.manager;
+        }
+    }
+}
+/**
  * HTTPConfiguration
  * @author Robert R Murrell
  */
@@ -998,6 +1123,10 @@ class HTTPConfiguration extends ConfigurationLoader {
     constructor(name, property = null) {
         super(name, property);
         this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER] = null;
+        if(this._property != null) {
+            this._cfp.addLink(new HTTPConfigurationParser());
+            this._ctp.addLink(new AESSessionManagerParser());
+        }
     }
     /**@return{SessionManager}*/get sessionManager() {return this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER];}
     /**
@@ -1007,6 +1136,15 @@ class HTTPConfiguration extends ConfigurationLoader {
     setSessionManager(sm = null) {
         this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER] = sm;
         return this;
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param {PropertyManager} pm
+     * @return {Promise<void>}
+     */
+    async _initLoadConfiguration(azcontext, pm) {
+        await super._initLoadConfiguration(azcontext, pm);
+
     }
     /**
      * @param {Object} azcontext
@@ -1021,6 +1159,36 @@ class HTTPConfiguration extends ConfigurationLoader {
         if(typeof _sm !== "undefined" && _sm != null) {
             await _sm.initialize(azcontext, pm, rm);
         }
+    }
+}
+/**
+ * JwtConfigurationParser
+ * @author Robert R Murrell
+ */
+class JwtConfigurationParser extends ConfigParser {
+    /**
+     * @param {ConfigParser} [link=null]
+     * @param {string} [version="1.0.0"]
+     */
+    constructor(link = null, version = "1.0.0") {
+        super("JWT", link, version);
+    }
+    /**
+     * @param _Object
+     * @return {Promise<void>}
+     * @private
+     */
+    async _create(_Object) {
+        if(_Object.hasOwnProperty("issuers") && Array.isArray(_Object.issuers))
+            this._config["celastrinajs.http.jwt.issuers"] = _Object.issuers;
+        if(_Object.hasOwnProperty("parameter") && (_Object.parameter instanceof HTTPParameter))
+            this._config["celastrinajs.http.jwt.issuers"] = _Object.parameter;
+        if(_Object.hasOwnProperty("name") && (typeof _Object.name === "string") && _Object.name.trim().length > 0)
+            this._config["celastrinajs.http.jwt.authorization.token.name"] = _Object.name;
+        if(_Object.hasOwnProperty("scheme") && (typeof _Object.scheme === "string") && _Object.scheme.trim().length > 0)
+            this._config["celastrinajs.http.jwt.authorization.token.schem"] = _Object.scheme;
+        if(_Object.hasOwnProperty("removeScheme") && (typeof _Object.removeScheme === "boolean"))
+            this._config["celastrinajs.http.jwt.authorization.token.scheme.remove"] = _Object.removeScheme;
     }
 }
 /**
@@ -1045,6 +1213,10 @@ class JwtConfiguration extends HTTPConfiguration {
         this._config[JwtConfiguration.CONFIG_JWT_TOKEN_NAME] = "authorization";
         this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME] = "Bearer";
         this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME_REMOVE] = true;
+        if(this._property != null) {
+            this._cfp.addLink(new JwtConfigurationParser());
+            this._ctp.addLink(new OpenIDJwtIssuerParser(new LocalJwtIssuerParser()));
+        }
     }
     /**@return{Array.<BaseIssuer>}*/get issuers(){return this._config[JwtConfiguration.CONFIG_JWT_ISSUERS];}
     /**@param{Array.<BaseIssuer>} issuers*/
@@ -1660,8 +1832,11 @@ module.exports = {
     HTTPContext: HTTPContext,
     JSONHTTPContext: JSONHTTPContext,
     BaseIssuer: BaseIssuer,
+    BaseIssuerParser: BaseIssuerParser,
     LocalJwtIssuer: LocalJwtIssuer,
+    LocalJwtIssuerParser: LocalJwtIssuerParser,
     OpenIDJwtIssuer: OpenIDJwtIssuer,
+    OpenIDJwtIssuerParser: OpenIDJwtIssuerParser,
     HTTPParameter: HTTPParameter,
     HeaderParameter: HeaderParameter,
     QueryParameter: QueryParameter,
@@ -1673,7 +1848,9 @@ module.exports = {
     AESSessionManager: AESSessionManager,
     AESSessionManagerParser: AESSessionManagerParser,
     SessionRoleFactory: SessionRoleFactory,
+    HTTPConfigurationParser: HTTPConfigurationParser,
     HTTPConfiguration: HTTPConfiguration,
+    JwtConfigurationParser: JwtConfigurationParser,
     JwtConfiguration: JwtConfiguration,
     HTTPSentry: HTTPSentry,
     OptimisticHTTPSentry: OptimisticHTTPSentry,

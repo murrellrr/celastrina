@@ -11,7 +11,7 @@ describe("LocalJwtIssuer", () => {
         it("Constructs defaults", () => {
             let _localjwt = new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken_prop");
             assert.strictEqual(_localjwt._issuer, "@celastrinajs/issuer/mock", "Expected '@celastrinajs/issuer/mock'.");
-            assert.strictEqual(_localjwt._keyProperty, "celastrinajsmocktoken_prop", "Expected 'celastrinajsmocktoken_prop'.");
+            assert.strictEqual(_localjwt._key, "celastrinajsmocktoken_prop", "Expected 'celastrinajsmocktoken_prop'.");
             assert.strictEqual(_localjwt._audiences, null, "Expected null.");
             assert.strictEqual(_localjwt._roles, null, "Expected null.");
             assert.strictEqual(_localjwt._validateNonce, false, "Expected false.");
@@ -19,7 +19,7 @@ describe("LocalJwtIssuer", () => {
         it("Constructs values", () => {
             let _localjwt = new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken_prop", ["a"], ["b"], true);
             assert.strictEqual(_localjwt._issuer, "@celastrinajs/issuer/mock", "Expected '@celastrinajs/issuer/mock'.");
-            assert.strictEqual(_localjwt._keyProperty, "celastrinajsmocktoken_prop", "Expected 'celastrinajsmocktoken_prop'.");
+            assert.strictEqual(_localjwt._key, "celastrinajsmocktoken_prop", "Expected 'celastrinajsmocktoken_prop'.");
             assert.deepStrictEqual(_localjwt._audiences, ["a"], "Expected ['a'].");
             assert.deepStrictEqual(_localjwt._roles, ["b"], "Expected ['b'].");
             assert.strictEqual(_localjwt._validateNonce, true, "Expected true.");
@@ -34,8 +34,7 @@ describe("LocalJwtIssuer", () => {
             /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("JwtSentryTest");
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _pm.mockProperty("celastrinajsmocktoken_prop", "celastrinajsmocktoken");
-            let _localjwt = new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken_prop", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]);
+            let _localjwt = new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]);
             let _mctx = new MockHTTPContext(_azctx, _config);
             let _subject = await JwtSubject.decode(_mocktoken);
             assert.strictEqual(await _localjwt.verify(_mctx, _subject), true, "Expected true.");

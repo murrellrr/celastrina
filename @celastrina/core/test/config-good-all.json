@@ -2,31 +2,73 @@
   "configurations": [
     {
       "_content": {
-        "type": "config;Core"
+        "type": "application/vnd.celastrinajs.config+json;Core"
       },
       "resources": {
-        "authorizations": {"_content": {"type": "attribute;Property+[AppRegistrationResource]"},
-                            "key": "mock_resources", "type": "object"}
+        "authorizations": {
+          "_content": {
+            "type": "application/vnd.celastrinajs.attribute+json;Property+[AppRegistrationResource]"
+          },
+          "key": "mock_resources",
+          "type": "object"
+        }
       },
       "authentication": {
         "optimistic": true,
         "permissions": [
-          {"_content": {
-              "type": "attribute;Permission",
-              "version": "1.0.0"},
-            "action": "mock-process-1", "roles": {"_content": {"type": "attribute;Property", "version": "1.0.0"},
-                                                  "key": "mock_process-1-roles", "type": "object"}, "match": {"type": "MatchAny"}},
-          {"_content": {
-              "type": "attribute;Permission"},
-            "action": "mock-process-2", "roles": ["role-4", "role-5", "role-6"], "match": {"type": "MatchAll"}},
-          {"_content": {
-              "type": "attribute;Property+Permission"},
-            "key": "mock_permission", "type": "object"},
-          {"_content": {
-              "type": "attribute;Property+[Permission]"},
-            "key": "mock_permission_expand", "type": "object", "expand": true}
+          {
+            "_content": {
+              "type": "application/vnd.celastrinajs.attribute+json;Permission",
+              "version": "1.0.0"
+            },
+            "action": "mock-process-1",
+            "roles": {
+              "_content": {
+                "type": "application/vnd.celastrinajs.attribute+json;Property",
+                "version": "1.0.0"
+              },
+              "key": "mock_process-1-roles",
+              "type": "object"
+            },
+            "match": {
+              "type": "MatchAny"
+            }
+          },
+          {
+            "_content": {
+              "type": "application/vnd.celastrinajs.attribute+json;Permission"
+            },
+            "action": "mock-process-2",
+            "roles": [
+              "role-4",
+              "role-5",
+              "role-6"
+            ],
+            "match": {
+              "type": "MatchAll"
+            }
+          },
+          {
+            "_content": {
+              "type": "application/vnd.celastrinajs.attribute+json;Property+Permission"
+            },
+            "key": "mock_permission",
+            "type": "object"
+          },
+          {
+            "_content": {
+              "type": "application/vnd.celastrinajs.attribute+json;Property+[Permission]",
+              "expand": true
+            },
+            "key": "mock_permission_expand",
+            "type": "object"
+          }
         ],
-        "roleFactory": {"_content": {"type": "attribute;RoleFactory"}}
+        "roleFactory": {
+          "_content": {
+            "type": "application/vnd.celastrinajs.attribute+json;RoleFactory"
+          }
+        }
       }
     }
   ]

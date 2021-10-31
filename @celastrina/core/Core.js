@@ -247,9 +247,12 @@ class ManagedIdentityResource extends ResourceAuthorization {
             if(typeof exception === "object" && exception.hasOwnProperty("response")) {
                 if(exception.response.status === 404)
                     throw CelastrinaError.newError("Resource '" + resource + "' not found.", 404);
-                else
-                    throw CelastrinaError.newError("Exception getting respurce '" + resource + "': " +
-                                                    exception.response.statusText, exception.response.status);
+                else {
+                    let status = exception.response.statusText;
+                    let msg = "Exception getting resource '" + resource + "'";
+                    (typeof status !== "string") ? msg += "." : msg += ": " + status;
+                    throw CelastrinaError.newError(msg, exception.response.status);
+                }
             }
             else
                 throw CelastrinaError.newError("Exception getting resource '" + resource + "'.");
@@ -571,19 +574,15 @@ class AppSettingsPropertyManager extends PropertyManager {
  */
 class AppConfigPropertyManager extends AppSettingsPropertyManager {
     /**
-     * @param {string} subscriptionId
-     * @param {string} resourceGroupName
      * @param {string} configStoreName
      * @param {string} [label="development"]
      * @param {boolean} [useVaultSecrets=true]
      */
-    constructor(subscriptionId, resourceGroupName, configStoreName,
-                label = "development", useVaultSecrets = true) {
+    constructor(configStoreName, label = "development", useVaultSecrets = true) {
         super();
         this._label = label;
-        this._endpoint = "https://management.azure.com/subscriptions/" + subscriptionId +
-                    "/resourceGroups/" + resourceGroupName + "/providers/Microsoft.AppConfiguration/configurationStores/" +
-                    configStoreName + "/listKeyValue?api-version=2019-10-01";
+        this._configStore = configStoreName;
+        this._endpoint = "https://" + configStoreName + ".azconfig.io/kv/{key}?label=" + label + "&api-version=1.0";
         /** @type {ManagedIdentityResource} */this._auth = null;
         /** @type{boolean} */this._useVaultSecrets = useVaultSecrets;
         if(this._useVaultSecrets)
@@ -614,19 +613,28 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
         config[Configuration.CONFIG_RESOURCE].addResource(this._auth);
     }
     /**
+     * @param _config
+     * @return {Promise<*>}
+     * @private
+     */
+    async _resolveVaultReference(_config) {
+        let _vlt = JSON.parse(_config.value);
+        return await this._vault.getSecret(await this._auth.getToken("https://vault.azure.net"), _vlt.uri);
+    }
+    _isVaultReference(kvp) {
+        return (kvp.content_type === "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8" &&
+                this._useVaultSecrets);
+    }
+    /**
      * @param kvp
      * @return {Promise<*>}
      * @private
      */
-    async _resolveVaultReference(kvp) {
-        if(kvp.contentType === "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8" &&
-                this._useVaultSecrets) {
-            let token = await this._auth.getToken("https://vault.azure.net");
-            let vaultRef = JSON.parse(kvp.value);
-            return await this._vault.getSecret(token, vaultRef.uri);
-        }
-        else
-            return kvp.value;
+    async _resolveFeatureFlag(kvp) {
+        return kvp.value;
+    }
+    _isFeatureFlag(kvp) {
+        return kvp.content_type === "application/vnd.microsoft.appconfig.ff+json;charset=utf-8"
     }
     /**
      * @param {string} key
@@ -635,12 +643,16 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
      */
     async _getAppConfigProperty(key) {
         try {
-            let token = await this._auth.getToken("https://management.azure.com/");
-            let response = await axios.post(this._endpoint, {
-                                                key: key,
-                                                label: this._label
-                                            }, {headers: {"Authorization": "Bearer " + token}});
-            return await this._resolveVaultReference(response.data);
+            let token = await this._auth.getToken("https://" + this._configStore + ".azconfig.io");
+            let _endpoint = this._endpoint.replace("{key}", key);
+            let response = await axios.get(_endpoint, {headers: {"Authorization": "Bearer " + token}});
+            let _value = response.data;
+            if(this._isVaultReference(_value))
+                return await this._resolveVaultReference(_value);
+            else if(this._isFeatureFlag(_value))
+                return await this._resolveFeatureFlag(_value);
+            else
+                return _value.value;
         }
         catch(exception) {
             if(exception instanceof CelastrinaError)
@@ -951,12 +963,6 @@ class AppConfigPropertyManagerFactory extends PropertyManagerFactory {
      * @return {PropertyManager}
      */
     _createPropertyManager(source) {
-        if(!source.hasOwnProperty("subscriptionId") || typeof source.subscriptionId !== "string" ||
-                source.subscriptionId.trim().length === 0)
-            throw CelastrinaValidationError.newValidationError("Invalid AppConfigPropertyManagerFactory, missing 'subscriptionId'.", "subscriptionId");
-        if(!source.hasOwnProperty("resourceGroupName") || typeof source.resourceGroupName !== "string" ||
-                source.resourceGroupName.trim().length === 0)
-            throw CelastrinaValidationError.newValidationError("Invalid AppConfigPropertyManagerFactory, missing 'resourceGroupName'.", "resourceGroupName");
         if(!source.hasOwnProperty("configStoreName") || typeof source.configStoreName !== "string" ||
                 source.configStoreName.trim().length === 0)
             throw CelastrinaValidationError.newValidationError("Invalid AppConfigPropertyManagerFactory, missing 'configStoreName'.", "configStoreName");
@@ -966,7 +972,7 @@ class AppConfigPropertyManagerFactory extends PropertyManagerFactory {
             _label = source.label;
         if(source.hasOwnProperty("useVault") && typeof source.useVault === "boolean")
             _useVault = source.useVault;
-        return new AppConfigPropertyManager(source.subscriptionId, source.resourceGroupName, source.configStoreName, _label, _useVault);
+        return new AppConfigPropertyManager(source.configStoreName, _label, _useVault);
     }
 }
 /**
@@ -1891,7 +1897,7 @@ class ParserChain {
      * @param {ParserChain} [link=null]
      * @param {string} [version="1.0.0"]
      */
-    constructor(mime = "celastrinajs", type = "Object", link = null,
+    constructor(mime = "application/vnd.celastrinajs+json", type = "Object", link = null,
                 version = "1.0.0") {
         /**@type{string}*/this._mime = mime;
         /**@type{string}*/this._type = type;
@@ -2026,7 +2032,7 @@ class ParserChain {
      * @abstract
      */
     async _create(_Object) {
-        throw CelastrinaError.newError("[ParserChain._create(_Object,)]: Not Implemented.", 501);
+        throw CelastrinaError.newError("[ParserChain._create(_Object)]: Not Implemented.", 501);
     }
 }
 /**
@@ -2035,7 +2041,7 @@ class ParserChain {
  * @author Robert R Murrell
  */
 class AttributeParser extends ParserChain {
-    static _CONFIG_PARSER_ATTRIBUTE_TYPE = "attribute";
+    static _CONFIG_PARSER_ATTRIBUTE_TYPE = "application/vnd.celastrinajs.attribute+json";
     /**
      * @param {string} [type="Object"]
      * @param {AttributeParser} [link=null]
@@ -2212,7 +2218,7 @@ class RoleFactoryParser extends AttributeParser {
  * @abstract
  */
 class ConfigParser extends ParserChain {
-    static _CONFIG_PARSER_TYPE = "config";
+    static _CONFIG_PARSER_TYPE = "application/vnd.celastrinajs.config+json";
     /**
      * @param {string} [type="Config"]
      * @param {ConfigParser} [link=null]
@@ -2356,8 +2362,8 @@ class ConfigurationLoader extends Configuration {
     static async replace(parser, _Object, _value, _prop) {
         let _lvalue = await parser.parse(_value);
         if(typeof _lvalue === "undefined") _lvalue = null;
-        if(Array.isArray(_lvalue) && Array.isArray(_Object) && _value.hasOwnProperty("expand") &&
-                (typeof _value.expand === "boolean") && _value.expand) {
+        if(Array.isArray(_lvalue) && Array.isArray(_Object) && _value._content.hasOwnProperty("expand") &&
+                (typeof _value._content.expand === "boolean") && _value._content.expand) {
             _Object.splice(_prop, 1, ..._lvalue);
         }
         else
@@ -2389,9 +2395,19 @@ class ConfigurationLoader extends Configuration {
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {PropertyManager} pm
+     * @param {Object} config
+     * @param {AttributeParser} ctp
+     * @param {ConfigParser} cfp
+     * @return {Promise<void>}
+     */
+    async _installParsers(azcontext, pm, config, ctp, cfp) {}
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param {PropertyManager} pm
      * @return {Promise<void>}
      */
     async _load(azcontext, pm) {
+        await this._installParsers(azcontext, pm, this._config, this._ctp, this._cfp);
         this._ctp.initialize(azcontext, this._config);
         this._cfp.initialize(azcontext, this._config);
         let _pm = this._config[Configuration.CONFIG_PROPERTY];

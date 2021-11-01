@@ -1760,8 +1760,16 @@ class BaseFunction {
       */
     async bootstrap(azcontext) {
         await this._configuration.initialize(azcontext);
-        /**@type{(null|BaseSentry)}*/let _sentry = await this.createSentry(azcontext, this._configuration);
-        /**@type{(null|BaseContext)}*/let _context = await this.createContext(azcontext, this._configuration);
+        /**@type{BaseSentry}*/let _sentry = await this.createSentry(azcontext, this._configuration);
+        if(!(_sentry instanceof BaseSentry)) {
+            azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.bootstrap(azcontext)]: Catostrophic Error! Sentry invalid after create.");
+            throw CelastrinaError.newError("Catostrophic Error! Sentry invalid.");
+        }
+        /**@type{BaseContext}*/let _context = await this.createContext(azcontext, this._configuration);
+        if(!(_context instanceof BaseContext)) {
+            azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.bootstrap(azcontext)]: Catostrophic Error! Context invalid after create.");
+            throw CelastrinaError.newError("Catostrophic Error! Context invalid.");
+        }
         await _context.initialize();
         await _sentry.initialize(this._configuration);
         this._context = _context;
@@ -1826,45 +1834,62 @@ class BaseFunction {
       * @param {_AzureFunctionContext} azcontext The azcontext of the function.
       */
     async execute(azcontext) {
-        azcontext.log.info("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Lifecycle started.");
+        azcontext.log.info("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Life-cycle started.");
         try {
             await this.bootstrap(azcontext);
-            await this.initialize(this._context);
-            this._context.subject = await this.authenticate(this._context);
-            await this.authorize(this._context);
-            await this.validate(this._context);
-            await this.load(this._context);
-            if(this._context.isMonitorInvocation)
-                await this.monitor(this._context);
-            else
-                await this.process(this._context);
-            await this.save(this._context);
+            if((typeof this._context !== "undefined") && this._context != null) {
+                await this.initialize(this._context);
+                this._context.subject = await this.authenticate(this._context);
+                await this.authorize(this._context);
+                await this.validate(this._context);
+                await this.load(this._context);
+                if (this._context.isMonitorInvocation)
+                    await this.monitor(this._context);
+                else
+                    await this.process(this._context);
+                await this.save(this._context);
+            }
+            else {
+                azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Catostrophic Error! Context was null after bootstrap, skipping all other life-cycles.");
+                throw CelastrinaError.newError("Catostrophic Error! Context null.");
+            }
         }
         catch(exception) {
             try {
-                azcontext.log.warn("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Exception Lifecycle.");
-                await this.exception(this._context, exception);
+                if((typeof this._context !== "undefined") && this._context != null) {
+                    azcontext.log.warn("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Exception Lifecycle.");
+                    await this.exception(this._context, exception);
+                }
+                else
+                    azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Catostrophic Error! Context was null, skipping exception life-cycle.");
             }
             catch(_exception) {
                 let _ex = this._unhandled(azcontext, _exception);
-                azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Exception thrown from Exception lifecycle: " +
+                azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Exception thrown from Exception life-cycle: " +
                                   _ex  + ", caused by " + exception + ". ");
             }
         }
         finally {
             try {
-                await this.terminate(this._context);
-                azcontext.log.info("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Lifecycle completed.");
-                if(this._context.result == null)
-                    azcontext.done();
-                else
-                    azcontext.done(this._context.result);
+                if((typeof this._context !== "undefined") && this._context != null) {
+                    await this.terminate(this._context);
+                    azcontext.log.info("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Life-cycle completed.");
+                    if (this._context.result == null)
+                        azcontext.done();
+                    else
+                        azcontext.done(this._context.result);
+                }
+                else {
+                    azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Catostrophic Error! Context was null, skipping terminate life-cycle.");
+                    throw CelastrinaError.newError("Catostrophic Error! Context null.");
+                }
             }
             catch(exception) {
                 let _ex = this._unhandled(azcontext, exception);
-                azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Exception thrown from Terminate lifecycle: " +
-                                  _ex  + ". ");
-                _ex.drop? azcontext.done() :  azcontext.done(_ex);
+                azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Exception thrown from Terminate life-cycle: " +
+                                    _ex);
+                azcontext.res.status = _ex.code;
+                azcontext.done(_ex);
             }
         }
     }
@@ -1880,7 +1905,7 @@ class BaseFunction {
             if(ex instanceof Error) ex = CelastrinaError.wrapError(ex);
             else ex = CelastrinaError.newError(ex);
         }
-        context.log.error("[BaseFunction._unhandled(context, exception)][exception](MESSAGE:" + ex.message + ") \r\n (STACK:" + ex.stack + ") \r\n (CAUSE:" + ex.cause + ")");
+        context.log.error("[BaseFunction._unhandled(context, exception)][exception]: \r\n (MESSAGE:" + ex.message + ") \r\n (STACK:" + ex.stack + ") \r\n (CAUSE:" + ex.cause + ")");
         return ex;
     }
 }

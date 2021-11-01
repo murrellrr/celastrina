@@ -29,7 +29,7 @@
                       "issuer": "@celastrinajs/issuer/mock",
                       "audiences": ["celastrinajs_mock_aud"],
                       "assignments": ["default_user"],
-                      "key": "celastrinajsmocktoken_key"},
+                      "key": "celastrinajsmocktoken"},
                   {"_content": {"type": "application/vnd.celastrinajs.attribute+json;OpenIDJwtIssuer"},
                       "issuer": "https://login.microsoftonline.com/1234567890/v2.0",
                       "audiences": ["celastrinajs_mock_aud"],

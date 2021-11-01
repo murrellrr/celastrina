@@ -1356,7 +1356,9 @@ class HTTPContext extends BaseContext {
      * @private
      */
     async _setSession() {
-        this._session = await this._config.sessionManager.loadSession(this);
+        /**@type{HTTPConfiguration}*/let _lconfig = /**@type{HTTPConfiguration}*/this._config;
+        if(_lconfig.sessionManager instanceof SessionManager)
+            this._session = await _lconfig.sessionManager.loadSession(this);
     }
     /**
      * @return {Promise<void>}
@@ -1367,6 +1369,44 @@ class HTTPContext extends BaseContext {
         await this._setRequestId();
         await this._parseCookies();
         await this._setSession();
+    }
+    /**
+     * @return {Promise<void>}
+     * @private
+     */
+    async _rewriteSession() {
+        /**@type{HTTPConfiguration}*/let _lconfig = /**@type{HTTPConfiguration}*/this._config;
+        if(_lconfig.sessionManager instanceof SessionManager) {
+            if (this.session != null && this.session.doWriteSession) {
+                /**@type{SessionManager}*/let _sm = _lconfig.sessionManager;
+                await _sm.saveSession(this.session, this);
+            }
+        }
+    }
+    /**
+     * @return {Promise<void>}
+     * @private
+     */
+    async _setCookies() {
+        let _cookies = this.cookies;
+        let _setcookies = [];
+        for(/**@type{Cookie}*/const _param in _cookies) {
+            if(_cookies.hasOwnProperty(_param)) {
+                let _cookie = _cookies[_param];
+                if(_cookie instanceof Cookie)
+                    _setcookies.unshift(_cookie.toAzureCookie());
+            }
+        }
+        _setcookies = await Promise.all(_setcookies);
+        if(_setcookies.length > 0)
+            this.azureFunctionContext.res.cookies = _setcookies;
+    }
+    /**
+     * @return {Promise<void>}
+     */
+    async terminate() {
+        await this._rewriteSession();
+        await this._setCookies();
     }
     /**
      * @param {string} name
@@ -1759,7 +1799,7 @@ class HTTPFunction extends BaseFunction {
             ex = CelastrinaError.wrapError(ex);
             context.sendServerError(ex);
         }
-        context.log("Request failed to process. (MESSAGE:" + ex.message + ") (STACK:" + ex.stack + ")", LOG_LEVEL.ERROR,
+        context.log("Request failed to process. \r\n (MESSAGE: " + ex.message + ") \r\n (STACK: " + ex.stack + ")" + " \r\n (CAUSE: " + ex.cause + ")", LOG_LEVEL.ERROR,
                      "HTTP.exception(context, exception)");
     }
     /**
@@ -1780,42 +1820,13 @@ class HTTPFunction extends BaseFunction {
         else
             await _handler(context);
     }
-    /**
-     * @param {HTTPContext} context
-     * @return {Promise<void>}
-     */
-    static async _rewriteSession(context) {
-        if(context.session != null && context.session.doWriteSession) {
-            /**@type{HTTPConfiguration}*/let _config = /**@type{HTTPConfiguration}*/context.config;
-            /**@type{SessionManager}*/let _sm = _config.sessionManager;
-            await _sm.saveSession(context.session, context);
-        }
-    }
-    /**
-     * @param {HTTPContext} context
-     * @return {Promise<void>}
-     */
-    static async _setCookies(context) {
-        let _cookies = context.cookies;
-        let _setcookies = [];
-        for(/**@type{Cookie}*/const _param in _cookies) {
-            if(_cookies.hasOwnProperty(_param)) {
-                let _cookie = _cookies[_param];
-                if(_cookie instanceof Cookie)
-                    _setcookies.unshift(_cookie.toAzureCookie());
-            }
-        }
-        _setcookies = await Promise.all(_setcookies);
-        if(_setcookies.length > 0)
-            context.azureFunctionContext.res.cookies = _setcookies;
-    }
+
     /**
      * @param {BaseContext | HTTPContext} context
      * @return {Promise<void>}
      */
     async terminate(context) {
-        await HTTPFunction._rewriteSession(context);
-        await HTTPFunction._setCookies(context);
+        await context.terminate();
     }
 }
 /**

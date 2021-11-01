@@ -11,6 +11,7 @@ const {AES256Algorithm} = require("@celastrina/core");
 const fs = require("fs");
 const cookie = require("cookie");
 const {MockMicrosoftOpenIDIDPServer} = require("./AzureOpenIDIPDMock");
+const jwt = require("jsonwebtoken");
 
 class MockJSONHTTPFunction extends JSONHTTPFunction {
     constructor(config) {
@@ -50,10 +51,14 @@ class MockJSONHTTPFunction extends JSONHTTPFunction {
      */
     async _get(context) {
         context.azureFunctionContext._getInvoked = true;
-        let smocka = await context.session.getProperty("mockA");
-        let smockb = await context.session.getProperty("mockB");
+        let smocka = null;
+        let smockb = null;
         switch(await context.properties.getProperty("celastrinajs_mock_action", "default")) {
             case "session_new":
+                if(context.session == null) {
+                    context.log("session was null.", LOG_LEVEL.INFO, "MockHTTPFunction._get(context)");
+                    throw CelastrinaValidationError.newValidationError("Session was null.");
+                }
                 context.log("session_new GET test case executed.", LOG_LEVEL.INFO, "MockHTTPFunction._get(context)");
                 await context.session.setProperty("mockA", "valueA");
                 await context.session.setProperty("mockB", "valueB");
@@ -63,6 +68,10 @@ class MockJSONHTTPFunction extends JSONHTTPFunction {
                 context.done();
                 break;
             case "session_test":
+                if(context.session == null) {
+                    context.log("session was null.", LOG_LEVEL.INFO, "MockHTTPFunction._get(context)");
+                    throw CelastrinaValidationError.newValidationError("Session was null.");
+                }
                 context.log("session_test GET test case executed.", LOG_LEVEL.INFO, "MockHTTPFunction._get(context)");
                 smocka = await context.session.getProperty("mockA");
                 smockb = await context.session.getProperty("mockB");
@@ -70,6 +79,10 @@ class MockJSONHTTPFunction extends JSONHTTPFunction {
                 context.done();
                 break;
             case "session_subject":
+                if(context.session == null) {
+                    context.log("session was null.", LOG_LEVEL.INFO, "MockHTTPFunction._get(context)");
+                    throw CelastrinaValidationError.newValidationError("Session was null.");
+                }
                 context.log("session_subject GET test case executed.", LOG_LEVEL.INFO, "MockHTTPFunction._get(context)");
                 smocka = await context.session.getProperty("mockA");
                 smockb = await context.session.getProperty("mockB");
@@ -152,7 +165,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
             _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookie + "; ";
             _azctx.req.method = "get";
@@ -173,7 +186,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
             _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookie + "; ";
             _azctx.req.method = "get";
@@ -193,7 +206,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
             _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookie + "; ";
             _azctx.req.method = "get";
@@ -215,7 +228,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
             _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookie + "; ";
             _azctx.req.method = "custom";
@@ -236,7 +249,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
             _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookie + "; ";
             _azctx.req.method = "GET";
@@ -257,7 +270,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
             _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookie + "; ";
             _azctx.req.method = "post";
@@ -278,7 +291,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
             _azctx.req.method = "get";
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
@@ -302,7 +315,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
             _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookie + "; ";
             let _response = await _mockopenid.setHeader(_azctx.req.headers);
@@ -331,7 +344,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
             _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookie + "; ";
             let _response = await _mockopenid.setHeader(_azctx.req.headers, true);
@@ -360,7 +373,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
             _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookie + "; ";
             let _response = await _mockopenid.setHeader(_azctx.req.headers);
@@ -392,7 +405,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
             _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookieroles + "; ";
             let _response = await _mockopenid.setHeader(_azctx.req.headers);
@@ -422,7 +435,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
             _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookieroles + "; ";
             let _response = await _mockopenid.setHeader(_azctx.req.headers);
@@ -451,7 +464,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
             _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookieroles + "; ";
             let _response = await _mockopenid.setHeader(_azctx.req.headers, false, "mock_subject", "celastrinajs_mock_aud");
@@ -465,6 +478,48 @@ describe("JSONHTTPFunction", () => {
 
             assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
             assert.deepStrictEqual(_azctx.res.body, {mockA: "valueA", mockB: "valueB", subject: _response.sub}, "Expected default JSON.");
+        });
+        it("should load from config, pass jwt Local and load session", async () => {
+            let _mockpayload = {sub: "celastrinajs_subject", iss: "@celastrinajs/issuer/mock", aud: "celastrinajs_mock_aud"};
+            let _mocktoken = jwt.sign(_mockpayload, "celastrinajsmocktoken");
+            let _azctx      = new MockAzureFunctionContext();
+            let _pm         = new MockPropertyManager();
+            let _config     = new JwtConfiguration("JSONHTTPFunctionTest", "jwt_config");
+
+            _pm.mockProperty("jwt_config", fs.readFileSync("./test/config-good-all.json").toString());
+            _pm.mockProperty("celastrinajs_mock_action", "session_subject");
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+
+            _azctx.req.headers["host"] = "celastrinajs.com";
+            _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
+            _azctx.req.headers["accept"] = "*/*";
+            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["connection"] = "keep-alive";
+            _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookieroles + "; ";
+            _azctx.req.headers["authorization"] = "Bearer " + _mocktoken;
+            _azctx.req.method = "get";
+            _azctx.req.originalUrl = "https://api.celastrinajs.com";
+
+            let _function = new MockJSONHTTPFunction(_config);
+            await _function.execute(_azctx);
+
+            assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
+            assert.deepStrictEqual(_azctx.res.body, {mockA: "valueA", mockB: "valueB", subject: "celastrinajs_subject"}, "Expected default JSON.");
+        });
+
+
+
+        it("Should do un-authenticated GET", async () => {
+            let _azctx      = new MockAzureFunctionContext();
+            let _pm         = new MockPropertyManager();
+            let _config     = new HTTPConfiguration("JSONHTTPFunctionTest", "jwt_config");
+            _pm.mockProperty("jwt_config", fs.readFileSync("./test/config-good-nosession_roles.json").toString());
+            _pm.mockProperty("celastrinajs_mock_action", "default");
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            let _function = new MockJSONHTTPFunction(_config);
+            await _function.execute(_azctx);
+
+            assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
         });
     });
 });

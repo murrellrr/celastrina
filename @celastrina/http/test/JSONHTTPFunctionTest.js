@@ -159,7 +159,7 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
             await _function.execute(_azctx);
             assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
-            assert.deepStrictEqual(_azctx.res.body, {code: 200, message: "Success! Welcome to celastrinajs.", name: "HTTPFunctionTest"}, "Expected default JSON.");
+            assert.deepStrictEqual(_azctx.res.body, {code: 200, message: "Success! Welcome to celastrinajs.", name: "JSONHTTPFunctionTest"}, "Expected default JSON.");
         });
         it("should responed read existing session", async () => {
             let _azctx  = new MockAzureFunctionContext();

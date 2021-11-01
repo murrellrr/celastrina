@@ -21,7 +21,7 @@ describe("HTTPParameter", () => {
     describe("#constructor(type)", () => {
         it("Sets the default type", () => {
             let _fetch = new HTTPParameter();
-            assert.deepStrictEqual(_fetch._type, "HTTPParameterFetch", "Sets type to 'HTTPParameterFetch'");
+            assert.deepStrictEqual(_fetch._type, "HTTPParameter", "Sets type to 'HTTPParameter'");
         });
         it("Sets the type", () => {
             let _fetch = new HTTPParameter("TEST_TYPE");

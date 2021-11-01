@@ -2027,7 +2027,7 @@ class ParserChain {
             return _Object;
     }
     /**
-     * @param {{_content:{type:string,version:string}}} _Object
+     * @param {{_content:{type:string,version?:string}}} _Object
      * @return {Promise<*>}
      * @abstract
      */

@@ -1,5 +1,5 @@
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL} = require("../../core/Core");
-const {JwtSubject} = require("../index");
+const {JwtSubject} = require("../HTTP");
 const assert = require("assert");
 const moment = require("moment");
 const jwt = require("jsonwebtoken");

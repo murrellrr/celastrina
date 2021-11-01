@@ -1,5 +1,5 @@
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL} = require("../../core/Core");
-const {BodyParameter} = require("../index");
+const {BodyParameter} = require("../HTTP");
 const {MockHTTPContext} = require("./HTTPContextTest");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const assert = require("assert");

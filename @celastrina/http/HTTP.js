@@ -554,15 +554,15 @@ class BaseIssuerParser extends AttributeParser {
         if(!(_BaseIssuer.hasOwnProperty("audiences")) || !(Array.isArray(_BaseIssuer.audiences)) || _BaseIssuer.audiences.length === 0)
             throw CelastrinaValidationError.newValidationError(
                 "[BaseIssuerParser._loadIssuer(_BaseIssuer, _issuer)][_BaseIssuer.audiences]: Audiences cannot be null.", "_BaseIssuer.audiences");
-        if(!(_BaseIssuer.hasOwnProperty("roles")) || !(Array.isArray(_BaseIssuer.roles)) || _BaseIssuer.roles.length === 0)
-            throw CelastrinaValidationError.newValidationError(
-                "[BaseIssuerParser._loadIssuer(_BaseIssuer, _issuer)][_BaseIssuer.roles]: ", "_BaseIssuer.roles");
+        let assignments = [];
+        if((_BaseIssuer.hasOwnProperty("assignments")) && (Array.isArray(_BaseIssuer.assignments)) && _BaseIssuer.assignments.length > 0)
+            assignments = _BaseIssuer.assignments;
         let _validate = false;
         if(_BaseIssuer.hasOwnProperty("validateNonce") && (typeof _BaseIssuer.validateNonce === "boolean"))
             _validate = _BaseIssuer.validateNonce;
         _issuer.issuer = _BaseIssuer.issuer.trim();
         _issuer.audiences = _BaseIssuer.audiences;
-        _issuer.assignments = _BaseIssuer.roles;
+        _issuer.assignments = assignments;
         _issuer.validateNonce = _validate;
     }
 }
@@ -632,7 +632,7 @@ class HTTPParameter {
      * @param{string}[type]
      * @param{boolean}[readOnly]
      */
-    constructor(type = "HTTPParameterFetch", readOnly = false) {this._type = type; this._readOnly = readOnly}
+    constructor(type = "HTTPParameter", readOnly = false) {this._type = type; this._readOnly = readOnly}
     /**@return{string}*/get type() {return this._type;}
     /**@return{boolean}*/get readOnly() {return this._readOnly;}
     /**
@@ -789,6 +789,49 @@ class BodyParameter extends HTTPParameter {
  * Session
  * @author Robert R Murrell
  */
+class HTTPParameterParser extends AttributeParser {
+    /**
+     * @param {AttributeParser} [link=null]
+     * @param {string} [version="1.0.0"]
+     */
+    constructor(link = null, version = "1.0.0") {
+        super("HTTPParameter", link, version);
+    }
+    /**
+     * @param {Object} _HTTPParameter
+     * @return {Promise<HTTPParameter>}
+     */
+    async _create(_HTTPParameter) {
+        let _parameter = "header";
+        if(_HTTPParameter.hasOwnProperty("parameter") && (typeof _HTTPParameter.parameter === "string") && _HTTPParameter.parameter.trim().length > 0)
+            _parameter = _HTTPParameter.parameter.trim();
+        return HTTPParameterParser.createHTTPParameter(_parameter);
+    }
+    /**
+     * @param {string} type
+     * @return {HTTPParameter}
+     */
+    static createHTTPParameter(type) {
+        switch(type) {
+            case "header":
+                return new HeaderParameter();
+            case "cookie":
+                return new CookieParameter();
+            case "query":
+                return new QueryParameter();
+            case "body":
+                return new BodyParameter();
+            default:
+                throw CelastrinaValidationError.newValidationError(
+                    "[HTTPParameterParser.getHTTPParameter(type)][type]: '" + type + "' is not supported.",
+                    "type");
+        }
+    }
+}
+/**
+ * Session
+ * @author Robert R Murrell
+ */
 class Session {
     /**
      * @param {Object} [values = {}]
@@ -856,6 +899,9 @@ class SessionManager {
         this._name = name.trim();
         this._createNew = createNew;
     }
+    /**@return{HTTPParameter}*/get parameter() {return this._parameter;}
+    /**@return{string}*/get name() {return this._name;}
+    /**@return{boolean}*/get createNew() {return this._createNew;}
     async initialize(azcontext, pm, rm) {}
     /**
      * @return {Promise<Session>}
@@ -925,6 +971,7 @@ class SecureSessionManager extends SessionManager {
         super(parameter, name, createNew);
         this._crypto = new Cryptography(algorithm);
     }
+    /**@return{Cryptography}*/get cryptography() {return this._crypto;}
     /**
      * @param azcontext
      * @param pm
@@ -985,6 +1032,7 @@ class SessionRoleFactory extends BaseRoleFactory {
         super();
         this._key = key;
     }
+    /**@return{string}*/get key() {return this._key;}
     /**
      * @param {BaseContext|HTTPContext} context
      * @param {BaseSubject|JwtSubject} subject
@@ -1010,7 +1058,7 @@ class SessionRoleFactoryParser extends RoleFactoryParser {
     }
     /**
      * @param {Object} _SessionRoleFactory
-     * @return {Promise<BaseRoleFactory>}
+     * @return {Promise<SessionRoleFactory>}
      */
     async _create(_SessionRoleFactory) {
         let _key = "roles";
@@ -1032,35 +1080,14 @@ class AESSessionManagerParser extends AttributeParser {
         super("AESSessionManager", link, version);
     }
     /**
-     * @param {string} name
-     * @return {Promise<HTTPParameter>}
-     * @private
-     */
-    async _createParameter(name) {
-        switch(name) {
-            case "header":
-                return new HeaderParameter();
-            case "cookie":
-                return new CookieParameter();
-            case "query":
-                return new QueryParameter();
-            case "body":
-                return new BodyParameter();
-            default:
-                throw CelastrinaValidationError.newValidationError(
-                    "[AESSessionManagerParser._createParameter(name)][AESSessionManager.parameter]: '" + name + "' is not supported.",
-                    "AESSessionManager.parameter");
-        }
-    }
-    /**
      * @param {Object} _AESSessionManager
      * @return {Promise<AESSessionManager>}
      */
     async _create(_AESSessionManager) {
         let _paramtype = "cookie";
-        if(_AESSessionManager.hasOwnProperty("paramter") && (typeof _AESSessionManager.parameter === "string"))
-            _paramtype = _AESSessionManager.parameter;
         let _paramname = "celastrinajs_session";
+        if(_AESSessionManager.hasOwnProperty("parameter") && (typeof _AESSessionManager.parameter === "string"))
+            _paramtype = _AESSessionManager.parameter;
         if(_AESSessionManager.hasOwnProperty("name") && (typeof _AESSessionManager.name === "string"))
             _paramname = _AESSessionManager.name;
         let _createnew = true;
@@ -1075,15 +1102,15 @@ class AESSessionManagerParser extends AttributeParser {
                 "[AESSessionManagerParser._create(_AESSessionManager)][AESSessionManager.options]: Argument 'optiosn' cannot be null or undefined.",
                 "AESSessionManager.options");
         }
-        if(!(_options.hasOwnProperty("iv")) || !(typeof _options.iv !== "string") || _options.iv.trim().length === 0)
+        if(!(_options.hasOwnProperty("iv")) || (typeof _options.iv !== "string") || _options.iv.trim().length === 0)
             throw CelastrinaValidationError.newValidationError(
                 "[AESSessionManagerParser._create(_AESSessionManager)][AESSessionManager.options.iv]: Aregument 'iv' cannot be null or empty.",
                 "AESSessionManager.options.iv");
-        if(!(_options.hasOwnProperty("key")) || !(typeof _options.key !== "string") || _options.key.trim().length === 0)
+        if(!(_options.hasOwnProperty("key")) || (typeof _options.key !== "string") || _options.key.trim().length === 0)
             throw CelastrinaValidationError.newValidationError(
                 "[AESSessionManagerParser._create(_AESSessionManager)][AESSessionManager.options.key]: Argument 'key' cannot be null or empty.",
                 "AESSessionManager.options.key");
-        return new AESSessionManager(_options, await this._createParameter(_paramtype), _paramname, _createnew);
+        return new AESSessionManager(_options, HTTPParameterParser.createHTTPParameter(_paramtype), _paramname, _createnew);
     }
 }
 /**
@@ -1105,8 +1132,9 @@ class HTTPConfigurationParser extends ConfigParser {
      */
     async _create(_Object) {
         if(_Object.hasOwnProperty("session") && (typeof _Object.session === "object") && _Object.session != null) {
-            if(_Object.hasOwnProperty("manager") && (_Object.manager instanceof SessionManager))
-                this._config["celastrinajs.http.session"] = _Object.manager;
+            let _session = _Object.session;
+            if(_session.hasOwnProperty("manager") && (_session.manager instanceof SessionManager))
+                this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER] = _session.manager;
         }
     }
 }
@@ -1123,12 +1151,18 @@ class HTTPConfiguration extends ConfigurationLoader {
     constructor(name, property = null) {
         super(name, property);
         this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER] = null;
-        if(this._property != null) {
-            this._cfp.addLink(new HTTPConfigurationParser());
-            this._ctp.addLink(new AESSessionManagerParser());
-        }
     }
     /**@return{SessionManager}*/get sessionManager() {return this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER];}
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param {PropertyManager} pm
+     * @return {Promise<void>}
+     */
+    async _installParsers(azcontext, pm, config, ctp, cfp) {
+        await super._installParsers(azcontext, pm, config, ctp, cfp);
+        cfp.addLink(new HTTPConfigurationParser());
+        ctp.addLink(new AESSessionManagerParser(new SessionRoleFactoryParser()));
+    }
     /**
      * @param {SessionManager} [sm=null]
      * @return {HTTPConfiguration}
@@ -1136,15 +1170,6 @@ class HTTPConfiguration extends ConfigurationLoader {
     setSessionManager(sm = null) {
         this._config[HTTPConfiguration.CONFIG_HTTP_SESSION_MANAGER] = sm;
         return this;
-    }
-    /**
-     * @param {_AzureFunctionContext} azcontext
-     * @param {PropertyManager} pm
-     * @return {Promise<void>}
-     */
-    async _initLoadConfiguration(azcontext, pm) {
-        await super._initLoadConfiguration(azcontext, pm);
-
     }
     /**
      * @param {Object} azcontext
@@ -1180,15 +1205,15 @@ class JwtConfigurationParser extends ConfigParser {
      */
     async _create(_Object) {
         if(_Object.hasOwnProperty("issuers") && Array.isArray(_Object.issuers))
-            this._config["celastrinajs.http.jwt.issuers"] = _Object.issuers;
+            this._config[JwtConfiguration.CONFIG_JWT_ISSUERS] = _Object.issuers;
         if(_Object.hasOwnProperty("parameter") && (_Object.parameter instanceof HTTPParameter))
-            this._config["celastrinajs.http.jwt.issuers"] = _Object.parameter;
+            this._config[JwtConfiguration.CONFIG_JWT_TOKEN_PARAMETER] = _Object.parameter;
         if(_Object.hasOwnProperty("name") && (typeof _Object.name === "string") && _Object.name.trim().length > 0)
-            this._config["celastrinajs.http.jwt.authorization.token.name"] = _Object.name;
+            this._config[JwtConfiguration.CONFIG_JWT_TOKEN_NAME] = _Object.name;
         if(_Object.hasOwnProperty("scheme") && (typeof _Object.scheme === "string") && _Object.scheme.trim().length > 0)
-            this._config["celastrinajs.http.jwt.authorization.token.schem"] = _Object.scheme;
+            this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME] = _Object.scheme;
         if(_Object.hasOwnProperty("removeScheme") && (typeof _Object.removeScheme === "boolean"))
-            this._config["celastrinajs.http.jwt.authorization.token.scheme.remove"] = _Object.removeScheme;
+            this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME_REMOVE] = _Object.removeScheme;
     }
 }
 /**
@@ -1213,10 +1238,11 @@ class JwtConfiguration extends HTTPConfiguration {
         this._config[JwtConfiguration.CONFIG_JWT_TOKEN_NAME] = "authorization";
         this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME] = "Bearer";
         this._config[JwtConfiguration.CONFIG_JWT_TOKEN_SCHEME_REMOVE] = true;
-        if(this._property != null) {
-            this._cfp.addLink(new JwtConfigurationParser());
-            this._ctp.addLink(new OpenIDJwtIssuerParser(new LocalJwtIssuerParser()));
-        }
+    }
+    async _installParsers(azcontext, pm, config, ctp, cfp) {
+        await super._installParsers(azcontext, pm, config, ctp, cfp);
+        cfp.addLink(new JwtConfigurationParser());
+        ctp.addLink(new OpenIDJwtIssuerParser(new LocalJwtIssuerParser()));
     }
     /**@return{Array.<BaseIssuer>}*/get issuers(){return this._config[JwtConfiguration.CONFIG_JWT_ISSUERS];}
     /**@param{Array.<BaseIssuer>} issuers*/
@@ -1848,6 +1874,7 @@ module.exports = {
     AESSessionManager: AESSessionManager,
     AESSessionManagerParser: AESSessionManagerParser,
     SessionRoleFactory: SessionRoleFactory,
+    SessionRoleFactoryParser: SessionRoleFactoryParser,
     HTTPConfigurationParser: HTTPConfigurationParser,
     HTTPConfiguration: HTTPConfiguration,
     JwtConfigurationParser: JwtConfigurationParser,

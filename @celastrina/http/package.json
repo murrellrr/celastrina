@@ -2,7 +2,7 @@
   "name": "@celastrina/http",
   "version": "2.0.17",
   "description": "HTTP Function Package for Celastrina",
-  "main": "index.js",
+  "main": "HTTP.js",
   "scripts": {
     "test": "mocha"
   },

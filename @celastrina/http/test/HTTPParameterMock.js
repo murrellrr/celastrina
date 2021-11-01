@@ -1,4 +1,4 @@
-const {HTTPParameter} = require("../index");
+const {HTTPParameter} = require("../HTTP");
 const {CelastrinaError} = require("../../core/Core");
 class MockHTTPParameter extends HTTPParameter {
     constructor(type = "MockHTTPParameter", readOnly = true, value = {mock_key: "Mock Value"}) {

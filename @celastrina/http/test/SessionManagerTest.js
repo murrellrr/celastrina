@@ -1,6 +1,6 @@
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration} = require("../../core/Core");
 const {Cookie, CookieParameter, Session, SessionManager, SecureSessionManager, AESSessionManager, JwtConfiguration,
-       LocalJwtIssuer} = require("../index");
+       LocalJwtIssuer} = require("../HTTP");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockHTTPContext} = require("./HTTPContextTest");
 const {MockHTTPParameter} = require("./HTTPParameterMock");

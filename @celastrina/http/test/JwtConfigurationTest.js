@@ -1,5 +1,5 @@
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration} = require("../../core/Core");
-const {HTTPParameter, HeaderParameter, JwtConfiguration} = require("../index");
+const {HTTPParameter, HeaderParameter, JwtConfiguration} = require("../HTTP");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockHTTPContext} = require("./HTTPContextTest");
 const {MockBaseIssuer} = require("./BaseIssuerTest");

@@ -1,5 +1,5 @@
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL} = require("../../core/Core");
-const {Cookie} = require("../index");
+const {Cookie} = require("../HTTP");
 const assert = require("assert");
 const moment = require("moment");
 

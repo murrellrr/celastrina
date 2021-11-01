@@ -4,7 +4,7 @@ const axios = require("axios");
 const {v4: uuidv4} = require("uuid");
 const moment = require("moment");
 const assert = require("assert");
-const {OpenIDJwtIssuer} = require("../index");
+const {OpenIDJwtIssuer} = require("../HTTP");
 
 const PRIVATE_PEM =
     "-----BEGIN RSA PRIVATE KEY-----\n" +

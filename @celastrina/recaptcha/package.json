@@ -1,0 +1,29 @@
+{
+  "name": "@celastrina/recaptcha",
+  "version": "1.0.0",
+  "description": "HTTP function using Google RECAPTCHA Sentry",
+  "main": "Recapchta.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/murrellrr/celastrina.git",
+    "directory": "@celastrina/recaptcha"
+  },
+  "keywords": [
+    "celastrinajs",
+    "HTTP",
+    "JSON",
+    "RECAPTCHA",
+    "captcha",
+    "Azure",
+    "Function"
+  ],
+  "author": "Robert R Murrell",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/murrellrr/celastrina/issues"
+  },
+  "homepage": "https://github.com/murrellrr/celastrina#readme"
+}

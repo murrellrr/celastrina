@@ -1359,7 +1359,7 @@ class CoreConfigParser extends ConfigParser {
     async _createRoleFactory(_Object) {
         if(_Object.hasOwnProperty("roleFactory") && (typeof _Object.roleFactory === "object") &&
             _Object.roleFactory != null) {
-            this._config[Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY] = _Object.roleFactory;
+            this._config[Configuration.CONFIG_ROLE_FACTORY] = _Object.roleFactory;
         }
     }
     /**
@@ -1381,21 +1381,20 @@ class CoreConfigParser extends ConfigParser {
  * @abstract
  */
 class AddOn {
-    constructor() {
+    constructor(name = "AddOn") {
+        this._name = name;
         this._config = null;
     }
+    /**@return{string}*/get name() {return this._name;}
+    /**@return{boolean}*/get wrapping() {return this._config != null;}
     /**
-     * @param {AttributeParser} parser
+     * @return {ConfigParser}
      */
-    addAttributeParser(parser) {}
+    getConfigParser() {return null;}
     /**
-     * @param {ConfigParser} parser
+     * @return {AttributeParser}
      */
-    addConfigParser(parser) {}
-    /**
-     * @param {Object} config
-     */
-    addConfiurations(config) {}
+    getAttributeParser() {return null;}
     /**
      * @param {Object} config
      */
@@ -1412,9 +1411,9 @@ class Configuration {
     /**@type{string}*/static PROP_LOCAL_DEV = "celastringjs.core.property.deployment.local.development";
     /**@type{string}*/static CONFIG_SENTRY = "celastrinajs.core.sentry";
     /**@type{string}*/static CONFIG_PERMISSION = "celastrinajs.core.sentry.permission";
+    /**@type{string}*/static CONFIG_ROLE_FACTORY = "celastrinajs.core.sentry.role.factory";
     /**@type{string}*/static CONFIG_RESOURCE = "celastrinajs.core.resource";
     /**@type{string}*/static CONFIG_AUTHORIATION_OPTIMISTIC = "celastrinajs.core.authorization.optimistic";
-    /**@type{string}*/static CONFIG_AUTHORIATION_ROLE_FACTORY = "celastrinajs.core.authorization.role.factory";
     /**
      * @param{string} name
      * @param {(null|string)} property
@@ -1428,6 +1427,7 @@ class Configuration {
         /**@type{Object}*/this._config = {};
         /**@type{AttributeParser}*/this._atp = null;
         /**@type{ConfigParser}*/this._cfp = null;
+        this._addOns = {};
         /**@type{(null|string)}*/this._property = property;
         if(this._property != null) {
             if(typeof property !== "string" || property.trim().length === 0)
@@ -1450,7 +1450,7 @@ class Configuration {
         this._config[Configuration.CONFIG_RESOURCE] = new ResourceManager();
         this._config[Configuration.CONFIG_PERMISSION] = new PermissionManager();
         this._config[Configuration.CONFIG_AUTHORIATION_OPTIMISTIC] = false;
-        this._config[Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY] = new BaseRoleFactory();
+        this._config[Configuration.CONFIG_ROLE_FACTORY] = new BaseRoleFactory();
         this._config[Configuration.CONFIG_SENTRY] = new Sentry();
     }
     /**@return{string}*/get name(){return this._config[Configuration.CONFIG_NAME];}
@@ -1460,7 +1460,7 @@ class Configuration {
     /**@return{boolean}*/get loaded(){return this._loaded;}
     /**@return{Sentry}*/get sentry() {return this._config[Configuration.CONFIG_SENTRY];}
     /**@return{PermissionManager}*/get permissions() {return this._config[Configuration.CONFIG_PERMISSION];}
-    /**@return{RoleFactory}*/get roleFactory() {return this._config[Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY];}
+    /**@return{RoleFactory}*/get roleFactory() {return this._config[Configuration.CONFIG_ROLE_FACTORY];}
     /**@return{ResourceManager}*/get resources() {return this._config[Configuration.CONFIG_RESOURCE];}
     /**@return{boolean}*/get authorizationOptimistic() {return this._config[Configuration.CONFIG_AUTHORIATION_OPTIMISTIC];}
     /**@return{AttributeParser}*/get contentParser() {return this._atp;}
@@ -1478,7 +1478,7 @@ class Configuration {
      * @return {Configuration}
      */
     setRoleFactory(factory) {
-        this._config[Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY] = factory;
+        this._config[Configuration.CONFIG_ROLE_FACTORY] = factory;
         return this;
     }
     /**
@@ -1520,15 +1520,37 @@ class Configuration {
     }
     /**
      * @param {AddOn} addOn
+     */
+    _wrap(addOn) {
+        if(!(addOn instanceof AddOn))
+            throw CelastrinaValidationError.newValidationError("Argument 'addOn' is required.", "addOn");
+        this._addOns[addOn.name] = addOn;
+        addOn.wrap(this._config);
+    }
+    /**
+     * @param {AddOn} addOn
      * @return {Configuration}
      */
     addOn(addOn) {
-        if(typeof addOn === "undefined" || addOn == null)
-            throw CelastrinaValidationError.newValidationError("Argument 'addOn' is required.", "addOn");
-        addOn.addConfigParser(this._cfp);
-        addOn.addAttributeParser(this._atp);
-        addOn.addConfiurations(this._config);
+        this._wrap(addOn);
+        let _acfp = addOn.getConfigParser();
+        if(_acfp != null) this._cfp.addLink(_acfp);
+        let _aatp = addOn.getAttributeParser();
+        if(_aatp != null) this._atp.addLink(_aatp);
         return this;
+    }
+    /**
+     * @param {string} name
+     * @param {AddOn} [defaultValue=null]
+     * @return {Promise<AddOn>}
+     */
+    async getAddOn(name, defaultValue = null) {
+        let _addon = this._addOns[name];
+        if(_addon instanceof AddOn) return _addon;
+        else {
+            if((defaultValue instanceof AddOn) && !defaultValue.wrapping) this._wrap(defaultValue);
+            return defaultValue;
+        }
     }
     /**
      * @param {AttributeParser} parser

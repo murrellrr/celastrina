@@ -31,7 +31,7 @@ describe("Sentry", () => {
             let _resolver = new MockRoleFactory();
             let _config = new Configuration("mock_configuration");
             let _azcontext = new MockAzureFunctionContext();
-            _config.setValue(Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY, _resolver);
+            _config.setValue(Configuration.CONFIG_ROLE_FACTORY, _resolver);
             _config.setAuthorizationOptimistic(true);
             await _config.initialize(_azcontext);
             await _config.ready();
@@ -45,7 +45,7 @@ describe("Sentry", () => {
             let _config = new Configuration("mock_configuration");
             let _azcontext = new MockAzureFunctionContext();
             _config.setAuthorizationOptimistic(true);
-            _config.setValue(Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY, _resolver);
+            _config.setValue(Configuration.CONFIG_ROLE_FACTORY, _resolver);
             await _config.initialize(_azcontext);
             await _config.ready();
             let _context = new Context(_config);
@@ -63,7 +63,7 @@ describe("Sentry", () => {
                 let _config = new Configuration("mock_configuration");
                 let _azcontext = new MockAzureFunctionContext();
                 let _context = new Context(_config);
-                _config.setValue(Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY, _resolver);
+                _config.setValue(Configuration.CONFIG_ROLE_FACTORY, _resolver);
                 await _config.initialize(_azcontext);
                 await _config.ready();
                 let _err = new CelastrinaError("Not Authorized.", 401);
@@ -75,7 +75,7 @@ describe("Sentry", () => {
                 let _azcontext = new MockAzureFunctionContext();
                 let _context = new Context(_config);
                 let _perm = new Permission("process", ["role1", "role2"], new MatchNone());
-                _config.setValue(Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY, _resolver);
+                _config.setValue(Configuration.CONFIG_ROLE_FACTORY, _resolver);
                 _config.permissions.addPermission(_perm);
                 await _config.initialize(_azcontext);
                 await _config.ready();
@@ -93,7 +93,7 @@ describe("Sentry", () => {
                 _config.setAuthorizationOptimistic(true);
                 let _azcontext = new MockAzureFunctionContext();
                 let _context = new Context(_config);
-                _config.setValue(Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY, _resolver);
+                _config.setValue(Configuration.CONFIG_ROLE_FACTORY, _resolver);
                 await _config.initialize(_azcontext);
                 await _config.ready();
                 let _subject = await _config.sentry.authenticate(_context);
@@ -106,7 +106,7 @@ describe("Sentry", () => {
                 let _azcontext = new MockAzureFunctionContext();
                 let _context = new Context(_config);
                 let _perm = new Permission("process", ["role1", "role2"], new MatchNone());
-                _config.setValue(Configuration.CONFIG_AUTHORIATION_ROLE_FACTORY, _resolver);
+                _config.setValue(Configuration.CONFIG_ROLE_FACTORY, _resolver);
                 _config.permissions.addPermission(_perm);
                 await _config.initialize(_azcontext);
                 await _config.ready();

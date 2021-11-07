@@ -1,10 +1,43 @@
-const {CelastrinaError, Configuration, AppSettingsPropertyManager, ResourceManager, PermissionManager, AttributeParser,
-       ConfigParser, CelastrinaValidationError, AppRegistrationResource, Permission, MatchAny, MatchAll, MatchNone} = require("../Core");
+const {CelastrinaError, AddOn, Configuration, AppSettingsPropertyManager, ResourceManager, PermissionManager,
+       AttributeParser, ConfigParser, CelastrinaValidationError, AppRegistrationResource, Permission, MatchAny,
+       MatchAll, MatchNone} = require("../Core");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockPropertyManager} = require("./PropertyManagerTest");
 const {MockResourceManager} = require("./ResourceAuthorizationTest");
 const assert = require("assert");
 const fs = require("fs");
+
+class MockAddOn extends AddOn {
+    constructor() {
+        super("MockAddOn");
+        this.invokedGetConfigParser = false;
+        this.invokedGetAttributeParser = false;
+        this.invokedWrap = false;
+    }
+    reset() {
+        this.invokedGetConfigParser = false;
+        this.invokedGetAttributeParser = false;
+        this.invokedWrap = false;
+    }
+    /**
+     * @return {ConfigParser}
+     */
+    getConfigParser() {
+        this.invokedGetConfigParser = true;
+        return null;
+    }
+    /**
+     * @return {AttributeParser}
+     */
+    getAttributeParser() {
+        this.invokedGetAttributeParser = true;
+        return null;
+    }
+    wrap(config) {
+        this.invokedWrap = true;
+        super.wrap(config);
+    }
+}
 
 describe("Configuration", () => {
     describe("#constructor(name)", () => {
@@ -239,6 +272,58 @@ describe("Configuration", () => {
             assert.notStrictEqual(_loader.getValue(Configuration.CONFIG_PERMISSION), null, "PermissionManager null.");
             /**@type{PermissionManager}*/let _permissions = _loader.getValue(Configuration.CONFIG_PERMISSION);
             assert.deepStrictEqual(_permissions._permissions, {}, "mock-process-1 correct.");
+        });
+    });
+    describe("AddOns", () => {
+        it("should complete add-on life cycle", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config = new Configuration("mock_configuration");
+            let _pm = new MockPropertyManager();
+            let _rm = new MockResourceManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
+            let _addon = new MockAddOn();
+            assert.deepStrictEqual(_config.addOn(_addon), _config, "Returns _config.");
+            assert.strictEqual(_addon.invokedGetConfigParser, true, "Expected to invoke getAttributeParser.");
+            assert.strictEqual(_addon.invokedGetConfigParser, true, "Expected to invoke getConfigParser.");
+            assert.strictEqual(_addon.invokedWrap, true, "Expected to invoke wrap.");
+            assert.strictEqual(_config._addOns.hasOwnProperty("MockAddOn"), true, "Expected add-on to be in the config addOns.");
+        });
+        it("gets add-on", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config = new Configuration("mock_configuration");
+            let _pm = new MockPropertyManager();
+            let _rm = new MockResourceManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
+            let _addon = new MockAddOn();
+            _config.addOn(_addon);
+            assert.deepStrictEqual(await _config.getAddOn(_addon.name), _addon, "Expected _addon.");
+        });
+        it("gets default add-on", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config = new Configuration("mock_configuration");
+            let _pm = new MockPropertyManager();
+            let _rm = new MockResourceManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
+            let _addon = new MockAddOn();
+            assert.deepStrictEqual(await _config.getAddOn(_addon.name, _addon), _addon, "Expected _addon.");
+            assert.strictEqual(_addon.invokedWrap, true, "Expected to invoke wrap.");
+        });
+        it("gets default add-on, only wraps once.", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config = new Configuration("mock_configuration");
+            let _pm = new MockPropertyManager();
+            let _rm = new MockResourceManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
+            let _addon = new MockAddOn();
+            await _config.getAddOn(_addon.name, _addon);
+            assert.strictEqual(_addon.invokedWrap, true, "Expected to invoke wrap.");
+            _addon.reset();
+            await _config.getAddOn(_addon.name, _addon);
+            assert.strictEqual(_addon.invokedWrap, false, "Expected not to invoke wrap.");
         });
     });
 });

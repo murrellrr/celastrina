@@ -176,7 +176,7 @@ describe("AppConfigPropertyManager", () => {
             let _config = new Configuration("mock_configuration");
             _config.setAuthorizationOptimistic(true);
             let _appcfg = new AppConfigPropertyManager("mock-app-config");
-            _config.setConfigurationItem(_appcfg);
+            _config.setValue(Configuration.CONFIG_PROPERTY, _appcfg);
             let _azcontext = new MockAzureFunctionContext();
             let _mockendpoint = new MockAppConfigEndpoint("mock-app-config");
             process.env["IDENTITY_ENDPOINT"] = "https://fake-azure-security-endpoint/";
@@ -195,7 +195,7 @@ describe("AppConfigPropertyManager", () => {
             let _config = new Configuration("mock_configuration");
             _config.setAuthorizationOptimistic(true);
             let _appcfg = new AppConfigPropertyManager("mock-app-config");
-            _config.setConfigurationItem(_appcfg);
+            _config.setValue(Configuration.CONFIG_PROPERTY, _appcfg);
             let _azcontext = new MockAzureFunctionContext();
             let _mockendpoint = new MockAppConfigEndpoint("mock-app-config");
             process.env["IDENTITY_ENDPOINT"] = "https://fake-azure-security-endpoint/";
@@ -215,7 +215,7 @@ describe("AppConfigPropertyManager", () => {
             let _config = new Configuration("mock_configuration");
             _config.setAuthorizationOptimistic(true);
             let _appcfg = new AppConfigPropertyManager("mock-app-config");
-            _config.setConfigurationItem(_appcfg);
+            _config.setValue(Configuration.CONFIG_PROPERTY, _appcfg);
             let _azcontext = new MockAzureFunctionContext();
             let _mockendpoint = new MockAppConfigEndpoint("mock-app-config");
             process.env["IDENTITY_ENDPOINT"] = "https://fake-azure-security-endpoint/";

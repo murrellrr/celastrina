@@ -103,5 +103,5 @@ describe("AuthorizationManager", () => {
 
 module.exports = {
     MockResourceAuthorization: MockResourceAuthorization,
-    MockAuthorizationManager: MockResourceManager
+    MockResourceManager: MockResourceManager
 };

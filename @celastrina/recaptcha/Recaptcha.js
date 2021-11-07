@@ -27,6 +27,8 @@
  * @license MIT
  */
 "use strict";
+const axios = require("axios").default;
+const {CelastrinaValidationError, CelastrinaError} = require("../core");
 
 // const axios       = require("axios").default;
 // const querystring = require("querystring");

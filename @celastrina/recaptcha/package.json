@@ -25,5 +25,8 @@
   "bugs": {
     "url": "https://github.com/murrellrr/celastrina/issues"
   },
-  "homepage": "https://github.com/murrellrr/celastrina#readme"
+  "homepage": "https://github.com/murrellrr/celastrina#readme",
+  "dependencies": {
+    "@celastrina/http": "^4.0.0"
+  }
 }

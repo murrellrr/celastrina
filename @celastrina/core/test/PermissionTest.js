@@ -1,4 +1,4 @@
-const {CelastrinaError, MatchAny, MatchNone, BaseSubject, Permission} = require("../Core");
+const {CelastrinaError, MatchAny, MatchNone, Subject, Permission} = require("../Core");
 const assert = require("assert");
 
 describe("Permission", () => {
@@ -8,8 +8,8 @@ describe("Permission", () => {
             assert.strictEqual(_permission.action, "mock_action");
         });
         it("Sets roles", () => {
-            let _permission = new Permission("mock_action", ["role1"]);
-            assert.strictEqual(_permission._roles.includes("role1"), true);
+            let _permission = new Permission("mock_action",["role1"]);
+            assert.strictEqual(_permission._roles.has("role1"), true);
         });
         it("Sets ValueMatch", () => {
             let _permission = new Permission("mock_action", ["role1"], new MatchNone());
@@ -21,13 +21,13 @@ describe("Permission", () => {
         });
         it("Defaults roles to empty array", () => {
             let _permission = new Permission("mock_action");
-            assert.strictEqual(_permission._roles.length, 0);
+            assert.strictEqual(_permission._roles.size, 0);
         });
     });
     describe("roles", () => {
         describe("#get roles()", () => {
             it("returns roles set in constructor", () => {
-                let _roles = ["role1, role2"];
+                let _roles = new Set(["role1", "role2"]);
                 let _permission = new Permission("mock_action", _roles);
                 assert.deepStrictEqual(_permission.roles, _roles);
             });
@@ -39,7 +39,7 @@ describe("Permission", () => {
             });
             it("Adds role to permission", () => {
                 _permission.addRole("role1");
-                assert.strictEqual(_permission._roles.includes("role1"), true);
+                assert.strictEqual(_permission._roles.has("role1"), true);
             });
         });
         describe("#addRoles(roles)", () => {
@@ -49,19 +49,19 @@ describe("Permission", () => {
             });
             it("Adds role to permission", () => {
                 _permission.addRoles(["role3", "role4"]);
-                assert.strictEqual(_permission._roles.includes("role3"), true);
-                assert.strictEqual(_permission._roles.includes("role4"), true);
+                assert.strictEqual(_permission._roles.has("role3"), true);
+                assert.strictEqual(_permission._roles.has("role4"), true);
             });
         });
     });
     describe("#authorize(subject)", () => {
-        let _permission = new Permission("mock_action", ["role1","role2"]);
+        let _permission = new Permission("mock_action", new Set(["role1","role2"]));
         it("Matching roles, any", async () => {
-            let _subject = new BaseSubject("mock_user", ["role2","role3"]);
+            let _subject = new Subject("mock_user", new Set(["role2","role3"]));
             assert.strictEqual(await _permission.authorize(_subject), true);
         });
         it("Matching roles, none", async () => {
-            let _subject = new BaseSubject("mock_user", ["role3","role4"]);
+            let _subject = new Subject("mock_user", new Set(["role3","role4"]));
             assert.strictEqual(await _permission.authorize(_subject), false);
         });
     });

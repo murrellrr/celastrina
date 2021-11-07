@@ -1,66 +1,71 @@
-const {CelastrinaError, LOG_LEVEL, Configuration, BaseSentry, BaseSubject, BaseContext} = require("../Core");
+const {CelastrinaError, LOG_LEVEL, Configuration, Sentry, Subject, Context} = require("../Core");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockResourceAuthorization} = require("./ResourceAuthorizationTest");
 const {MockPropertyManager} = require("./PropertyManagerTest");
 const assert = require("assert");
 
-class MockContext extends BaseContext {
+class MockContext extends Context {
     constructor(azcontext, config) {
-        super(azcontext, config);
+        super(config);
     }
     setMonitorMode() {this._monitor = true;}
 }
 
 
 describe("BaseContext", () => {
-    describe("#constructor(azcontext, config)", () => {
+    describe("#constructor(azcontext, config)", async () => {
         let _config = new Configuration("mock_configuration");
         let _azcontext = new MockAzureFunctionContext();
+        await _config.initialize(_azcontext);
         it("sets azcontext and config", () => {
-            let _context = new BaseContext(_azcontext, _config);
-            assert.strictEqual(_context._azfunccontext, _azcontext);
+            let _context = new Context(_config);
             assert.strictEqual(_context._config, _config);
             assert.strictEqual(typeof _context._requestId, "string");
             assert.strictEqual(_context._monitor, false);
             assert.strictEqual(_context._action, "process");
         });
     });
-    describe("#get name()", () => {
+    describe("#get name()", async () => {
         let _config = new Configuration("mock_configuration");
         let _azcontext = new MockAzureFunctionContext();
-        let _context = new BaseContext(_azcontext, _config);
+        await _config.initialize(_azcontext);
+        let _context = new Context(_config);
         it("Has name 'mock_configuration'", () => {
             assert.strictEqual(_context.name, "mock_configuration");
         });
     });
-    describe("#get config()", () => {
+    describe("#get config()", async () => {
         let _config = new Configuration("mock_configuration");
         let _azcontext = new MockAzureFunctionContext();
-        let _context = new BaseContext(_azcontext, _config);
+        await _config.initialize(_azcontext);
+        let _context = new Context(_config);
         it("Has config", () => {
             assert.strictEqual(_context.config, _config);
         });
     });
-    describe("#get action()", () => {
+    describe("#get action()", async () => {
         let _config = new Configuration("mock_configuration");
         let _azcontext = new MockAzureFunctionContext();
-        let _context = new BaseContext(_azcontext, _config);
+        await _config.initialize(_azcontext);
+        let _context = new Context(_config);
         it("Has action 'process'", () => {
             assert.strictEqual(_context.action, "process");
         });
     });
-    describe("#get azureFunctionContext()", () => {
+    describe("#get azureFunctionContext()", async () => {
         let _config = new Configuration("mock_configuration");
         let _azcontext = new MockAzureFunctionContext();
-        let _context = new BaseContext(_azcontext, _config);
+        await _config.initialize(_azcontext);
+        let _context = new Context( _config);
         it("Has azureFunctionContext.", () => {
             assert.strictEqual(_context.azureFunctionContext, _azcontext);
         });
     });
-    describe("logging", () => {
+    describe("logging", async () => {
         let _config = new Configuration("mock_configuration");
         let _azcontext = new MockAzureFunctionContext();
-        let _context = new BaseContext(_azcontext, _config);
+        await _config.initialize(_azcontext);
+        let _context = new Context( _config);
         describe("#log(message, level = LOG_LEVEL.INFO, subject = null)", () => {
             it("Default logs to info", () => {
                 _azcontext.log.reset();
@@ -117,30 +122,22 @@ describe("BaseContext", () => {
             });
         });
     });
-    describe("sentry", () => {
+    describe("subject", async () => {
         let _config = new Configuration("mock_configuration");
         let _azcontext = new MockAzureFunctionContext();
-        let _context = new BaseContext(_azcontext, _config);
-        let _sentry = new BaseSentry();
-        it("Sets sentry passed in", () => {
-            _context.sentry = _sentry;
-            assert.strictEqual(_context.sentry, _sentry);
-        });
-    });
-    describe("subject", () => {
-        let _config = new Configuration("mock_configuration");
-        let _azcontext = new MockAzureFunctionContext();
-        let _context = new BaseContext(_azcontext, _config);
-        let _subject = new BaseSubject("mock_subject");
+        await _config.initialize(_azcontext);
+        let _context = new Context(_config);
+        let _subject = new Subject("mock_subject");
         it("Sets subject passed in", () => {
             _context.subject = _subject;
             assert.strictEqual(_context.subject, _subject);
         });
     });
-    describe("bindings", () => {
+    describe("bindings", async () => {
         let _config = new Configuration("mock_configuration");
         let _azcontext = new MockAzureFunctionContext();
-        let _context = new BaseContext(_azcontext, _config);
+        await _config.initialize(_azcontext);
+        let _context = new Context(_config);
         describe("#setBinding(name, value = null)", () => {
             it("Sets binding by name using default value null", () => {
                 _context.setBinding("mock_bindning-one");
@@ -162,20 +159,22 @@ describe("BaseContext", () => {
                 assert.deepStrictEqual(_context.getBinding("mock_bindning-two", 42), 42);
             });
         });
-        describe("#get properties()", () => {
+        describe("#get properties()", async () => {
             let _config = new Configuration("mock_configuration");
             let _azcontext = new MockAzureFunctionContext();
-            let _context = new BaseContext(_azcontext, _config);
+            await _config.initialize(_azcontext);
+            let _context = new Context(_config);
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             it("Has properties from configuration", () => {
                 assert.strictEqual(_context.properties, _pm);
             });
         });
-        describe("#done(value = null)", () => {
+        describe("#done(value = null)", async () => {
             let _config = new Configuration("mock_configuration");
             let _azcontext = new MockAzureFunctionContext();
-            let _context = new BaseContext(_azcontext, _config);
+            await _config.initialize(_azcontext);
+            let _context = new Context(_config);
             it("Defaults done to null", () => {
                 _context.done();
                 assert.strictEqual(_context._result, null);
@@ -190,19 +189,21 @@ describe("BaseContext", () => {
             });
         });
         describe("#initialize()", () => {
-            describe("Initializing trace ID if present.", () => {
+            describe("Initializing trace ID if present.", async () => {
                 let _config = new Configuration("mock_configuration");
                 let _azcontext = new MockAzureFunctionContext();
-                let _context = new BaseContext(_azcontext, _config);
+                await _config.initialize(_azcontext);
+                let _context = new Context(_config);
                 it("has trace ID", () => {
                     _context.initialize();
                     assert.strictEqual(_context.traceId, _azcontext.traceContext.traceparent);
                 });
             });
-            describe("Initializing in monitor mode..", () => {
+            describe("Initializing in monitor mode..", async () => {
                 let _config = new Configuration("mock_configuration");
                 let _azcontext = new MockAzureFunctionContext();
-                let _context = new BaseContext(_azcontext, _config);
+                await _config.initialize(_azcontext);
+                let _context = new Context(_config);
                 it("Monitor is true and response not null.", () => {
                     _context._monitor = true;
                     _context.initialize();

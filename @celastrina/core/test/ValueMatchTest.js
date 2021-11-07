@@ -16,7 +16,7 @@ describe("ValueMatch", () => {
         it("Throws Not Implemented exception", () => {
             let _vm = new ValueMatch();
             let _err = new CelastrinaError("Not Implemented.", 501);
-            assert.rejects(async () => {await _vm.isMatch([""], [""]);}, _err);
+            assert.rejects(async () => {await _vm.isMatch(new Set([""]), new Set([""]));}, _err);
         });
     });
     describe("MatchAll", () => {
@@ -28,13 +28,13 @@ describe("ValueMatch", () => {
         });
         describe("#isMatch(assertions, roles)", () => {
             it("Matches when all assertion are not found in values", async () => {
-                assert.strictEqual(await _vm.isMatch(["role1" , "role2"], ["role1" , "role2"]), true);
+                assert.strictEqual(await _vm.isMatch(new Set(["role1" , "role2"]), new Set(["role1" , "role2"])), true);
             });
             it("Does not match when at least one assertion is not found in values", async () => {
-                assert.strictEqual(await _vm.isMatch(["role1" , "role3"], ["role1" , "role2"]), false);
+                assert.strictEqual(await _vm.isMatch(new Set(["role1" , "role3"]), new Set(["role1" , "role2"])), false);
             });
             it("Does not match when all assertion are not found in values", async () => {
-                assert.strictEqual(await _vm.isMatch(["role3" , "role4"], ["role1" , "role2"]), false);
+                assert.strictEqual(await _vm.isMatch(new Set(["role3" , "role4"]), new Set(["role1" , "role2"])), false);
             });
         });
     });
@@ -47,10 +47,10 @@ describe("ValueMatch", () => {
         });
         describe("#isMatch(assertions, roles)", () => {
             it("Matches when any assertion is found in values", async () => {
-                assert.strictEqual(await _vm.isMatch(["role2", "role3"], ["role1", "role2"]), true);
+                assert.strictEqual(await _vm.isMatch(new Set(["role2", "role3"]), new Set(["role1", "role2"])), true);
             });
             it("Does not match when no assertion is found in values", async () => {
-                assert.strictEqual(await _vm.isMatch(["role3", "role4"], ["role1", "role2"]), false);
+                assert.strictEqual(await _vm.isMatch(new Set(["role3", "role4"]), new Set(["role1", "role2"])), false);
             });
         });
     });
@@ -63,13 +63,13 @@ describe("ValueMatch", () => {
         });
         describe("#isMatch(assertions, roles)", () => {
             it("Matches when all assertion are not found in values", async () => {
-                assert.strictEqual(await _vm.isMatch(["role3", "role4"], ["role1", "role2"]), true);
+                assert.strictEqual(await _vm.isMatch(new Set(["role3", "role4"]), new Set(["role1", "role2"])), true);
             });
             it("Does not match when at least one assertion is found in values", async () => {
-                assert.strictEqual(await _vm.isMatch(["role1", "role3"], ["role1", "role2"]), false);
+                assert.strictEqual(await _vm.isMatch(new Set(["role1", "role3"]), new Set(["role1", "role2"])), false);
             });
             it("Does not match when all assertion are found in values", async () => {
-                assert.strictEqual(await _vm.isMatch(["role1", "role2"], ["role1", "role2"]), false);
+                assert.strictEqual(await _vm.isMatch(new Set(["role1", "role2"]), new Set(["role1", "role2"])), false);
             });
         });
     });

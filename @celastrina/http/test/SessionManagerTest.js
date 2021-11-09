@@ -1,6 +1,7 @@
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration} = require("../../core/Core");
-const {Cookie, CookieParameter, Session, SessionManager, SecureSessionManager, AESSessionManager, JwtConfiguration,
-       LocalJwtIssuer} = require("../HTTP");
+const {Cookie, CookieParameter, Session, SessionManager, SecureSessionManager, AESSessionManager,
+       LocalJwtIssuer, JwtAddOn
+} = require("../HTTP");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockHTTPContext} = require("./HTTPContextTest");
 const {MockHTTPParameter} = require("./HTTPParameterMock");
@@ -35,8 +36,8 @@ class MockSessionManager extends SessionManager {
         this.newSessionInvoked = true;
         return super.newSession();
     }
-    async initialize(context) {
-        await super.initialize(context);
+    async initialize(context, pm, rm) {
+        await super.initialize(context, pm, rm);
         this.initializeInvoked = true;
     }
     async loadSession(context) {
@@ -96,16 +97,21 @@ describe("SessionManager", () => {
         });
     });
     describe("Accessors", () => {
-        let _azctx = new MockAzureFunctionContext();
-        /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("JwtSentryTest");
-        let _pm = new MockPropertyManager();
-        _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-        let _mctx = new MockHTTPContext(_azctx, _config);
         it("returns existing session", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config    = new Configuration("JwtSentryTest");
+            /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
+            let _pm = new MockPropertyManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            await _config.initialize(_azcontext);
+            await _config.ready();
+            let _context = new MockHTTPContext(_config);
+            await _context.initialize();
+
             let _mockparam = new MockHTTPParameter();
             _mockparam.stageParameter("mock_session", "{\"mockA\": \"valueA\", \"mockB\": \"valueB\"}");
             let _sm = new MockSessionManager(_mockparam, "mock_session", false);
-            let _session = await _sm.loadSession(_mctx);
+            let _session = await _sm.loadSession(_context);
             assert.strictEqual(_session instanceof Session, true, "Expecte true, not null instance of Session.");
             assert.strictEqual(_session.isNew, false, "Expecte false, not new.");
             assert.strictEqual(_session.doWriteSession, false, "Expecte false, not new, do not write.");
@@ -113,23 +119,38 @@ describe("SessionManager", () => {
             assert.strictEqual(await _session.getProperty("mockB"), "valueB", "Expecte 'valueB'.");
         });
         it("returns null session", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config    = new Configuration("JwtSentryTest");
+            /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
+            let _pm = new MockPropertyManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            await _config.initialize(_azcontext);
+            await _config.ready();
+            let _context = new MockHTTPContext(_config);
+            await _context.initialize();
+
             let _mockparam = new MockHTTPParameter();
             let _sm = new MockSessionManager(_mockparam, "mock_session", false);
-            let _session = await _sm.loadSession(_mctx);
+            let _session = await _sm.loadSession(_context);
             assert.strictEqual(_session, null, "Expecte null.");
         });
     });
     describe("loadSession(context)", () => {
-        let _azctx = new MockAzureFunctionContext();
-        /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("JwtSentryTest");
-        let _pm = new MockPropertyManager();
-        _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-        let _mctx = new MockHTTPContext(_azctx, _config);
         it("loads existing session", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config    = new Configuration("JwtSentryTest");
+            /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
+            let _pm = new MockPropertyManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            await _config.initialize(_azcontext);
+            await _config.ready();
+            let _context = new MockHTTPContext(_config);
+            await _context.initialize();
+
             let _mockparam = new MockHTTPParameter();
             _mockparam.stageParameter("mock_session", "{\"mockA\": \"valueA\", \"mockB\": \"valueB\"}");
             let _sm = new MockSessionManager(_mockparam, "mock_session", false);
-            let _session = await _sm.loadSession(_mctx);
+            let _session = await _sm.loadSession(_context);
             assert.strictEqual(_session instanceof Session, true, "Expecte true, not null instance of Session.");
             assert.strictEqual(_session.isNew, false, "Expecte false, not new.");
             assert.strictEqual(_session.doWriteSession, false, "Expecte false, not new, do not write.");
@@ -141,9 +162,19 @@ describe("SessionManager", () => {
             assert.strictEqual(_sm._saveSessionInvoked, false, "Expected false, _save not invoked.");
         });
         it("loads new session", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config    = new Configuration("JwtSentryTest");
+            /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
+            let _pm = new MockPropertyManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            await _config.initialize(_azcontext);
+            await _config.ready();
+            let _context = new MockHTTPContext(_config);
+            await _context.initialize();
+
             let _mockparam = new MockHTTPParameter();
             let _sm = new MockSessionManager(_mockparam, "mock_session", true);
-            let _session = await _sm.loadSession(_mctx);
+            let _session = await _sm.loadSession(_context);
             assert.strictEqual(_session instanceof Session, true, "Expecte true, not null instance of Session.");
             assert.strictEqual(_session.isNew, true, "Expecte true, new.");
             assert.strictEqual(_session.doWriteSession, true, "Expecte true, new, do write.");
@@ -154,9 +185,19 @@ describe("SessionManager", () => {
             assert.strictEqual(_sm._saveSessionInvoked, false, "Expected false, _save not invoked.");
         });
         it("loads null session", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config    = new Configuration("JwtSentryTest");
+            /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
+            let _pm = new MockPropertyManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            await _config.initialize(_azcontext);
+            await _config.ready();
+            let _context = new MockHTTPContext(_config);
+            await _context.initialize();
+
             let _mockparam = new MockHTTPParameter();
             let _sm = new MockSessionManager(_mockparam, "mock_session", false);
-            let _session = await _sm.loadSession(_mctx);
+            let _session = await _sm.loadSession(_context);
             assert.strictEqual(_session, null, "Expecte null.");
             assert.strictEqual(_sm.loadSessionInvoked, true, "Expected true, load invoked.");
             assert.strictEqual(_sm.newSessionInvoked, false, "Expected false, new not invoked.");
@@ -212,16 +253,20 @@ describe("AESSessionManager", () => {
             let _decipher = await _encrypt.createDecipher();
             _encookie = _cipher.update(_encookie, "utf8", "base64");
             _encookie += _cipher.final("base64");
-            let _azctx = new MockAzureFunctionContext();
-            _azctx.req.headers["cookie"] = "test=abc; celastrinajs_session=" + _encookie;
-            /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("JwtSentryTest");
+            let _azcontext = new MockAzureFunctionContext();
+            _azcontext.bindings.req.headers["cookie"] = "test=abc; celastrinajs_session=" + _encookie;
+            let _config    = new Configuration("JwtSentryTest");
+            /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn("JwtSentryTest");
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            let _mctx = new MockHTTPContext(_azctx, _config);
-            await _mctx._parseCookies();
+            await _config.initialize(_azcontext);
+            await _config.ready();
+            let _context = new MockHTTPContext(_config);
+            await _context.initialize();
+
             let _sm = new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter());
-            await _sm.initialize(_mctx);
-            /**@type{Session}*/let _session = await _sm.loadSession(_mctx);
+            await _sm.initialize(_context);
+            /**@type{Session}*/let _session = await _sm.loadSession(_context);
             assert.strictEqual(_session instanceof Session, true, "Expected instance of Session.");
             assert.strictEqual(_session.isNew, false, "Expected false.");
             assert.strictEqual(_session.doWriteSession, false, "Expectde false.");
@@ -231,22 +276,37 @@ describe("AESSessionManager", () => {
     });
     describe("#saveSession(session = null, context)", () => {
         it("Should encrypt session and set parameter", async () => {
-            let _azctx = new MockAzureFunctionContext();
-            /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("JwtSentryTest");
+            let _encookie = JSON.stringify({keyA: "valueA", keyB: "valueB"});
+            let _encrypt = AES256Algorithm.create({
+                key: "c2f9dab0ceae47d99c7bf4537fbb0c3a",
+                iv: "1234567890123456"
+            });
+            await _encrypt.initialize();
+            let _cipher = await _encrypt.createCipher();
+            let _decipher = await _encrypt.createDecipher();
+            _encookie = _cipher.update(_encookie, "utf8", "base64");
+            _encookie += _cipher.final("base64");
+            let _azcontext = new MockAzureFunctionContext();
+            _azcontext.bindings.req.headers["cookie"] = "test=abc; celastrinajs_session=" + _encookie;
+            let _config    = new Configuration("JwtSentryTest");
+            /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn("JwtSentryTest");
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            let _mctx = new MockHTTPContext(_azctx, _config);
-            await _mctx._parseCookies();
+            await _config.initialize(_azcontext);
+            await _config.ready();
+            let _context = new MockHTTPContext(_config);
+            await _context.initialize();
+
             let _sm = new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter());
-            await _sm.initialize(_mctx);
+            await _sm.initialize(_context);
             /**@type{Session}*/let _session = await _sm.newSession();
             await _session.setProperty("keyA", "valueA");
             await _session.setProperty("keyB", "valueB");
-            await _sm.saveSession(_session, _mctx);
+            await _sm.saveSession(_session, _context);
             assert.strictEqual(_session instanceof Session, true, "Expected instance of Session.");
             assert.strictEqual(_session.isNew, true, "Expected true.");
             assert.strictEqual(_session.doWriteSession, true, "Expectde true.");
-            assert.strictEqual(_mctx.getCookie("celastrinajs_session") == null, false, "Expected false.");
+            assert.strictEqual(_context.getCookie("celastrinajs_session") == null, false, "Expected false.");
         });
     });
 });

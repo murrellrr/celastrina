@@ -58,18 +58,7 @@ describe("Sentry", () => {
     });
     describe("#authorize(context, subject)", () => {
         describe("Pessimistic", () => {
-            it("Should throw error as not optimistic and no permissions are set.", async () => {
-                let _resolver = new MockRoleFactory();
-                let _config = new Configuration("mock_configuration");
-                let _azcontext = new MockAzureFunctionContext();
-                let _context = new Context(_config);
-                _config.setValue(Configuration.CONFIG_ROLE_FACTORY, _resolver);
-                await _config.initialize(_azcontext);
-                await _config.ready();
-                let _err = new CelastrinaError("Not Authorized.", 401);
-                await assert.rejects(_config.sentry.authenticate(_context), _err);
-            });
-            it("Should throw error as not optimistic and no permissions are set.", async () => {
+            it("Should throw authorization error as not optimistic and no permissions are set.", async () => {
                 let _resolver = new MockRoleFactory();
                 let _config = new Configuration("mock_configuration");
                 let _azcontext = new MockAzureFunctionContext();

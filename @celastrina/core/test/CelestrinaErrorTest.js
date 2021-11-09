@@ -367,7 +367,7 @@ describe("CelastrinaValidationError", () => {
     });
     describe("CelastrinaValidationError: Error Celastrina.", () => {
         let e1 = new CelastrinaValidationError("test", 999, true, "sample.tag", new Error("TestError"));
-        let e2 = CelastrinaValidationError.wrapError(e1);
+        let e2 = CelastrinaValidationError.wrapValidationError(e1);
         it("should set same object", () => {
             assert.strictEqual(e1, e2);
         });

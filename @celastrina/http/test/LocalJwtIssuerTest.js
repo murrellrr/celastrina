@@ -1,10 +1,11 @@
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration} = require("../../core/Core");
-const {LocalJwtIssuer, HTTPContext, Cookie, JwtSubject, JwtConfiguration, JwtSentry} = require("../HTTP");
+const {LocalJwtIssuer, HTTPContext, Cookie, JwtSubject, JwtAddOn, JwtSentry} = require("../HTTP");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockHTTPContext} = require("./HTTPContextTest");
 const assert = require("assert");
 const jwt = require("jsonwebtoken");
 const {MockPropertyManager} = require("../../core/test/PropertyManagerTest");
+const {Subject} = require("../../core");
 
 describe("LocalJwtIssuer", () => {
     describe("#constructor(issuer, keyProperty, audiences = null, assignments = null, validateNonce = false)", () => {
@@ -29,56 +30,82 @@ describe("LocalJwtIssuer", () => {
         it("Verifies valid token", async () => {
             let _mockpayload = {iss: "@celastrinajs/issuer/mock", aud: "aefff932-5d4e-4216-a117-0d42e47b06b7"};
             let _mocktoken = jwt.sign(_mockpayload, "celastrinajsmocktoken");
-            let _azctx  = new MockAzureFunctionContext();
-            _azctx.req.headers["authorization"] = "Bearer " + _mocktoken;
-            /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("JwtSentryTest");
+            let _azcontext  = new MockAzureFunctionContext();
+            _azcontext.req.headers["authorization"] = "Bearer " + _mocktoken;
+            /**@type{Configuration}*/let _config = new Configuration("JwtSentryTest");
+            /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn("JwtSentryTest");
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            await _config.initialize(_azcontext);
+            await _config.ready();
+            let _context = new MockHTTPContext(_config);
+            await _context.initialize();
+            let _subject = new Subject("1234567890");
+            let _jwtsubject = await JwtSubject.decode(_subject, _mocktoken);
             let _localjwt = new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]);
-            let _mctx = new MockHTTPContext(_azctx, _config);
-            let _subject = await JwtSubject.decode(_mocktoken);
-            assert.strictEqual(await _localjwt.verify(_mctx, _subject), true, "Expected true.");
+
+            let _assertion = {assignments: ["mock_user_role"], verified: true};
+            assert.deepStrictEqual(await _localjwt.verify(_context, _jwtsubject), _assertion, "Expected true.");
         });
         it("Does not verifies invalid issuer", async () => {
             let _mockpayload = {iss: "@celastrinajs/issuer/mock/invalid", aud: "aefff932-5d4e-4216-a117-0d42e47b06b7"};
             let _mocktoken = jwt.sign(_mockpayload, "celastrinajsmocktoken");
-            let _azctx  = new MockAzureFunctionContext();
-            /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("JwtSentryTest");
+            let _azcontext  = new MockAzureFunctionContext();
+            _azcontext.req.headers["authorization"] = "Bearer " + _mocktoken;
+            /**@type{Configuration}*/let _config = new Configuration("JwtSentryTest");
+            /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn("JwtSentryTest");
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _pm.mockProperty("celastrinajsmocktoken_prop", "celastrinajsmocktoken");
-            let _localjwt = new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken_prop", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]);
-            let _mctx = new MockHTTPContext(_azctx, _config);
-            let _subject = await JwtSubject.decode(_mocktoken);
-            assert.strictEqual(await _localjwt.verify(_mctx, _subject), false, "Expected false.");
+            await _config.initialize(_azcontext);
+            await _config.ready();
+            let _context = new MockHTTPContext(_config);
+            await _context.initialize();
+            let _subject = new Subject("1234567890");
+            let _jwtsubject = await JwtSubject.decode(_subject, _mocktoken);
+            let _localjwt = new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]);
+
+            let _assertion = {verified: false};
+            assert.deepStrictEqual(await _localjwt.verify(_context, _jwtsubject), _assertion, "Expected false.");
         });
         it("Does not verifies invalid audience", async () => {
             let _mockpayload = {iss: "@celastrinajs/issuer/mock", aud: "aefff932-5d4e-4216-a117-0d42e47b06b7_INVALID"};
             let _mocktoken = jwt.sign(_mockpayload, "celastrinajsmocktoken");
-            let _azctx  = new MockAzureFunctionContext();
-            /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("JwtSentryTest");
+            let _azcontext  = new MockAzureFunctionContext();
+            _azcontext.req.headers["authorization"] = "Bearer " + _mocktoken;
+            /**@type{Configuration}*/let _config = new Configuration("JwtSentryTest");
+            /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn("JwtSentryTest");
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _pm.mockProperty("celastrinajsmocktoken_prop", "celastrinajsmocktoken");
-            let _localjwt = new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken_prop", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]);
-            let _mctx = new MockHTTPContext(_azctx, _config);
-            let _subject = await JwtSubject.decode(_mocktoken);
-            assert.strictEqual(await _localjwt.verify(_mctx, _subject), false, "Expected false.");
+            await _config.initialize(_azcontext);
+            await _config.ready();
+            let _context = new MockHTTPContext(_config);
+            await _context.initialize();
+            let _subject = new Subject("1234567890");
+            let _jwtsubject = await JwtSubject.decode(_subject, _mocktoken);
+            let _localjwt = new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]);
+
+            let _assertion = {verified: false};
+            assert.deepStrictEqual(await _localjwt.verify(_context, _jwtsubject), _assertion, "Expected false.");
         });
         it("Does not verifies invalid token", async () => {
-            let _mockpayload = {iss: "@celastrinajs/issuer/mock", aud: "aefff932-5d4e-4216-a117-0d42e47b06b7_INVALID"};
+            let _mockpayload = {iss: "@celastrinajs/issuer/mock", aud: "aefff932-5d4e-4216-a117-0d42e47b06b7"};
             let _mocktoken = jwt.sign(_mockpayload, "celastrinajsmocktoken");
-            let _azctx  = new MockAzureFunctionContext();
-            /**@type{JwtConfiguration}*/let _config = new JwtConfiguration("JwtSentryTest");
+            let _azcontext  = new MockAzureFunctionContext();
+            _azcontext.req.headers["authorization"] = "Bearer " + _mocktoken;
+            /**@type{Configuration}*/let _config = new Configuration("JwtSentryTest");
+            /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn("JwtSentryTest");
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _pm.mockProperty("celastrinajsmocktoken_prop", "celastrinajsmocktoken");
-            let _localjwt = new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken_prop", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]);
-            let _mctx = new MockHTTPContext(_azctx, _config);
-            let _subject = await JwtSubject.decode(_mocktoken);
-            // Gonne break the token
-            _subject._token += "invalid";
-            assert.strictEqual(await _localjwt.verify(_mctx, _subject), false, "Expected false.");
+            await _config.initialize(_azcontext);
+            await _config.ready();
+            let _context = new MockHTTPContext(_config);
+            await _context.initialize();
+            let _subject = new Subject("1234567890");
+            let _jwtsubject = await JwtSubject.decode(_subject, _mocktoken + "_INVALID");
+            let _localjwt = new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]);
+
+            let _assertion = {verified: false};
+            assert.deepStrictEqual(await _localjwt.verify(_context, _jwtsubject), _assertion, "Expected false.");
         });
     });
 });

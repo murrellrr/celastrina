@@ -58,10 +58,24 @@ const {TokenResponse, AuthenticationContext} = require("adal-node");
  * @property {string} client_id
  */
 /**
+ * Use to type-safe-check across node packages.
+ * @param {string} type The celastrinajs typestring.
+ * @param {Object} source The object instance you would like to check
+ * @return {boolean} True, if the types is equalt to source.__type, false otherwise.
+ */
+function instanceOfCelastringType(type, source) {
+    if(((typeof source === "undefined") || source == null) || (typeof type !== "string")) return false;
+    if(source.hasOwnProperty("__type") && (typeof source.__type === "string"))
+        return type === source.__type;
+    else
+        return false;
+}
+/**
  * CelastrinaError
  * @author Robert R Murrell
  */
 class CelastrinaError extends Error {
+    static CELASTRINAJS_ERROR_TYPE = "celastrinajs.core.CelastrinaError";
     /**
      * @param {string} message
      * @param {int} code
@@ -74,6 +88,7 @@ class CelastrinaError extends Error {
         /**@type{Error}*/this.cause = cause;
         /**@type{number}*/this.code = code;
         /**@type{boolean}*/this.drop = drop;
+        this.__type = CelastrinaError.CELASTRINAJS_ERROR_TYPE;
     }
     /**@return {string}*/toString() {
         return "[" + this.name + "][" + this.code + "][" + this.drop + "]: " + this.message;
@@ -98,7 +113,8 @@ class CelastrinaError extends Error {
         let ex = error;
         if(typeof ex === "undefined" || ex == null)
             return new CelastrinaError("Unhandled Exception.", code, drop);
-        if(ex instanceof CelastrinaError)
+
+        if(instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, ex))
             return ex;
         else if(typeof ex === "string" || typeof ex === "number"  || typeof ex === "boolean")
             return new CelastrinaError(ex, code, drop);
@@ -113,6 +129,7 @@ class CelastrinaError extends Error {
  * @author Robert R Murrell
  */
 class CelastrinaValidationError extends CelastrinaError {
+    static CELASTRINAJS_VALIDATION_ERROR_TYPE = "celastrinajs.core.CelastrinaValidationError";
     /**
      * @param {string} message
      * @param {int} code
@@ -123,6 +140,7 @@ class CelastrinaValidationError extends CelastrinaError {
     constructor(message, code = 400, drop = false, tag = "", cause = null) {
         super(message, code, drop, cause);
         /**@type{string}*/this.tag = tag;
+        this.__type = CelastrinaValidationError.CELASTRINAJS_VALIDATION_ERROR_TYPE;
     }
     /**@return {string}*/toString() {
         return "[" + this.name + "][" + this.code + "][" + this.drop + "][" + this.tag + "]: " + this.message;
@@ -149,7 +167,7 @@ class CelastrinaValidationError extends CelastrinaError {
         let ex = error;
         if(typeof ex === "undefined")
             return new CelastrinaValidationError("Unhandled Exception.", code, drop, tag);
-        if(ex instanceof CelastrinaValidationError)
+        if(instanceOfCelastringType(CelastrinaValidationError.CELASTRINAJS_VALIDATION_ERROR_TYPE, ex))
             return ex;
         else if(typeof ex === "string" || typeof ex === "number"  || typeof ex === "boolean")
             return new CelastrinaValidationError(ex, code, drop, tag);
@@ -165,6 +183,7 @@ class CelastrinaValidationError extends CelastrinaError {
  * @abstract
  */
 class ResourceAuthorization {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.ResourceAuthorization";
     /**
      * @param {string} id
      * @param {number} [skew=0]
@@ -173,6 +192,7 @@ class ResourceAuthorization {
         this._id = id;
         this._tokens = {};
         this._skew = skew;
+        this.__type = ResourceAuthorization.CELASTRINAJS_TYPE;
     }
     /**@return{string}*/get id(){return this._id;}
     /**
@@ -300,8 +320,10 @@ class AppRegistrationResource extends ResourceAuthorization {
  * ResourceManager
  */
 class ResourceManager {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.ResourceManager";
     constructor() {
         this._resources = {};
+        this.__type = ResourceManager.CELASTRINAJS_TYPE;
     }
     /**@return{Object}*/get authorizations() {return this._resources;}
     /**
@@ -349,7 +371,10 @@ class ResourceManager {
  * @author Robert R Murrell
  */
 class Vault {
-    constructor() {}
+    static CELASTRINAJS_TYPE = "celastrinajs.core.Vault";
+    constructor() {
+        this.__type = Vault.CELASTRINAJS_TYPE;
+    }
     /**
      * @param {string} token
      * @param {string} identifier
@@ -380,7 +405,10 @@ class Vault {
  * @author Robert R Murrell
  */
 class PropertyManager {
-    constructor(){}
+    static CELASTRINAJS_TYPE = "celastrinajs.core.PropertyManager";
+    constructor(){
+        this.__type = PropertyManager.CELASTRINAJS_TYPE;
+    }
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
@@ -540,7 +568,9 @@ class PropertyManager {
  * @author Robert R Murrell
  */
 class AppSettingsPropertyManager extends PropertyManager {
-    constructor(){super();}
+    constructor() {
+        super();
+    }
     /**@return{string}*/get name() {return "AppSettingsPropertyManager";}
     /**
      * @param {string} key
@@ -580,10 +610,8 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
         let _identityEndpoint = process.env["IDENTITY_ENDPOINT"];
         if(typeof _identityEndpoint === "undefined" || _identityEndpoint == null)
             throw CelastrinaError.newError("AppConfigPropertyManager requires User or System Assigned Managed Identy to be enabled.");
-        else {
-            azcontext.log.verbose("[AppConfigPropertyManager.initialize(azcontext, config)]: ManagedIdentityResource created.");
+        else
             this._auth = new ManagedIdentityResource();
-        }
     }
     /**
      * @param {_AzureFunctionContext} azcontext
@@ -591,7 +619,6 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
      * @return {Promise<void>}
      */
     async ready(azcontext, config) {
-        azcontext.log.info("[AppConfigPropertyManager.ready(azcontext, config)]: Added ManagedIdentityResource to authorization context.");
         config[Configuration.CONFIG_RESOURCE].addResource(this._auth);
     }
     /**
@@ -637,7 +664,7 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
                 return _value.value;
         }
         catch(exception) {
-            if(exception instanceof CelastrinaError)
+            if(instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, exception))
                 throw exception;
             else if(typeof exception === "object" && exception.hasOwnProperty("response")) {
                 if(exception.response.status === 404)
@@ -671,6 +698,7 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
  * @author Robert R Murrell
  */
 class CachedProperty {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.CachedProperty";
     /**
      * @param {*} value
      * @param {number} [time=300]
@@ -682,6 +710,7 @@ class CachedProperty {
         /**@type{moment.DurationInputArg2} */this._unit = unit;
         /**@type{(null|moment.Moment)}*/this._expires = moment().add(this._time, this._unit);
         /**@type{(null|moment.Moment)}*/this._lastUpdate = moment();
+        this.__type = CachedProperty.CELASTRINAJS_TYPE;
     }
     /**@return{(null|moment.Moment)}*/get expires(){return this._expires;}
     /**@return{(null|moment.Moment)}*/get lastUpdated(){return this._lastUpdate;}
@@ -728,7 +757,7 @@ class CachedPropertyManager extends PropertyManager {
         for(let prop in this._cache) {
             if(this._cache.hasOwnProperty(prop)) {
                 let cached = this._cache[prop];
-                if (cached instanceof CachedProperty) promises.unshift(cached.clear());
+                if(instanceOfCelastringType(CachedProperty.CELASTRINAJS_TYPE, cached)) promises.unshift(cached.clear());
             }
         }
         await Promise.all(promises);
@@ -757,7 +786,7 @@ class CachedPropertyManager extends PropertyManager {
      */
     async getCacheInfo(key) {
         let cached = this._cache[key];
-        if (!(cached instanceof CachedProperty)) return null;
+        if(typeof cached === "undefined" || cached == null) return null;
         else return cached;
     }
     /**
@@ -770,7 +799,7 @@ class CachedPropertyManager extends PropertyManager {
      */
     async _getCache(key, defaultValue, func, construct) {
         let cached  = this._cache[key];
-        if(!(cached instanceof CachedProperty)) {
+        if(!instanceOfCelastringType(CachedProperty.CELASTRINAJS_TYPE, cached)) {
             let _value =await this._manager[func](key, defaultValue, construct);
             if(_value != null) this._cache[key] =  new CachedProperty(_value, this._defaultTime, this._defaultUnit);
             return _value;
@@ -880,9 +909,11 @@ class CachedPropertyManager extends PropertyManager {
  * @author Robert R Murrell
  */
 class PropertyManagerFactory {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.PropertyManagerFactory";
     /**@param{(null|string)}[name=null]*/
     constructor(name = null) {
         this._name = name;
+        this.__type = PropertyManagerFactory.CELASTRINAJS_TYPE;
     }
     /**@return{string}*/get name(){return this._name}
     /**
@@ -935,7 +966,9 @@ class PropertyManagerFactory {
  * @author Robert R Murrell
  */
 class AppConfigPropertyManagerFactory extends PropertyManagerFactory {
-    constructor(name = "celastrinajs.core.property.appconfig.config"){super(name);}
+    constructor(name = "celastrinajs.core.property.appconfig.config") {
+        super(name);
+    }
     /**@return{string}*/getName() {return "AppConfigPropertyManagerFactory";}
     /**
      * @param {{subscriptionId:string, resourceGroupName:string, configStoreName:string, label:(null|undefined|string),
@@ -961,6 +994,7 @@ class AppConfigPropertyManagerFactory extends PropertyManagerFactory {
  * @abstract
  */
 class ParserChain {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.ParserChain";
     /**
      * @param {string} [mime="application/celastrinajs+json"]
      * @param {string} [type="Object"]
@@ -976,6 +1010,7 @@ class ParserChain {
         /**@type{PropertyManager}*/this._pm = null;
         /**@type{_AzureFunctionContext}*/this._azcontext = null;
         /**@type{Object}*/this._config = null;
+        this.__type = ParserChain.CELASTRINAJS_TYPE;
     }
     /**
      * @param {Object} config
@@ -1111,6 +1146,7 @@ class ParserChain {
  * @author Robert R Murrell
  */
 class AttributeParser extends ParserChain {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.AttributeParser";
     static _CONFIG_PARSER_ATTRIBUTE_TYPE = "application/vnd.celastrinajs.attribute+json";
     /**
      * @param {string} [type="Object"]
@@ -1119,6 +1155,7 @@ class AttributeParser extends ParserChain {
      */
     constructor(type = "Object", link = null, version = "1.0.0") {
         super(AttributeParser._CONFIG_PARSER_ATTRIBUTE_TYPE, type, link, version);
+        this.__type = AttributeParser.CELASTRINAJS_TYPE;
     }
 }
 /**
@@ -1276,10 +1313,10 @@ class RoleFactoryParser extends AttributeParser {
     }
     /**
      * @param {Object} _RoleFactory
-     * @return {Promise<BaseRoleFactory>}
+     * @return {Promise<DefaultRoleFactory>}
      */
     async _create(_RoleFactory) {
-        return new BaseRoleFactory();
+        return new DefaultRoleFactory();
     }
 }
 /**
@@ -1296,6 +1333,7 @@ class ConfigParser extends ParserChain {
      */
     constructor(type = "Config", link = null, version = "1.0.0") {
         super(ConfigParser._CONFIG_PARSER_TYPE, type, link, version);
+        this.__type = "celastrinajs.core.ConfigParser";
     }
 }
 /**
@@ -1381,9 +1419,11 @@ class CoreConfigParser extends ConfigParser {
  * @abstract
  */
 class AddOn {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.AddOn";
     constructor(name = "AddOn") {
         this._name = name;
         this._config = null;
+        this.__type = AddOn.CELASTRINAJS_TYPE;
     }
     /**@return{string}*/get name() {return this._name;}
     /**@return{boolean}*/get wrapping() {return this._config != null;}
@@ -1395,6 +1435,14 @@ class AddOn {
      * @return {AttributeParser}
      */
     getAttributeParser() {return null;}
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param {PropertyManager} pm
+     * @param {ResourceManager} rm
+     * @param {PermissionManager} prm
+     * @return {Promise<void>}
+     */
+    async initialize(azcontext, pm, rm, prm) {};
     /**
      * @param {Object} config
      */
@@ -1442,6 +1490,7 @@ class Configuration {
             /**@type{AttributeParser}*/this._atp = new PropertyParser(new PermissionParser(
                                                                       new AppRegistrationResourceParser(new RoleFactoryParser())));
             /**@type{ConfigParser}*/this._cfp = new CoreConfigParser();
+            this.__type = "celastrinajs.core.Configuration";
         }
         /**@type{boolean}*/this._loaded = false;
         this._config[Configuration.CONFIG_CONTEXT] = null;
@@ -1450,7 +1499,7 @@ class Configuration {
         this._config[Configuration.CONFIG_RESOURCE] = new ResourceManager();
         this._config[Configuration.CONFIG_PERMISSION] = new PermissionManager();
         this._config[Configuration.CONFIG_AUTHORIATION_OPTIMISTIC] = false;
-        this._config[Configuration.CONFIG_ROLE_FACTORY] = new BaseRoleFactory();
+        this._config[Configuration.CONFIG_ROLE_FACTORY] = new DefaultRoleFactory();
         this._config[Configuration.CONFIG_SENTRY] = new Sentry();
     }
     /**@return{string}*/get name(){return this._config[Configuration.CONFIG_NAME];}
@@ -1520,37 +1569,30 @@ class Configuration {
     }
     /**
      * @param {AddOn} addOn
-     */
-    _wrap(addOn) {
-        if(!(addOn instanceof AddOn))
-            throw CelastrinaValidationError.newValidationError("Argument 'addOn' is required.", "addOn");
-        this._addOns[addOn.name] = addOn;
-        addOn.wrap(this._config);
-    }
-    /**
-     * @param {AddOn} addOn
      * @return {Configuration}
      */
     addOn(addOn) {
-        this._wrap(addOn);
-        let _acfp = addOn.getConfigParser();
-        if(_acfp != null) this._cfp.addLink(_acfp);
-        let _aatp = addOn.getAttributeParser();
-        if(_aatp != null) this._atp.addLink(_aatp);
+        if(!instanceOfCelastringType(AddOn.CELASTRINAJS_TYPE, addOn))
+            throw CelastrinaValidationError.newValidationError("Argument 'addOn' is required and must be of type '" +
+                                                                       AddOn.CELASTRINAJS_TYPE + "'.", "addOn");
+        this._addOns[addOn.name] = addOn;
+        addOn.wrap(this._config);
+        if(this._property != null) {
+            let _acfp = addOn.getConfigParser();
+            if (_acfp != null) this._cfp.addLink(_acfp);
+            let _aatp = addOn.getAttributeParser();
+            if (_aatp != null) this._atp.addLink(_aatp);
+        }
         return this;
     }
     /**
      * @param {string} name
-     * @param {AddOn} [defaultValue=null]
      * @return {Promise<AddOn>}
      */
-    async getAddOn(name, defaultValue = null) {
+    async getAddOn(name) {
         let _addon = this._addOns[name];
-        if(_addon instanceof AddOn) return _addon;
-        else {
-            if((defaultValue instanceof AddOn) && !defaultValue.wrapping) this._wrap(defaultValue);
-            return defaultValue;
-        }
+        if(typeof _addon !== "undefined") return _addon;
+        else return null;
     }
     /**
      * @param {AttributeParser} parser
@@ -1595,19 +1637,9 @@ class Configuration {
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {PropertyManager} pm
-     * @param {Object} config
-     * @param {AttributeParser} ctp
-     * @param {ConfigParser} cfp
-     * @return {Promise<void>}
-     */
-    async _installParsers(azcontext, pm, config, ctp, cfp) {}
-    /**
-     * @param {_AzureFunctionContext} azcontext
-     * @param {PropertyManager} pm
      * @return {Promise<void>}
      */
     async _load(azcontext, pm) {
-        await this._installParsers(azcontext, pm, this._config, this._atp, this._cfp);
         this._atp.initialize(azcontext, this._config);
         this._cfp.initialize(azcontext, this._config);
         let _pm = this._config[Configuration.CONFIG_PROPERTY];
@@ -1686,17 +1718,22 @@ class Configuration {
             return new AppSettingsPropertyManager();
         }
         else {
-            /**@type{(undefined|null|PropertyManager)}*/let _manager = this._config[Configuration.CONFIG_PROPERTY];
-            if(typeof _manager === "undefined" || _manager == null) {
+            /**@type{PropertyManager}*/let _manager = this._config[Configuration.CONFIG_PROPERTY];
+            if(typeof _manager == "undefined" || _manager == null) {
                 azcontext.log.info("[Configuration._getPropertyManager(azcontext)]: No property manager specified, defaulting to AppSettingsPropertyManager.");
                 _manager = new AppSettingsPropertyManager();
                 this._config[Configuration.CONFIG_PROPERTY] = _manager;
             }
-            else if(_manager instanceof PropertyManagerFactory) {
-                azcontext.log.info("[Configuration._getPropertyManager(azcontext)]: Found PropertyManagerFactory " + _manager.name + ", creating PropertyManager.");
-                _manager = _manager.createPropertyManager();
-                azcontext.log.info("[Configuration._getPropertyManager(azcontext)]: PropertyManager " + _manager.name + " created.");
-                this._config[Configuration.CONFIG_PROPERTY] = _manager;
+            else {
+                if (instanceOfCelastringType(PropertyManagerFactory.CELASTRINAJS_TYPE, _manager)) {
+                    /**@type{PropertyManagerFactory}*/let _factory = /**@type{PropertyManagerFactory}*/_manager;
+                    _manager = _factory.createPropertyManager();
+                    this._config[Configuration.CONFIG_PROPERTY] = _manager;
+                }
+                else if(!instanceOfCelastringType(PropertyManager.CELASTRINAJS_TYPE, _manager)) {
+                    azcontext.log.error("[Configuration._getPropertyManager(azcontext)]: Invalid property manager. Must be of type '" + PropertyManager.CELASTRINAJS_TYPE + "'");
+                    throw CelastrinaError.newError("Invalid property manager.");
+                }
             }
             return _manager;
         }
@@ -1712,34 +1749,31 @@ class Configuration {
      * @param {_AzureFunctionContext} azcontext
      * @param {PropertyManager} pm
      * @return {Promise<void>}
+     * @private
      */
     async _initPropertyManager(azcontext, pm) {
         await pm.initialize(azcontext, this._config);
-        azcontext.log.info("[Configuration._initPropertyManager(azcontext)]: PropertyManager Initialized.");
         await pm.ready(azcontext, this._config);
-        azcontext.log.info("[Configuration._initPropertyManager(azcontext)]: PropertyManager Ready.");
     }
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {PermissionManager} prm
      * @return {Promise<void>}
+     * @private
      */
     async _initPermissionManager(azcontext, prm) {
         await prm.initialize(azcontext, this._config);
-        azcontext.log.info("[Configuration._initPermissionManager(azcontext)]: PermissionManager Initialized.");
         await prm.ready(azcontext, this._config);
-        azcontext.log.info("[Configuration._initPermissionManager(azcontext)]: PermissionManager Ready.");
     }
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {ResourceManager} rm
      * @return {Promise<void>}
+     * @private
      */
     async _initResourceManager(azcontext, rm) {
         await rm.initialize(azcontext, this._config);
-        azcontext.log.info("[Configuration._initResourceManager(azcontext)]: ResourceManager Initialized.");
         await rm.ready(azcontext, this._config);
-        azcontext.log.info("[Configuration._initResourceManager(azcontext)]: ResourceManager Ready.");
     }
     /**
      * @param {_AzureFunctionContext} azcontext
@@ -1747,10 +1781,29 @@ class Configuration {
      * @param {ResourceManager} rm
      * @param {PermissionManager} prm
      * @return {Promise<void>}
+     * @private
      */
     async _initSentry(azcontext, pm, rm, prm) {
         /**@type{Sentry}*/let _sentry = this._config[Configuration.CONFIG_SENTRY];
         return _sentry.initialize(this);
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @param {PropertyManager} pm
+     * @param {ResourceManager} rm
+     * @param {PermissionManager} prm
+     * @return {Promise<void>}
+     * @private
+     */
+    async _initAddOns(azcontext, pm, rm, prm) {
+        let _promises = [];
+        for(let prop in this._addOns) {
+            if(this._addOns.hasOwnProperty(prop)) {
+                /**@type{AddOn}*/let _addon = this._addOns[prop];
+                _promises.unshift(_addon.initialize(azcontext, pm, rm, prm));
+            }
+        }
+        await Promise.all(_promises);
     }
     /**
      * @param {_AzureFunctionContext} azcontext
@@ -1766,13 +1819,12 @@ class Configuration {
      * @return {Promise<void>}
      */
     async initialize(azcontext) {
-        azcontext.log.info("[Configuration.initialize(azcontext)]: Preparing configuration.");
         this._config[Configuration.CONFIG_CONTEXT] = azcontext;
         if(!this._loaded) {
-            azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration not loaded, initializing.");
+            azcontext.log.info("[" + azcontext.bindingData.invocationId + "][Configuration.initialize(azcontext)]: Initializing Configuration.");
             let _name = this._config[Configuration.CONFIG_NAME];
             if(typeof _name !== "string" || _name.trim().length === 0 || _name.indexOf(' ') >= 0) {
-                azcontext.log.error("[Configuration.load(azcontext)]: Invalid Configuration. Name cannot be undefined, null, or 0 length.");
+                azcontext.log.error("[Configuration.load(azcontext)]: Invalid Configuration. Name cannot be undefined, null, or empty.");
                 throw CelastrinaValidationError.newValidationError("Name cannot be undefined, null, or 0 length.", Configuration.CONFIG_NAME);
             }
             await this._preInitialize(azcontext);
@@ -1784,11 +1836,10 @@ class Configuration {
             await this._initPermissionManager(azcontext, _prm);
             await this._initResourceManager(azcontext, _rm);
             await this._initSentry(azcontext, _pm, _rm, _prm);
+            await this._initAddOns(azcontext, _pm, _rm, _prm);
             await this._postInitialize(azcontext, _pm, _rm);
-            azcontext.log.info("[Configuration.initialize(azcontext)]: Initialization successful.");
+            azcontext.log.info("[" + azcontext.bindingData.invocationId + "][Configuration.initialize(azcontext)]: Initialization successful.");
         }
-        else
-            azcontext.log.info("[Configuration.initialize(azcontext)]: Configuration loaded, initilization not required.");
     }
     /**
      * @return{Promise<void>}
@@ -1797,6 +1848,7 @@ class Configuration {
 }
 /**@abstract*/
 class Algorithm {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.Algorithm";
     /**
      * @param {string} name
      */
@@ -1804,6 +1856,7 @@ class Algorithm {
         if(typeof name === "undefined" || name == null || name.trim().length === 0)
             throw CelastrinaValidationError.newValidationError("Argument 'name' cannot be undefined, null, or zero length.", "name");
         this._name = name;
+        this.__type = Algorithm.CELASTRINAJS_TYPE;
     }
     /**@return{string}*/get name(){return this._name;}
     /**@return{Promise<void>}*/
@@ -1856,8 +1909,12 @@ class AES256Algorithm extends Algorithm {
 }
 /** Cryptography */
 class Cryptography {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.Cryptography";
     /**@param{Algorithm}algorithm*/
-    constructor(algorithm){this._algorithm = algorithm;}
+    constructor(algorithm) {
+        this._algorithm = algorithm;
+        this.__type = Cryptography.CELASTRINAJS_TYPE;
+    }
     /**@return{Promise<void>}*/
     async initialize() {
         return this._algorithm.initialize();
@@ -1904,10 +1961,12 @@ const LOG_LEVEL = {TRACE: 0, VERBOSE: 1, INFO: 2, WARN: 3, ERROR: 4, THREAT: 5};
  * @author Robert R Murrell
  */
 class MonitorResponse {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.MonitorResponse";
     constructor() {
         this._passed = {};
         this._failed = {};
         this._passedCheck = false;
+        this.__type = MonitorResponse.CELASTRINAJS_TYPE;
     }
     /**@return{Object}*/get passed(){return this._passed;}
     /**@return{Object}*/get failed(){return this._failed;}
@@ -1936,11 +1995,15 @@ class MonitorResponse {
  * @author Robert R Murrell
  */
 class ValueMatch {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.ValueMatch";
     /**
      * @brief
      * @param {string} [type]
      */
-    constructor(type = "ValueMatch"){this._type = type}
+    constructor(type = "ValueMatch"){
+        this._type = type;
+        this.__type = ValueMatch.CELASTRINAJS_TYPE;
+    }
     /** @return {string} */get type(){return this._type;}
     /**
      * @param {Set<string>} assertion
@@ -2016,6 +2079,7 @@ class MatchNone extends ValueMatch {
  * @author Robert R Murrell
  */
 class Permission {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.Permission";
     /**
      * @param {string} action
      * @param {(Array<string>|Set<string>)} roles
@@ -2031,6 +2095,7 @@ class Permission {
             this._roles = new Set();
         this._action = action.toLowerCase();
         this._match = match;
+        this.__type = Permission.CELASTRINAJS_TYPE;
     }
     /**@return{string}*/get action(){return this._action;}
     /**@return{Set<string>}*/get roles(){return this._roles;}
@@ -2056,8 +2121,10 @@ class Permission {
  * @author Robert R Murrell
  */
 class PermissionManager {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.PermissionManager";
     constructor() {
         /**@type{Object}*/this._permissions = {};
+        this.__type = PermissionManager.CELASTRINAJS_TYPE;
     }
     /**@return{Object}*/get permissions() {return this._permissions;}
     /**
@@ -2091,12 +2158,15 @@ class PermissionManager {
     async ready(azcontext, config) {}
 }
 /**
- * BaseRoleFactory
+ * DefaultRoleFactory
  * @abstract
  * @author Robert R Murrell
  */
 class RoleFactory {
-    constructor() {}
+    static CELASTRINAJS_TYPE = "celastrinajs.core.RoleFactory";
+    constructor() {
+        this.__type = RoleFactory.CELASTRINAJS_TYPE;
+    }
     /**
      * @param {Context} context
      * @param {Subject} subject
@@ -2121,10 +2191,10 @@ class RoleFactory {
     async initialize(config) {};
 }
 /**
- * BaseRoleFactory
+ * DefaultRoleFactory
  * @author Robert R Murrell
  */
-class BaseRoleFactory extends RoleFactory {
+class DefaultRoleFactory extends RoleFactory {
     constructor() {super()}
     /**
      * @param {Context} context
@@ -2138,6 +2208,7 @@ class BaseRoleFactory extends RoleFactory {
  * @author Robert R Murrell
  */
 class Subject {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.Subject";
     /**
      * @param {string} id
      * @param {Array<string>} [roles=[]]
@@ -2147,6 +2218,7 @@ class Subject {
         this._claims = claims;
         this._claims.sub = id;
         /**@type{Set}*/this._roles = new Set(roles);
+        this.__type = Subject.CELASTRINAJS_TYPE;
     }
     /**@return{string}*/get id(){return this._claims.sub;}
     /**@return{Set<string>}*/get roles() {return this._roles;}
@@ -2180,32 +2252,54 @@ class Subject {
      * @param {string} role
      * @return {Promise<boolean>}
      */
-    async isInRole(role) {return this._roles.has(role);}
+    async isInRole(role) {return this.isInRoleSync(role);}
+    /**
+     * @param {string} role
+     * @return {boolean}
+     */
+    isInRoleSync(role) {return this._roles.has(role);}
     /**
      * @param {string} claim
      * @return{boolean}
      * @return {Promise<boolean>}
      */
-    async hasClaim(claim) {return this._claims.hasOwnProperty(claim);}
+    async hasClaim(claim) {return this.hasClaimSync(claim);}
+    /**
+     * @param {string} claim
+     * @return{boolean}
+     * @return {boolean}
+     */
+    hasClaimSync(claim) {return this._claims.hasOwnProperty(claim);}
     /**
      * @param {string} key
      * @param {(null|string)} defaultValue
-     * @return {Promise<void>}
+     * @return {Promise<*>}
      */
-    async getClaim(key, defaultValue = null) {
+    async getClaim(key, defaultValue = null) {return this.getClaimSync(key, defaultValue);}
+    /**
+     * @param {string} key
+     * @param {(null|string)} defaultValue
+     * @return {*}
+     */
+    getClaimSync(key, defaultValue = null) {
         let _claim = this._claims[key];
-        if(typeof _claim === "string") return _claim;
-        else return defaultValue;
+        if(typeof _claim == "undefined" || _claim == null) _claim = defaultValue;
+        return _claim;
     }
     /**
      * @param {Object} claims
      * @return {Promise<void>}
      */
-    async getClaims(claims) {
+    async getClaims(claims) {return this.getClaimsSync(claims);}
+    /**
+     * @param {Object} claims
+     * @return {void}
+     */
+    getClaimsSync(claims) {
         for(let _prop in claims) {
             if(claims.hasOwnProperty(_prop)) {
                 let _value = this._claims[_prop];
-                if(typeof _value === "string") claims[_prop] = _value;
+                if(typeof _value !== "undefined") claims[_prop] = _value;
             }
         }
     }
@@ -2215,6 +2309,7 @@ class Subject {
  * @author Robert R Murrell
  */
 class Asserter {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.Asserter";
     /**
      * @param {Context} context
      * @param {Subject} subject
@@ -2234,6 +2329,7 @@ class Asserter {
         this._optimistic = optimistic;
         this._assertions = {};
         this._assignments = new Set();
+        this.__type = Asserter.CELASTRINAJS_TYPE;
     }
     /**@return{Context}*/get context() {return this._context;}
     /**@return{Subject}*/get subject() {return this._subject;}
@@ -2277,19 +2373,22 @@ class Asserter {
     }
 }
 /**
- * BaseAuthenticator
+ * Authenticator
  * @authro Robert R Murrell
+ * @abstract
  */
-class BaseAuthenticator {
-    constructor(name = "BaseAuthenticator", required = false, link = null) {
+class Authenticator {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.Authenticator";
+    constructor(name = "Authenticator", required = false, link = null) {
         this._name = name;
         this._required = required;
-        /**@type{BaseAuthenticator}*/this._link = link;
+        /**@type{Authenticator}*/this._link = link;
+        this.__type = Authenticator.CELASTRINAJS_TYPE;
     }
     /**@return{string}*/get name() {return this._name;}
     /**@return{boolean}*/get required() {return this._required;}
     /**
-     * @param {BaseAuthenticator} link
+     * @param {Authenticator} link
      */
     addLink(link) {(this._link == null) ? this._link = link : this._link.addLink(link);}
     /**
@@ -2300,7 +2399,7 @@ class BaseAuthenticator {
         /**@type{boolean}*/let _result = await this._authenticate(assertion);
         if(!_result) {
             assertion.context.log("Subject '" + assertion.subject.id + "' failed to authenticate '" +
-                                          this._name + "'", LOG_LEVEL.THREAT, "BaseAuthenticator.authenticate(auth)");
+                                          this._name + "'", LOG_LEVEL.THREAT, "Authenticator.authenticate(auth)");
             if(this._required) throw CelastrinaError.newError("Not Authorized.", 401);
         }
         if(this._link != null) return this._link.authenticate(assertion);
@@ -2308,27 +2407,30 @@ class BaseAuthenticator {
     /**
      * @param {Asserter} assertion
      * @return {Promise<boolean>}
+     * @abstract
      */
     async _authenticate(assertion) {
-        return assertion.assert(this._name, false, null, "401 - Not Authorized.");
+        throw CelastrinaError.newError("Not Implemented.", 501);
     }
 }
 /**
- * BaseAuthorizor
+ * Authorizor
  * @authro Robert R Murrell
  */
-class BaseAuthorizor {
+class Authorizor {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.Authorizor";
     /**
      * @param {string} name
-     * @param {BaseAuthorizor} link
+     * @param {Authorizor} link
      */
     constructor(name= "BaseAuthorizor", link = null) {
         this._name = name;
         this._link = link;
+        this.__type = Authorizor.CELASTRINAJS_TYPE;
     }
     /**@return{string}*/get name() {return this._name;}
     /**
-     * @param {BaseAuthorizor} link
+     * @param {Authorizor} link
      */
     addLink(link) {(this._link == null) ? this._link = link : this._link.addLink(link);}
     /**
@@ -2339,7 +2441,7 @@ class BaseAuthorizor {
         /**@type{boolean}*/let _result = await this._authorize(assertion);
         if(!_result)
             assertion.context.log("Subject '" + assertion.subject.id + "' failed to authorize '" +
-                                          this._name + "'", LOG_LEVEL.THREAT, "BaseAuthorizor.authorize(context, subject, pm)");
+                                          this._name + "'", LOG_LEVEL.THREAT, "Authorizor.authorize(context, subject, pm)");
         if(this._link != null) return this._link.authorize(assertion);
     }
     /**
@@ -2348,7 +2450,7 @@ class BaseAuthorizor {
      */
     async _authorize(assertion) {
         /**@type{Permission}*/let _permission = assertion.permissions.getPermission(assertion.context.action);
-        if(!(_permission instanceof Permission))
+        if(_permission == null)
             return assertion.assert(this._name, assertion.optimistic);
         let _auth = await _permission.authorize(assertion.subject);
         let _msg = null;
@@ -2361,28 +2463,42 @@ class BaseAuthorizor {
  * @author Robert R Murrell
  */
 class Sentry {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.Sentry";
     constructor() {
         /**@type{boolean}*/this._optimistic = false;
-        /**@type{BaseAuthenticator}*/this._authenticator = new BaseAuthenticator();
-        /**@type{BaseAuthorizor}*/this._authorizor = new BaseAuthorizor();
+        /**@type{Authenticator}*/this._authenticator = null; // no authentication by default.
+        /**@type{Authorizor}*/this._authorizor = new Authorizor();
         /**@type{PermissionManager}*/this._permissions = null;
         /**@type{RoleFactory}*/this._roleFactory = null;
+        this.__type = Sentry.CELASTRINAJS_TYPE;
     }
     /**@return{boolean}*/get optimistic() {return this._optimistic;}
-    /**@return{BaseAuthenticator}*/get AuthenticatorChain() {return this._authenticator};
-    /**@return{BaseAuthorizor}*/get AuthorizorChain() {return this._authorizor};
+    /**@return{Authenticator}*/get AuthenticatorChain() {return this._authenticator};
+    /**@return{Authorizor}*/get AuthorizorChain() {return this._authorizor};
     /**@return{PermissionManager}*/get permissions() {return this._permissions;}
     /**@return{RoleFactory}*/get roleFactory() {return this._roleFactory;}
     /**
-     * @param {BaseAuthenticator} authenticator
+     * @param {Authenticator} authenticator
      * @return {Sentry}
      */
-    addAuthenticator(authenticator) {this._authenticator.addLink(authenticator);return this;}
+    addAuthenticator(authenticator) {
+        if(!instanceOfCelastringType(Authenticator.CELASTRINAJS_TYPE, authenticator))
+            throw CelastrinaValidationError.newValidationError("Argument 'authenticator' must be type Authenticator.", "authenticator");
+        if(this._authenticator == null) this._authenticator = authenticator;
+        else this._authenticator.addLink(authenticator);
+        return this;
+    }
     /**
-     * @param {BaseAuthorizor} authorizor
+     * @param {Authorizor} authorizor
      * @return {Sentry}
      */
-    addAuthorizor(authorizor) {this._authorizor.addLink(authorizor);return this;}
+    addAuthorizor(authorizor) {
+        if(!instanceOfCelastringType(Authorizor.CELASTRINAJS_TYPE, authorizor))
+            throw CelastrinaValidationError.newValidationError("Argument 'authorizor' must be type Authorizor.", "authorizor");
+        if(this._authorizor == null) this._authorizor = authorizor;
+        else this._authorizor.addLink(authorizor);
+        return this;
+    }
     /**
      * @param {Context} context
      * @return {Promise<Subject>}
@@ -2390,20 +2506,32 @@ class Sentry {
     async authenticate(context) {
         let _subject = new Subject(context.requestId);
         let _asserter = new Asserter(context, _subject, this._permissions, this._optimistic);
-        await this._authenticator.authenticate(_asserter);
-        let _authenticated = await _asserter.hasAffirmativeAssertion();
-        if(_authenticated || this._optimistic) {
-            if(!_authenticated)
-                context.log("Subject '" + _subject.id + "' failed to authenticate any authenticators but security is optimistic.",
-                                    LOG_LEVEL.THREAT, "Sentry.authenticate(context)");
-            await _asserter.assign(_subject); // assign roles from authenticators.
+
+        /* Default behavior is to run un-authenticated and rely on authorization to enforce optimism
+           when no authenticator is specified. This is to avoid scenarios where the default Authorizor by-default
+           returns true but optimistic is true and next link fails, making it pass authentication when optimistic.
+           Simply returning false from the Authenticator is not sufficient as it produces the wrong behavior, or a 401
+           instead of a 403. */
+        if(this._authenticator == null) {
             context.subject = _subject;
             return this._roleFactory.assignSubjectRoles(context, _subject); // assign roles from role factory.
         }
         else {
-            context.log("Subject '" + _subject.id + "' failed to authenticate any authenticators and security is not optimistic.",
-                                LOG_LEVEL.THREAT, "Sentry.authenticate(context)");
-            throw CelastrinaError.newError("Not Authorized.", 401);
+            await this._authenticator.authenticate(_asserter);
+            let _authenticated = await _asserter.hasAffirmativeAssertion();
+            if(_authenticated || this._optimistic) {
+                if(!_authenticated)
+                    context.log("Subject '" + _subject.id + "' failed to authenticate any authenticators but security is optimistic.",
+                        LOG_LEVEL.THREAT, "Sentry.authenticate(context)");
+                await _asserter.assign(_subject); // assign roles from authenticators.
+                context.subject = _subject;
+                return this._roleFactory.assignSubjectRoles(context, _subject); // assign roles from role factory.
+            }
+            else {
+                context.log("Subject '" + _subject.id + "' failed to authenticate any authenticators and security is not optimistic.",
+                    LOG_LEVEL.THREAT, "Sentry.authenticate(context)");
+                throw CelastrinaError.newError("Not Authorized.", 401);
+            }
         }
     }
     /**
@@ -2440,6 +2568,7 @@ class Sentry {
  * @author Robert R Murrell
  */
 class Context {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.Context";
     /**
      * @param {Configuration} config
      */
@@ -2452,6 +2581,7 @@ class Context {
         /**@type{Subject}*/this._subject = null;
         /**@type{string}*/this._action = "process";
         /**@type{*}*/this._result = null;
+        this.__type = Context.CELASTRINAJS_TYPE;
     }
     /**
      * @return {Promise<void>}
@@ -2533,10 +2663,12 @@ class Context {
  * @author Robert R Murrell
  */
 class BaseFunction {
+    static CELASTRINAJS_TYPE = "celastrinajs.core.BaseFunction";
     /**@param{Configuration}configuration*/
     constructor(configuration) {
         /**@type{Configuration}*/this._configuration = configuration;
         /**@type{Context}*/this._context = null;
+        this.__type = BaseFunction.CELASTRINAJS_TYPE;
     }
     /**@return{Context}*/get context() {return this._context;}
     /**@return{Configuration}*/get configuration() {return this._configuration;}
@@ -2553,13 +2685,13 @@ class BaseFunction {
     async bootstrap(azcontext) {
         await this._configuration.initialize(azcontext);
         /**@type{Sentry}*/let _sentry = await this._configuration.sentry;
-        if(!(_sentry instanceof Sentry)) {
-            azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.bootstrap(azcontext)]: Catostrophic Error! Sentry invalid after create.");
+        if(typeof _sentry === "undefined" || _sentry == null) {
+            azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.bootstrap(azcontext)]: Catostrophic Error! Sentry is null or undefined.");
             throw CelastrinaError.newError("Catostrophic Error! Sentry invalid.");
         }
         /**@type{Context}*/let _context = await this.createContext(this._configuration);
-        if(!(_context instanceof Context)) {
-            azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.bootstrap(azcontext)]: Catostrophic Error! Context invalid after create.");
+        if(typeof _context === "undefined" || _context == null) {
+            azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.bootstrap(azcontext)]: Catostrophic Error! Context is null or undefined.");
             throw CelastrinaError.newError("Catostrophic Error! Context invalid.");
         }
         await _context.initialize();
@@ -2624,7 +2756,6 @@ class BaseFunction {
       * @param {_AzureFunctionContext} azcontext The azcontext of the function.
       */
     async execute(azcontext) {
-        azcontext.log.info("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Life-cycle started.");
         try {
             await this.bootstrap(azcontext);
             if((typeof this._context !== "undefined") && this._context != null) {
@@ -2646,10 +2777,8 @@ class BaseFunction {
         }
         catch(exception) {
             try {
-                if((typeof this._context !== "undefined") && this._context != null) {
-                    azcontext.log.warn("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Exception Lifecycle.");
+                if((typeof this._context !== "undefined") && this._context != null)
                     await this.exception(this._context, exception);
-                }
                 else
                     azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Catostrophic Error! Context was null, skipping exception life-cycle.");
             }
@@ -2663,7 +2792,6 @@ class BaseFunction {
             try {
                 if((typeof this._context !== "undefined") && this._context != null) {
                     await this.terminate(this._context);
-                    azcontext.log.info("[" + azcontext.bindingData.invocationId + "][BaseFunction.execute(azcontext)]: Life-cycle completed.");
                     if (this._context.result == null)
                         azcontext.done();
                     else
@@ -2691,7 +2819,7 @@ class BaseFunction {
     _unhandled(context, exception) {
         /**@type{(exception|Error|CelastrinaError|*)}*/let ex = exception;
         if(typeof ex === "undefined" || ex == null) ex = CelastrinaError.newError("Unhandled server error.");
-        else if(!(ex instanceof CelastrinaError)) {
+        else if(!instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, ex)) {
             if(ex instanceof Error) ex = CelastrinaError.wrapError(ex);
             else ex = CelastrinaError.newError(ex);
         }
@@ -2700,6 +2828,7 @@ class BaseFunction {
     }
 }
 module.exports = {
+    instanceOfCelastringType: instanceOfCelastringType,
     CelastrinaError: CelastrinaError,
     CelastrinaValidationError: CelastrinaValidationError,
     LOG_LEVEL: LOG_LEVEL,
@@ -2731,11 +2860,11 @@ module.exports = {
     Permission: Permission,
     PermissionManager: PermissionManager,
     RoleFactory: RoleFactory,
-    BaseRoleFactory: BaseRoleFactory,
+    DefaultRoleFactory: DefaultRoleFactory,
     Subject: Subject,
     Asserter: Asserter,
-    BaseAuthenticator: BaseAuthenticator,
-    BaseAuthorizor: BaseAuthorizor,
+    Authenticator: Authenticator,
+    Authorizor: Authorizor,
     Sentry: Sentry,
     Context: Context,
     BaseFunction: BaseFunction

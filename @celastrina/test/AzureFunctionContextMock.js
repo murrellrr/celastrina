@@ -45,15 +45,18 @@ class MockAzureFunctionContext {
                                     "host": "original-azure-function-url",
                                     "origin": "https://functions.azure.com",
                                 },
+                                params: {},
                                 body: {},
                                 rawBody: {}
                              },
                              res: {
                                  headers: {
-                                     "content-type": "application/json"
+                                     "Content-Type": "application/json"
                                  },
                                  body: {},
-                                 rawBody: {}
+                                 rawBody: {},
+                                 status: 500,
+                                 cookies: null
                              },
                              mockBindingTwo: {key: "mock_key", value: "mock_value"}};
         this.bindingData  = {invocationId: "mock_invocation_id"};
@@ -72,8 +75,14 @@ class MockAzureFunctionContext {
     get req() {
         return this.bindings.req;
     }
+    set req(req) {
+        this.bindings.req = req;
+    }
     get res() {
         return this.bindings.res;
+    }
+    set res(res) {
+        this.bindings.res = res;
     }
     done(something) {
         this.doneInvoked = true;

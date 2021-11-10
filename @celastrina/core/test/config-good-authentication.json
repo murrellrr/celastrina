@@ -1,0 +1,61 @@
+{
+  "configurations": [
+    {
+      "_content": {
+        "type": "application/vnd.celastrinajs.config+json;Core"
+      },
+      "authentication": {
+        "optimistic": true,
+        "permissions": [
+          {
+            "_content": {
+              "type": "application/vnd.celastrinajs.attribute+json;Permission",
+              "version": "1.0.0"
+            },
+            "action": "mock-process-1",
+            "roles": {
+              "_content": {
+                "type": "application/vnd.celastrinajs.attribute+json;Property",
+                "version": "1.0.0"
+              },
+              "key": "mock_process-1-roles",
+              "type": "object"
+            },
+            "match": {
+              "type": "MatchAny"
+            }
+          },
+          {
+            "_content": {
+              "type": "application/vnd.celastrinajs.attribute+json;Permission"
+            },
+            "action": "mock-process-2",
+            "roles": [
+              "role-4",
+              "role-5",
+              "role-6"
+            ],
+            "match": {
+              "type": "MatchAll"
+            }
+          },
+          {
+            "_content": {
+              "type": "application/vnd.celastrinajs.attribute+json;Property+Permission"
+            },
+            "key": "mock_permission",
+            "type": "object"
+          },
+          {
+            "_content": {
+              "type": "application/vnd.celastrinajs.attribute+json;Property+[Permission]",
+              "expand": true
+            },
+            "key": "mock_permission_expand",
+            "type": "object"
+          }
+        ]
+      }
+    }
+  ]
+}

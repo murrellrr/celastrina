@@ -1,16 +1,41 @@
-const {CelastrinaError, ConfigurationItem, Configuration, AppSettingsPropertyManager, ResourceManager,
-       PermissionManager} = require("../Core");
+const {CelastrinaError, AddOn, Configuration, AppSettingsPropertyManager, ResourceManager, PermissionManager,
+       AttributeParser, ConfigParser, CelastrinaValidationError, AppRegistrationResource, Permission, MatchAny,
+       MatchAll, MatchNone} = require("../Core");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockPropertyManager} = require("./PropertyManagerTest");
-const {MockAuthorizationManager} = require("./ResourceAuthorizationTest");
+const {MockResourceManager} = require("./ResourceAuthorizationTest");
 const assert = require("assert");
+const fs = require("fs");
 
-class MockConfigurationItem extends ConfigurationItem {
+class MockAddOn extends AddOn {
     constructor() {
-        super();
+        super("MockAddOn");
+        this.invokedGetConfigParser = false;
+        this.invokedGetAttributeParser = false;
+        this.invokedWrap = false;
+        this.invokedInitialize = false;
     }
-    get key() {return "mock-key";}
-    get value() {return "mock-value";}
+    reset() {
+        this.invokedGetConfigParser = false;
+        this.invokedGetAttributeParser = false;
+        this.invokedWrap = false;
+        this.invokedInitialize = false;
+    }
+    getConfigParser() {
+        this.invokedGetConfigParser = true;
+        return null;
+    }
+    getAttributeParser() {
+        this.invokedGetAttributeParser = true;
+        return null;
+    }
+    wrap(config) {
+        this.invokedWrap = true;
+        super.wrap(config);
+    }
+    async initialize(azcontext, pm, rm, prm) {
+        this.invokedInitialize = true;
+    }
 }
 
 describe("Configuration", () => {
@@ -38,6 +63,33 @@ describe("Configuration", () => {
         it("Loaded must default false", () => {
             let _config = new Configuration("test");
             assert.strictEqual(_config.loaded, false);
+        });
+        it("Should succeed with valid property", () => {
+            let _loader = new Configuration("ConfigurationTest", "mock_property");
+            assert.strictEqual(_loader._property, "mock_property", "Set property");
+            assert.strictEqual(_loader._atp instanceof AttributeParser, true, "Content Parser is AttributeParser.");
+            assert.strictEqual(_loader._cfp instanceof ConfigParser, true, "Config Parser is ContentParser.");
+        });
+        it("Should load with null.", () => {
+            let _loader = new Configuration("ConfigurationTest");
+            assert.strictEqual(_loader.configParser, null, "Expected configParser to be null.");
+            assert.strictEqual(_loader.contentParser, null, "Expected contentParser to be null.");
+        });
+        it("Should fail with 0 length string", () => {
+            let _err = new CelastrinaValidationError("[Configuration][property]: Invalid string. Argument cannot be null or zero length.", 400, false, "property");
+            assert.throws(() => {let _loader = new Configuration("ConfigurationTest", "");}, _err);
+        });
+        it("Should fail with empty string", () => {
+            let _err = new CelastrinaValidationError("[Configuration][property]: Invalid string. Argument cannot be null or zero length.", 400, false, "property");
+            assert.throws(() => {let _loader = new Configuration("ConfigurationTest", "          ");}, _err);
+        });
+        it("Should trim string", () => {
+            let _loader = new Configuration("ConfigurationTest", "     mock_property     ");
+            assert.strictEqual(_loader._property, "mock_property", "Trim property");
+        });
+        it("Should fail when spaces are in the middle of string", () => {
+            let _err = new CelastrinaValidationError("[Configuration][property]: Invalid string. Argument cannot contain spaces.", 400, false, "property");
+            assert.throws(() => {let _loader = new Configuration("ConfigurationTest", "mock _ property");}, _err);
         });
     });
     describe("values", () => {
@@ -101,32 +153,23 @@ describe("Configuration", () => {
             });
         });
     });
-    describe("#setConfigurationItem(config)", () => {
-        it("must set configiration value", () => {
-            let _config = new Configuration("test");
-            let _mock = new MockConfigurationItem();
-            _config.setConfigurationItem(_mock);
-            let _result = _config.getValue("mock-key");
-            assert.strictEqual(_result, _mock);
-            assert.strictEqual(_result.value, "mock-value");
-        });
-    });
+
     describe("#initialize(azcontext)", () => {
         let _azcontext = new MockAzureFunctionContext();
         it("Should initialize specified property and authorization managers", async () => {
             let _config = new Configuration("mock_configuration");
             let _pm = new MockPropertyManager();
-            let _am = new MockAuthorizationManager();
+            let _rm = new MockResourceManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _config.setValue(Configuration.CONFIG_RESOURCE, _am);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
             await _config.initialize(_azcontext);
-            assert.strictEqual(_config.properties, _pm);
-            assert.strictEqual(_config.resources, _am);
+            assert.deepStrictEqual(_config.properties, _pm);
+            assert.deepStrictEqual(_config.resources, _rm);
             assert.strictEqual(_config.loaded, false, "Should not be loaded yet.");
             assert.strictEqual(_pm.initialized, true, "PropertyManager Initialized.");
             assert.strictEqual(_pm.readied, true, "PropertyManager Readied.");
-            assert.strictEqual(_am.initialized, true, "AuthorizationManager Initialized.");
-            assert.strictEqual(_am.readied, true, "AuthorizationManager Readied.");
+            assert.strictEqual(_rm.initialized, true, "AuthorizationManager Initialized.");
+            assert.strictEqual(_rm.readied, true, "AuthorizationManager Readied.");
         });
         it("Should initialize default property, permission, and authorization managers", async () => {
             let _config = new Configuration("mock_configuration");
@@ -135,6 +178,167 @@ describe("Configuration", () => {
             assert.strictEqual(_config.resources instanceof ResourceManager, true, "authorizations is ResourceManager.");
             assert.strictEqual(_config.permissions instanceof PermissionManager, true, "authorizations is PermissionManager.");
             assert.strictEqual(_config.loaded, false, "Should not be loaded yet.");
+        });
+        it("Should invoke configuration loader if present", async () => {
+            let _config = new Configuration("mock_configuration");
+            let _pm = new MockPropertyManager();
+            let _rm = new MockResourceManager();
+            _pm.mockProperty("mock_process-1-roles", "[\"role-1\", \"role-2\", \"role-3\"]");
+            _pm.mockProperty("mock_resources", "[{\"id\": \"mock-resource-1\", \"authority\": \"authority1\", \"tenant\":  \"tenant1\", \"secret\": \"secret1\"},{\"id\": \"mock-resource-2\", \"authority\": \"authority2\", \"tenant\":  \"tenant2\", \"secret\": \"secret2\"}]");
+            _pm.mockProperty("mock_permission", "{\"action\": \"mock-process-3\", \"roles\": [\"role-7\", \"role-8\", \"role-9\"], \"match\": {\"type\": \"MatchNone\"}}");
+            _pm.mockProperty("mock_permission_expand", "[{\"action\": \"mock-process-4\", \"roles\": [\"role-10\", \"role-11\", \"role-12\"], \"match\": {\"type\": \"MatchAny\"}}, {\"action\": \"mock-process-5\", \"roles\": [\"role-13\", \"role-14\", \"role-15\"], \"match\": {\"type\": \"MatchAny\"}}]");
+            _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good-all.json", "utf8"));
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
+            await _config.initialize(_azcontext);
+            assert.strictEqual(_config.properties, _pm);
+            assert.strictEqual(_config.resources, _rm);
+            assert.strictEqual(_config.loaded, false, "Should not be loaded yet.");
+            assert.strictEqual(_pm.initialized, true, "PropertyManager Initialized.");
+            assert.strictEqual(_pm.readied, true, "PropertyManager Readied.");
+            assert.strictEqual(_rm.initialized, true, "AuthorizationManager Initialized.");
+            assert.strictEqual(_rm.readied, true, "AuthorizationManager Readied.");
+        });
+    });
+    describe("#load(pm, config), resource config", () => {
+        let _loader = new Configuration("ConfigurationTest", "mock_property");
+        let _pm = new MockPropertyManager();
+        _pm.mockProperty("mock_resources", "[{\"id\": \"mock-resource-1\", \"authority\": \"authority1\", \"tenant\":  \"tenant1\", \"secret\": \"secret1\"},{\"id\": \"mock-resource-2\", \"authority\": \"authority2\", \"tenant\":  \"tenant2\", \"secret\": \"secret2\"}]");
+        _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good-resources.json", "utf8"));
+        let _azcontext = new MockAzureFunctionContext();
+        it("Sets resource authorizations", async () => {
+            _loader.setValue("celastrinajs.core.permission", new PermissionManager());
+            _loader.setValue("celastrinajs.core.resource", new ResourceManager());
+            _loader.setValue("celastrinajs.core.property.manager", _pm);
+            await assert.doesNotReject(_loader.initialize(_azcontext));
+            assert.notStrictEqual(_loader.getValue(Configuration.CONFIG_RESOURCE), null, "ResourceManager null.");
+            /**@type{ResourceManager}*/let _resources = _loader.getValue(Configuration.CONFIG_RESOURCE);
+            let _rm1 = new AppRegistrationResource("mock-resource-1", "authority1", "tenant1", "secret1");
+            let _rm2 = new AppRegistrationResource("mock-resource-2", "authority2", "tenant2", "secret2");
+            assert.deepStrictEqual(_resources._resources["mock-resource-1"], _rm1, "mock-resource-1 set.");
+            assert.deepStrictEqual(_resources._resources["mock-resource-2"], _rm2, "mock-resource-2 set.");
+            assert.deepStrictEqual(await _resources.getResource("mock-resource-1"), _rm1, "mock-resource-1 via getResource.");
+            assert.deepStrictEqual(await _resources.getResource("mock-resource-2"), _rm2, "mock-resource-2 via getResource.");
+        });
+    });
+    describe("#load(pm, config), full config", () => {
+        let _pm = new MockPropertyManager();
+        _pm.mockProperty("mock_process-1-roles", "[\"role-1\", \"role-2\", \"role-3\"]");
+        _pm.mockProperty("mock_resources", "[{\"id\": \"mock-resource-1\", \"authority\": \"authority1\", \"tenant\":  \"tenant1\", \"secret\": \"secret1\"},{\"id\": \"mock-resource-2\", \"authority\": \"authority2\", \"tenant\":  \"tenant2\", \"secret\": \"secret2\"}]");
+        _pm.mockProperty("mock_permission", "{\"action\": \"mock-process-3\", \"roles\": [\"role-7\", \"role-8\", \"role-9\"], \"match\": {\"type\": \"MatchNone\"}}");
+        _pm.mockProperty("mock_permission_expand", "[{\"action\": \"mock-process-4\", \"roles\": [\"role-10\", \"role-11\", \"role-12\"], \"match\": {\"type\": \"MatchAny\"}}, {\"action\": \"mock-process-5\", \"roles\": [\"role-13\", \"role-14\", \"role-15\"], \"match\": {\"type\": \"MatchAny\"}}]");
+        _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good-all.json", "utf8"));
+        let _azcontext = new MockAzureFunctionContext();
+        it("Sets permissions", async () => {
+            let _loader = new Configuration("ConfigurationTest", "mock_property");
+            _loader.setValue("celastrinajs.core.permission", new PermissionManager());
+            _loader.setValue("celastrinajs.core.resource", new ResourceManager());
+            _loader.setValue("celastrinajs.core.property.manager", _pm);
+            await assert.doesNotReject(_loader.initialize(_azcontext));
+            assert.notStrictEqual(_loader.getValue(Configuration.CONFIG_PERMISSION), null, "PermissionManager null.");
+            /**@type{PermissionManager}*/let _permissions = _loader.getValue(Configuration.CONFIG_PERMISSION);
+            let _pm1 = new Permission("mock-process-1", ["role-1", "role-2", "role-3"], new MatchAny());
+            let _pm2 = new Permission("mock-process-2", ["role-4", "role-5", "role-6"], new MatchAll());
+            let _pm3 = new Permission("mock-process-3", ["role-7", "role-8", "role-9"], new MatchNone());
+            assert.deepStrictEqual(_permissions._permissions["mock-process-1"], _pm1, "mock-process-1 correct.");
+            assert.deepStrictEqual(_permissions._permissions["mock-process-2"], _pm2, "mock-process-2 correct.");
+            assert.deepStrictEqual(_permissions._permissions["mock-process-3"], _pm3, "mock-process-3 correct.");
+            assert.deepStrictEqual(await _permissions.getPermission("mock-process-1"), _pm1, "mock-process-1 correct via getPermission.");
+            assert.deepStrictEqual(await _permissions.getPermission("mock-process-2"), _pm2, "mock-process-2 correct via getPermission.");
+            assert.deepStrictEqual(await _permissions.getPermission("mock-process-3"), _pm3, "mock-process-3 correct via getPermission.");
+        });
+        it("Sets resource authorizations", async () => {
+            let _loader = new Configuration("ConfigurationTest", "mock_property");
+            _loader.setValue("celastrinajs.core.permission", new PermissionManager());
+            _loader.setValue("celastrinajs.core.resource", new ResourceManager());
+            _loader.setValue("celastrinajs.core.property.manager", _pm);
+            await assert.doesNotReject(_loader.initialize(_azcontext));
+            assert.notStrictEqual(_loader.getValue(Configuration.CONFIG_RESOURCE), null, "ResourceManager null.");
+            /**@type{ResourceManager}*/let _resources = _loader.getValue(Configuration.CONFIG_RESOURCE);
+            let _rm1 = new AppRegistrationResource("mock-resource-1", "authority1", "tenant1", "secret1");
+            let _rm2 = new AppRegistrationResource("mock-resource-2", "authority2", "tenant2", "secret2");
+            assert.deepStrictEqual(_resources._resources["mock-resource-1"], _rm1, "mock-resource-1 set.");
+            assert.deepStrictEqual(_resources._resources["mock-resource-2"], _rm2, "mock-resource-2 set.");
+            assert.deepStrictEqual(await _resources.getResource("mock-resource-1"), _rm1, "mock-resource-1 via getResource.");
+            assert.deepStrictEqual(await _resources.getResource("mock-resource-2"), _rm2, "mock-resource-2 via getResource.");
+        });
+        it("Should do nothing when property is null.", async () => {
+            let _loader = new Configuration("ConfigurationTest");
+            _loader.setValue("celastrinajs.core.permission", new PermissionManager());
+            _loader.setValue("celastrinajs.core.resource", new ResourceManager());
+            _loader.setValue("celastrinajs.core.property.manager", _pm);
+            await assert.doesNotReject(_loader.initialize(_azcontext));
+            assert.notStrictEqual(_loader.getValue(Configuration.CONFIG_PERMISSION), null, "PermissionManager null.");
+            /**@type{PermissionManager}*/let _permissions = _loader.getValue(Configuration.CONFIG_PERMISSION);
+            assert.deepStrictEqual(_permissions._permissions, {}, "mock-process-1 correct.");
+        });
+    });
+    describe("AddOns", () => {
+        it("should complete add-on life cycle", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config = new Configuration("mock_configuration");
+            let _pm = new MockPropertyManager();
+            let _rm = new MockResourceManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
+            let _addon = new MockAddOn();
+            assert.deepStrictEqual(_config.addOn(_addon), _config, "Returns _config.");
+            assert.strictEqual(_addon.invokedWrap, true, "Expected to invoke wrap.");
+            assert.strictEqual(_config._addOns.hasOwnProperty("MockAddOn"), true, "Expected add-on to be in the config addOns.");
+        });
+        it("gets add-on", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config = new Configuration("mock_configuration");
+            let _pm = new MockPropertyManager();
+            let _rm = new MockResourceManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
+            let _addon = new MockAddOn();
+            _config.addOn(_addon);
+            assert.deepStrictEqual(await _config.getAddOn(_addon.name), _addon, "Expected _addon.");
+        });
+        it("not found add-on returns null", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config = new Configuration("mock_configuration");
+            let _pm = new MockPropertyManager();
+            let _rm = new MockResourceManager();
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
+            assert.deepStrictEqual(await _config.getAddOn("_addon.name"), null, "Expected null.");
+        });
+        it("should fail with null AddOn", () => {
+            let _config = new Configuration("mock_configuration");
+            let _error = CelastrinaValidationError.newValidationError("Argument 'addOn' is required and must be of type 'celastrinajs.core.AddOn'.", "addOn");
+            assert.throws(() => {
+                _config.addOn(null);
+            }, _error, "Expected exception.");
+        });
+        it("should fail with non AddOn", () => {
+            let _config = new Configuration("mock_configuration");
+            let _error = CelastrinaValidationError.newValidationError("Argument 'addOn' is required and must be of type 'celastrinajs.core.AddOn'.", "addOn");
+            assert.throws(() => {
+                _config.addOn({});
+            }, _error, "Expected exception.");
+        });
+        it("Should initialize add-ons", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config = new Configuration("mock_configuration", "mock_property");
+            let _pm = new MockPropertyManager();
+            let _rm = new MockResourceManager();
+            _pm.mockProperty("mock_process-1-roles", "[\"role-1\", \"role-2\", \"role-3\"]");
+            _pm.mockProperty("mock_resources", "[{\"id\": \"mock-resource-1\", \"authority\": \"authority1\", \"tenant\":  \"tenant1\", \"secret\": \"secret1\"},{\"id\": \"mock-resource-2\", \"authority\": \"authority2\", \"tenant\":  \"tenant2\", \"secret\": \"secret2\"}]");
+            _pm.mockProperty("mock_permission", "{\"action\": \"mock-process-3\", \"roles\": [\"role-7\", \"role-8\", \"role-9\"], \"match\": {\"type\": \"MatchNone\"}}");
+            _pm.mockProperty("mock_permission_expand", "[{\"action\": \"mock-process-4\", \"roles\": [\"role-10\", \"role-11\", \"role-12\"], \"match\": {\"type\": \"MatchAny\"}}, {\"action\": \"mock-process-5\", \"roles\": [\"role-13\", \"role-14\", \"role-15\"], \"match\": {\"type\": \"MatchAny\"}}]");
+            _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good-all.json", "utf8"));
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
+            let _addon = new MockAddOn();
+            _config.addOn(_addon);
+            await _config.initialize(_azcontext);
+            await _config.ready();
+            assert.strictEqual(_addon.invokedGetConfigParser, true, "Expected to invoke initialize.");
+            assert.strictEqual(_addon.invokedGetAttributeParser, true, "Expected to invoke initialize.");
+            assert.strictEqual(_addon.invokedInitialize, true, "Expected to invoke initialize.");
         });
     });
 });

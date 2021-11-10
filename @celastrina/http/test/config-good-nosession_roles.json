@@ -1,0 +1,10 @@
+{
+  "configurations": [
+    {
+      "_content": {"type": "application/vnd.celastrinajs.config+json;Core"},
+      "authentication": {
+        "optimistic": true
+      }
+    }
+  ]
+}

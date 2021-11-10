@@ -1,0 +1,18 @@
+{
+  "configurations": [
+    {
+      "_content": {
+        "type": "application/vnd.celastrinajs.config+json;Core"
+      },
+      "resources": {
+        "authorizations": {
+          "_content": {
+            "type": "application/vnd.celastrinajs.attribute+json;Property+[AppRegistrationResource]"
+          },
+          "key": "mock_resources",
+          "type": "object"
+        }
+      }
+    }
+  ]
+}

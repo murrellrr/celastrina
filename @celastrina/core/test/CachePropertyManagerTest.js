@@ -4,6 +4,7 @@ const {MockPropertyManager} = require("./PropertyManagerTest");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const assert = require("assert");
 const sinon = require("sinon");
+const moment = require("moment");
 
 class MockObject {
     constructor(key, value) {
@@ -18,7 +19,7 @@ function createMockObject(_Object) {
 describe("CachePropertyManager", () => {
     let _clock = null;
     before(() => {
-        _clock = sinon.useFakeTimers();
+        _clock = sinon.useFakeTimers(moment().toDate());
     });
     after(() => {
         sinon.clock.reset();

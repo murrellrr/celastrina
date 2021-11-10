@@ -1326,6 +1326,7 @@ class RoleFactoryParser extends AttributeParser {
  */
 class ConfigParser extends ParserChain {
     static _CONFIG_PARSER_TYPE = "application/vnd.celastrinajs.config+json";
+    static CELASTRINAJS_TYPE = "celastrinajs.core.ConfigParser";
     /**
      * @param {string} [type="Config"]
      * @param {ConfigParser} [link=null]
@@ -1333,7 +1334,7 @@ class ConfigParser extends ParserChain {
      */
     constructor(type = "Config", link = null, version = "1.0.0") {
         super(ConfigParser._CONFIG_PARSER_TYPE, type, link, version);
-        this.__type = "celastrinajs.core.ConfigParser";
+        this.__type = ConfigParser.CELASTRINAJS_TYPE;
     }
 }
 /**

@@ -1172,8 +1172,8 @@ class HTTPAddOn extends AddOn {
     constructor() {
         super(HTTPAddOn.CONFIG_ADDON_HTTP);
     }
-    getConfigParser() {return new HTTPConfigurationParser();}
-    getAttributeParser() {return new AESSessionManagerParser(new SessionRoleFactoryParser())}
+    /**@return {ConfigParser}*/getConfigParser() {return new HTTPConfigurationParser();}
+    /**@return {AttributeParser}*/getAttributeParser() {return new AESSessionManagerParser(new SessionRoleFactoryParser())}
     wrap(config) {
         super.wrap(config);
         this._config[HTTPAddOn.CONFIG_HTTP_SESSION_MANAGER] = null;
@@ -1227,15 +1227,15 @@ class JwtConfigurationParser extends ConfigParser {
  * JwtAddOn
  * @author Robert R Murrell
  */
-class JwtAddOn extends AddOn {
-    static CONFIG_ADDON_JWT = "celastrinajs.http.jwt.addon";
+class JwtAddOn extends HTTPAddOn {
+    static CONFIG_ADDON_JWT = HTTPAddOn.CONFIG_ADDON_HTTP;
     static CONFIG_JWT_ISSUERS = "celastrinajs.http.jwt.issuers";
     static CONFIG_JWT_TOKEN_PARAMETER = "celastrinajs.http.jwt.authorization.token.parameter";
     static CONFIG_JWT_TOKEN_NAME = "celastrinajs.http.jwt.authorization.token.name";
     static CONFIG_JWT_TOKEN_SCHEME = "celastrinajs.http.jwt.authorization.token.scheme";
     static CONFIG_JWT_TOKEN_SCHEME_REMOVE = "celastrinajs.http.jwt.authorization.token.scheme.remove";
     constructor() {
-        super(JwtAddOn.CONFIG_ADDON_JWT);
+        super();
     }
     wrap(config) {
         super.wrap(config);
@@ -1245,13 +1245,24 @@ class JwtAddOn extends AddOn {
         this._config[JwtAddOn.CONFIG_JWT_TOKEN_SCHEME] = "Bearer";
         this._config[JwtAddOn.CONFIG_JWT_TOKEN_SCHEME_REMOVE] = true;
     }
-    getConfigParser() {
-        return new JwtConfigurationParser();
+    /**@return{ConfigParser}*/getConfigParser() {
+        let _parser = super.getConfigParser();
+        let local = new JwtConfigurationParser();
+        if(instanceOfCelastringType(ConfigParser.CELASTRINAJS_TYPE, _parser))
+            _parser.addLink(local);
+        else _parser = local;
+        return _parser;
     }
-    getAttributeParser() {
-        return new OpenIDJwtIssuerParser(new LocalJwtIssuerParser(new HTTPParameterParser()));
+    /**@return{AttributeParser}*/getAttributeParser() {
+        let _parser = super.getAttributeParser();
+        let local = new OpenIDJwtIssuerParser(new LocalJwtIssuerParser(new HTTPParameterParser()))
+        if(instanceOfCelastringType(AttributeParser.CELASTRINAJS_TYPE, _parser))
+            _parser.addLink(local);
+        else _parser = local;
+        return _parser;
     }
     async initialize(azcontext, pm, rm, prm) {
+        await super.initialize(azcontext, pm, rm, prm);
         /**@type{Sentry}*/let _sentry = this._config[Configuration.CONFIG_SENTRY];
         _sentry.addAuthenticator(new JwtAuthenticator());
     }
@@ -1527,8 +1538,7 @@ class HTTPContext extends Context {
         if(body == null) body = "<html lang=\"en\"><head><title>" + this._config.name + "</title></head><body><header>302 - Redirect</header><main><p><h2>" + url + "</h2></main><footer>celastrinajs</footer></body></html>";
         this.send(body, 302);
     }
-    /**@param{string}url*/
-    sendRedirectForwardBody(url) {this.sendRedirect(url, this._config.context.req.body);}
+    /**@param{string}url*/sendRedirectForwardBody(url) {this.sendRedirect(url, this._config.context.req.body);}
     /**
      * @param {*} [error=null]
      * @param {*} [body=null]

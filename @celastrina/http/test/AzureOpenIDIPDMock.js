@@ -81,19 +81,25 @@ class MockMicrosoftOpenIDIDPServer {
         this._privateKey = privateKey;
         this._jwkToken = JSON.parse(JSON.stringify(jwk));
         this._jwkToken.kid = this._kid;
+        this._issuerPath = issuerPath;
         this._configurl = configPath.split("{domain}").join(this._domain).split("{tenant}")
             .join(this._tenant).split("{version}").join(this._version);
-        this._issuer = issuerPath.split("{domain}").join(this._domain).split("{tenant}")
+        this._issuer = this._issuerPath.split("{domain}").join(this._domain).split("{tenant}")
             .join(this._tenant).split("{version}").join(this._version);
         this._jwksUri = jwksUriPath.split("{domain}").join(this._domain).split("{tenant}")
             .join(this._tenant).split("{version}").join(this._version);
     }
+    set tenant(tenant) {this._tenant = tenant;}
     get domain() {return this._domain;}
     get tenant() {return this._tenant;}
     get version() {return this._version;}
     get configPath() {return this._configurl;}
     get issuerPath() {return this._issuer;}
     get jwksPath() {return this._jwksUri;}
+    rebuildIssuer() {
+        this._issuer = this._issuerPath.split("{domain}").join(this._domain).split("{tenant}")
+            .join(this._tenant).split("{version}").join(this._version);
+    }
     async createOpenIDIssuer(aud = [uuidv4()], foozleIssuer = false, assigments = ["mock_user_role"]) {
         let _lissuer = this._issuer;
         if(foozleIssuer) _lissuer += "_foozled";

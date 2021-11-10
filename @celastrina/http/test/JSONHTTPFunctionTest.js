@@ -425,57 +425,61 @@ describe("JSONHTTPFunction", () => {
     });
     describe("#execute(azcontext) with JWT header and session roles", () => {
         it("should pass jwt and load session", async () => {
-            // let _azctx      = new MockAzureFunctionContext();
-            // let _mockopenid = new MockMicrosoftOpenIDIDPServer();
-            // let _pm         = new MockPropertyManager();
-            // let _config     = new JwtConfiguration("JSONHTTPFunctionTest");
-            //
-            // _pm.mockProperty("celastrinajs_mock_action", "session_subject");
-            // _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            // _config.setSessionManager(new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter()));
-            // _config.permissions.addPermission(new Permission("get", ["mock_user_role", "mock_admin_role"], new MatchAll()));
-            // _config.setValue(JwtConfiguration.CONFIG_AUTHORIATION_ROLE_FACTORY, new SessionRoleFactory());
-            // _azctx.req.headers["host"] = "celastrinajs.com";
-            // _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
-            // _azctx.req.headers["accept"] = "*/*";
-            // _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
-            // _azctx.req.headers["connection"] = "keep-alive";
-            // _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookieroles + "; ";
-            // let _response = await _mockopenid.setHeader(_azctx.req.headers);
-            // _azctx.req.method = "get";
-            // _azctx.req.originalUrl = "https://api.celastrinajs.com";
-            // _config.addIssuer(await _mockopenid.createOpenIDIssuer([_response.aud]));
-            // let _function = new MockJSONHTTPFunction(_config);
-            //
-            // await _mockopenid.start();
-            // await _function.execute(_azctx);
-            // await _mockopenid.stop();
-            //
-            // assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
-            // assert.deepStrictEqual(_azctx.res.body, {mockA: "valueA", mockB: "valueB", subject: _response.sub}, "Expected default HTML.");
-        });
-        it("should fail not authorized", async () => {
-            let _azctx      = new MockAzureFunctionContext();
             let _mockopenid = new MockMicrosoftOpenIDIDPServer();
-            let _pm         = new MockPropertyManager();
-            let _config     = new JwtConfiguration("JSONHTTPFunctionTest");
-
+            let _azctx  = new MockAzureFunctionContext();
+            let _config = new Configuration("JSONHTTPFunctionTest");
+            let _httpconfig = new HTTPAddOn();
+            let _jwtconfig = new JwtAddOn();
+            let _pm = new MockPropertyManager();
             _pm.mockProperty("celastrinajs_mock_action", "session_subject");
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _config.setSessionManager(new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter()));
-            _config.permissions.addPermission(new Permission("get", ["mock_user_role", "mock_admin_role", "foozled_role"], new MatchAll()));
-            _config.setValue(JwtConfiguration.CONFIG_AUTHORIATION_ROLE_FACTORY, new SessionRoleFactory());
+            _config.addOn(_httpconfig).addOn(_jwtconfig);
+            _config.setValue(Configuration.CONFIG_ROLE_FACTORY, new SessionRoleFactory());
+            _config.permissions.addPermission(new Permission("get", ["mock_user_role", "mock_admin_role"], new MatchAny()));
+            _httpconfig.setSessionManager(new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter()));
+            let _function = new MockJSONHTTPFunction(_config);
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
-            _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookieroles + "; ";
-            let _response = await _mockopenid.setHeader(_azctx.req.headers);
+            _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookie + "; ";
             _azctx.req.method = "get";
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
-            _config.addIssuer(await _mockopenid.createOpenIDIssuer([_response.aud]));
+            let _response = await _mockopenid.setHeader(_azctx.req.headers);
+            _jwtconfig.addIssuer(await _mockopenid.createOpenIDIssuer([_response.aud]));
+
+            await _mockopenid.start();
+            await _function.execute(_azctx);
+            await _mockopenid.stop();
+
+            assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
+            assert.deepStrictEqual(_azctx.res.body, {mockA: "valueA", mockB: "valueB", subject: _response.sub}, "Expected default HTML.");
+        });
+        it("should fail not authorized", async () => {
+            let _mockopenid = new MockMicrosoftOpenIDIDPServer();
+            let _azctx  = new MockAzureFunctionContext();
+            let _config = new Configuration("JSONHTTPFunctionTest");
+            let _httpconfig = new HTTPAddOn();
+            let _jwtconfig = new JwtAddOn();
+            let _pm = new MockPropertyManager();
+            _pm.mockProperty("celastrinajs_mock_action", "session_subject");
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.addOn(_httpconfig).addOn(_jwtconfig);
+            _config.setValue(Configuration.CONFIG_ROLE_FACTORY, new SessionRoleFactory());
+            _config.permissions.addPermission(new Permission("get", ["mock_user_role", "mock_admin_role", "foozled_role"], new MatchAll()));
+            _httpconfig.setSessionManager(new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter()));
             let _function = new MockJSONHTTPFunction(_config);
+            _azctx.req.headers["host"] = "celastrinajs.com";
+            _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
+            _azctx.req.headers["accept"] = "*/*";
+            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["connection"] = "keep-alive";
+            _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookie + "; ";
+            _azctx.req.method = "get";
+            _azctx.req.originalUrl = "https://api.celastrinajs.com";
+            let _response = await _mockopenid.setHeader(_azctx.req.headers);
+            _jwtconfig.addIssuer(await _mockopenid.createOpenIDIssuer([_response.aud]));
 
             await _mockopenid.start();
             await _function.execute(_azctx);
@@ -485,43 +489,46 @@ describe("JSONHTTPFunction", () => {
             assert.deepStrictEqual(_azctx.res.body, {name:"CelastrinaError", message: "Forbidden.", tag: null, cause: null, code: 403, drop: false}, "Expected default HTML.");
         });
         it("should load from config, pass jwt OpenID and load session", async () => {
-            let _azctx      = new MockAzureFunctionContext();
-            let _mockopenid = new MockMicrosoftOpenIDIDPServer("1234567890");
-            let _pm         = new MockPropertyManager();
-            let _config     = new JwtConfiguration("JSONHTTPFunctionTest", "jwt_config");
-
+            let _mockopenid = new MockMicrosoftOpenIDIDPServer();
+            _mockopenid.tenant = "mock_tenant";
+            _mockopenid.rebuildIssuer();
+            let _azctx  = new MockAzureFunctionContext();
+            let _config = new Configuration("JSONHTTPFunctionTest", "jwt_config");
+            let _jwtconfig = new JwtAddOn();
+            let _pm = new MockPropertyManager();
             _pm.mockProperty("jwt_config", fs.readFileSync("./test/config-good-all.json").toString());
             _pm.mockProperty("celastrinajs_mock_action", "session_subject");
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-
+            _config.addOn(_jwtconfig);
+            let _function = new MockJSONHTTPFunction(_config);
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
             _azctx.req.headers["accept"] = "*/*";
-            _azctx.req.headers["accept-encoding"] = "gzip, deflate, br";
+            _azctx.req.headers["Accept-Encoding"] = "gzip, deflate, br";
             _azctx.req.headers["connection"] = "keep-alive";
-            _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookieroles + "; ";
-            let _response = await _mockopenid.setHeader(_azctx.req.headers, false, "mock_subject", "celastrinajs_mock_aud");
+            _azctx.req.headers["cookie"] = " celastrinajs_session=" + _mockenccookie + "; ";
             _azctx.req.method = "get";
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
+            await _mockopenid.setHeader(_azctx.req.headers, false, "1234567890", "celastrinajs_mock_aud_open");
 
-            let _function = new MockJSONHTTPFunction(_config);
             await _mockopenid.start();
             await _function.execute(_azctx);
             await _mockopenid.stop();
 
             assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
-            assert.deepStrictEqual(_azctx.res.body, {mockA: "valueA", mockB: "valueB", subject: _response.sub}, "Expected default JSON.");
+            assert.deepStrictEqual(_azctx.res.body, {mockA: "valueA", mockB: "valueB", subject: "1234567890"}, "Expected default HTML.");
         });
         it("should load from config, pass jwt Local and load session", async () => {
-            let _mockpayload = {sub: "celastrinajs_subject", iss: "@celastrinajs/issuer/mock", aud: "celastrinajs_mock_aud"};
+            let _mockpayload = {sub: "celastrinajs_subject", iss: "@celastrinajs/issuer/mock", aud: "celastrinajs_mock_aud_local", exp: 1857350304};
             let _mocktoken = jwt.sign(_mockpayload, "celastrinajsmocktoken");
-            let _azctx      = new MockAzureFunctionContext();
-            let _pm         = new MockPropertyManager();
-            let _config     = new JwtConfiguration("JSONHTTPFunctionTest", "jwt_config");
-
+            let _azctx  = new MockAzureFunctionContext();
+            let _config = new Configuration("JSONHTTPFunctionTest", "jwt_config");
+            let _jwtconfig = new JwtAddOn();
+            let _pm = new MockPropertyManager();
             _pm.mockProperty("jwt_config", fs.readFileSync("./test/config-good-all.json").toString());
             _pm.mockProperty("celastrinajs_mock_action", "session_subject");
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.addOn(_jwtconfig);
 
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
@@ -534,19 +541,27 @@ describe("JSONHTTPFunction", () => {
             _azctx.req.originalUrl = "https://api.celastrinajs.com";
 
             let _function = new MockJSONHTTPFunction(_config);
+
             await _function.execute(_azctx);
 
             assert.strictEqual(_azctx.res.status, 200, "Expected 200.");
-            assert.deepStrictEqual(_azctx.res.body, {mockA: "valueA", mockB: "valueB", subject: "celastrinajs_subject"}, "Expected default JSON.");
+            assert.deepStrictEqual(_azctx.res.body, {mockA: "valueA", mockB: "valueB", subject: "celastrinajs_subject"},
+                                   "Expected default JSON.");
         });
         it("Should do un-authenticated GET", async () => {
-            let _azctx      = new MockAzureFunctionContext();
-            let _pm         = new MockPropertyManager();
-            let _config     = new HTTPConfiguration("JSONHTTPFunctionTest", "jwt_config");
+            let _azctx  = new MockAzureFunctionContext();
+            let _config = new Configuration("JSONHTTPFunctionTest", "jwt_config");
+            let _httpconfig = new HTTPAddOn();
+            let _pm = new MockPropertyManager();
             _pm.mockProperty("jwt_config", fs.readFileSync("./test/config-good-nosession_roles.json").toString());
             _pm.mockProperty("celastrinajs_mock_action", "default");
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.addOn(_httpconfig);
+
+            _config.permissions.addPermission(new Permission("get", ["mock_user_role", "mock_admin_role"], new MatchAny()));
+            _httpconfig.setSessionManager(new AESSessionManager({key: "c2f9dab0ceae47d99c7bf4537fbb0c3a", iv: "1234567890123456"}, new CookieParameter()));
             let _function = new MockJSONHTTPFunction(_config);
+
             await _function.execute(_azctx);
 
             assert.strictEqual(_azctx.res.status, 200, "Expected 200.");

@@ -5,7 +5,7 @@
       "authentication": {
         "permissions": [
           {"_content": {"type": "application/vnd.celastrinajs.attribute+json;Permission"},
-            "action": "get", "roles": ["default_user"], "match": {"type": "MatchAny"}}
+            "action": "get", "roles": ["default_user", "mock_admin_role"], "match": {"type": "MatchAny"}}
         ],
         "roleFactory": {"_content": {"type": "application/vnd.celastrinajs.attribute+json;SessionRoleFactory"}}
       }
@@ -20,19 +20,20 @@
                         "iv": "1234567890123456",
                         "key": "c2f9dab0ceae47d99c7bf4537fbb0c3a"
                       },
-                      "createNew":  true}
+                      "createNew":  true
+        }
       }
     },
     {
       "_content": {"type": "application/vnd.celastrinajs.config+json;JWT"},
       "issuers": [{"_content": {"type": "application/vnd.celastrinajs.attribute+json;LocalJwtIssuer"},
                       "issuer": "@celastrinajs/issuer/mock",
-                      "audiences": ["celastrinajs_mock_aud"],
+                      "audiences": ["celastrinajs_mock_aud_local"],
                       "assignments": ["default_user"],
                       "key": "celastrinajsmocktoken"},
                   {"_content": {"type": "application/vnd.celastrinajs.attribute+json;OpenIDJwtIssuer"},
-                      "issuer": "https://login.microsoftonline.com/1234567890/v2.0",
-                      "audiences": ["celastrinajs_mock_aud"],
+                      "issuer": "https://login.microsoftonline.com/mock_tenant/v2.0",
+                      "audiences": ["celastrinajs_mock_aud_open"],
                       "assignments": ["default_user"],
                       "configURL": "https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration"}
       ],

@@ -1,8 +1,8 @@
 {
   "name": "@celastrina/timer",
-  "version": "2.0.52",
+  "version": "4.0.0",
   "description": "Timer Function Package for Celastrina",
-  "main": "index.js",
+  "main": "Timer.js",
   "scripts": {
     "test": "mocha"
   },
@@ -15,7 +15,7 @@
     "Azure",
     "Function",
     "Celatrina",
-    "Semaphore"
+    "Timer"
   ],
   "author": "Robert R Murrell",
   "license": "MIT",
@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/core": "^2.0.62",
+    "@celastrina/core": "^4.5.23",
     "moment": "^2.29.1"
   }
 }

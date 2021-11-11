@@ -1,6 +1,6 @@
 {
   "name": "@celastrina/recaptcha",
-  "version": "1.0.0",
+  "version": "4.0.0",
   "description": "HTTP function using Google RECAPTCHA Sentry",
   "main": "Recapchta.js",
   "scripts": {
@@ -27,6 +27,8 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/http": "^4.0.0"
+    "@celastrina/core": "^4.5.22",
+    "@celastrina/http": "^4.1.0",
+    "axios": "^0.24.0"
   }
 }

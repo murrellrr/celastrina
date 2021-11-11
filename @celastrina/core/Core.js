@@ -340,9 +340,8 @@ class ResourceManager {
      */
     async getResource(id = ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY) {
         let _auth = this._resources[id];
-        if(typeof _auth === "undefined" || _auth == null)
-            throw CelastrinaError.newError("Not authorized.", 401);
-        return _auth;
+        if(!instanceOfCelastringType(ResourceAuthorization.CELASTRINAJS_TYPE, _auth)) return null;
+        else return _auth;
     }
     /**
      * @param {string} resource
@@ -351,7 +350,8 @@ class ResourceManager {
      */
     async getToken(resource, id = ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY) {
         /**@type{ResourceAuthorization}*/let _auth = await this.getResource(id);
-        return await _auth.getToken(resource);
+        if(_auth == null) return null;
+        else return await _auth.getToken(resource);
     }
     /**
      * @param {_AzureFunctionContext} azcontext
@@ -364,7 +364,15 @@ class ResourceManager {
      * @param {Object} config
      * @return {Promise<void>}
      */
-    async ready(azcontext, config) {}
+    async ready(azcontext, config) {
+        let _identityEndpoint = process.env["IDENTITY_ENDPOINT"];
+        if(typeof _identityEndpoint === "string") {
+            let _auth = this._resources[ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY]; // Checking to see if it was already created during init
+            if(!instanceOfCelastringType(ResourceAuthorization.CELASTRINAJS_TYPE, _auth)) {
+                this._resources[ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY] = new ManagedIdentityResource();
+            }
+        }
+    }
 }
 /**
  * Vault

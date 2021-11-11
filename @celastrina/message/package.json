@@ -1,8 +1,8 @@
 {
   "name": "@celastrina/message",
-  "version": "2.0.52",
+  "version": "4.0.0",
   "description": "Celastrina QStorage Function packages for Azure",
-  "main": "index.js",
+  "main": "Message.js",
   "scripts": {
     "test": "mocha"
   },
@@ -29,7 +29,7 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/core": "^2.0.62",
+    "@celastrina/core": "^4.5.22",
     "moment": "^2.29.1",
     "uuid": "^8.3.2"
   }

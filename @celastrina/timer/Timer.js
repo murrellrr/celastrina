@@ -27,11 +27,8 @@
  * @license MIT
  */
 "use strict";
-
 const moment = require("moment");
-const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration,
-       BaseContext, BaseFunction} = require("@celastrina/core");
-
+const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration, Context, BaseFunction} = require("@celastrina/core");
 /**
  * @typedef _AzureTimerScheduleStatus
  * @property {string} last
@@ -47,49 +44,38 @@ const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration,
  * @property {_AzureTimerSchedule} tick
  * @property {boolean} isPastDue
  */
-
 /**
- * @type {BaseFunction}
+ * TimerContext
+ * @author Robert R Murrell
  */
-class TimerContext extends BaseContext {
+class TimerContext extends Context {
        /**
-        * @param {_AzureTimerContext} azcontext
         * @param {Configuration} config
         */
-       constructor(azcontext, config) {
-              super(azcontext, config);
-              let tick = azcontext.bindings.tick;
-              /**@type{moment.Moment}*/this._lastRun = moment(tick.scheduleStatus.last);
-              /**@type{moment.Moment}*/this._lastUpdated = moment(tick.scheduleStatus.lastUpdated);
-              /**@type{moment.Moment}*/this._nextRun = moment(tick.scheduleStatus.next);
-              /**@type{boolean}*/this._isPastDue = tick.isPastDue;
+       constructor(config) {
+              super(config);
        }
-       /**@returns{boolean}*/get isPastDue() {return this._isPastDue;}
-       /**@returns{moment.Moment}*/get lastRun() {return this._lastRun;}
-       /**@returns{moment.Moment}*/get lastUpdated() {return this._lastUpdated;}
-       /**@returns{moment.Moment}*/get nextRun() {return this._nextRun;}
+       /**@returns{boolean}*/get isPastDue() {return this._config.context.isPastDue;}
+       /**@returns{moment.Moment}*/get lastRun() {return moment(this._config.context.scheduleStatus.last)}
+       /**@returns{moment.Moment}*/get lastUpdated() {return moment(this._config.context.scheduleStatus.lastUpdated);}
+       /**@returns{moment.Moment}*/get nextRun() {return moment(this._config.context.scheduleStatus.next);}
 }
 /**
- * @type {BaseFunction}
+ * TimerFunction
+ * @author Robert R Murrell
  * @abstract
  */
 class TimerFunction extends BaseFunction {
        /**@param{Configuration}configuration*/
-       constructor(configuration) {super(configuration);}
+       constructor(configuration) {
+              super(configuration);
+       }
        /**
-        * @param {_AzureFunctionContext | _AzureTimerContext} context
         * @param {Configuration} config
-        * @returns {Promise<BaseContext & HTTPContext>}
+        * @returns {Promise<TimerContext>}
         */
-       async createContext(context, config) {
-              return new Promise((resolve, reject) => {
-                     try {
-                            resolve(new TimerContext(context, config));
-                     }
-                     catch(exception) {
-                            reject(exception);
-                     }
-              });
+       async createContext(config) {
+              new TimerContext(config);
        }
        /**
         * @param {TimerContext} context
@@ -97,28 +83,18 @@ class TimerFunction extends BaseFunction {
         * @private
         */
        async _tick(context) {
-              return new Promise((resolve, reject) => {
-                     context.log("Not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "Timer._tick(context)");
-                     reject(CelastrinaError.newError("Not Implemented.", 501));
-              });
+              context.log("Not implemented.", LOG_LEVEL.VERBOSE, "Timer._tick(context)");
+              throw CelastrinaError.newError("Not Implemented.", 501);
        }
        /**
-        * @param {BaseContext | TimerContext} context
+        * @param {Context|TimerContext} context
         * @returns {Promise<void>}
         */
        async process(context) {
-              return new Promise((resolve, reject) => {
-                     this._tick(context)
-                         .then(() => {
-                                resolve();
-                         })
-                         .catch((exception) => {
-                                reject(exception);
-                         });
-              });
+              return this._tick(context);
        }
 }
-
 module.exports = {
-       TimerContext: TimerContext, TimerFunction: TimerFunction
+       TimerContext: TimerContext,
+       TimerFunction: TimerFunction
 };

@@ -34,7 +34,8 @@ class MockAzureFunctionContext {
     constructor() {
         this.doneInvoked = false;
         this.donecontents = null;
-        this.bindings     = {req: {
+        this.bindings     = {tick: {},
+                             req: {
                                 originalUrl: "http://original-azure-function-url",
                                 method: "GET",
                                 query: {},
@@ -72,18 +73,12 @@ class MockAzureFunctionContext {
             verbose(message) {this.message = message; this.invoked = "verbose";console.log("+++++[celastrinajs.mocha.azcontext.mock.logging][verbose]" + message);},
         }
     }
-    get req() {
-        return this.bindings.req;
-    }
-    set req(req) {
-        this.bindings.req = req;
-    }
-    get res() {
-        return this.bindings.res;
-    }
-    set res(res) {
-        this.bindings.res = res;
-    }
+    get tick() {return this.bindings.tick;}
+    set tick(tick) {this.bindings.tick = tick;}
+    get req() {return this.bindings.req;}
+    set req(req) {this.bindings.req = req;}
+    get res() {return this.bindings.res;}
+    set res(res) {this.bindings.res = res;}
     done(something) {
         this.doneInvoked = true;
         this.donecontents = something;

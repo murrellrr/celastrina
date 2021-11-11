@@ -21,14 +21,52 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-/**
- * @author Robert R Murrell
- * @copyright Robert R Murrell
- * @license MIT
- */
+// /**
+//  * @author Robert R Murrell
+//  * @copyright Robert R Murrell
+//  * @license MIT
+//  */
+// "use strict";
+// const axios = require("axios").default;
+// const {CelastrinaValidationError, CelastrinaError} = require("../core");
 "use strict";
 const axios = require("axios").default;
-const {CelastrinaValidationError, CelastrinaError} = require("../core");
+const {CelastrinaError, CelastrinaValidationError, AddOn, ConfigParser} = require("@celastrina/core");
+const {} = require("@celastrina/http");
+
+class RecaptchaConfigurationParser extends ConfigParser {
+    /**
+     * @param {ConfigParser} [link=null]
+     * @param {string} [version="1.0.0"]
+     */
+    constructor(link = null, version = "1.0.0") {
+        super("HTTP", link, version);
+    }
+
+    async _create(_Object) {
+        return Promise.resolve(undefined);
+    }
+}
+
+class RecaptchaAddOn extends AddOn {
+    static CELASTRINA_RECAPTCHA_ADDON = "celastrinajs.addon.http.recaptcha";
+    static CONFIG_RECAPTCHA_URL = "celastrinajs.http.recaptcha.url";
+    static CONFIG_RECAPTCHA_THRESHOLD = "celastrinajs.http.recaptcha.score.threshold";
+    static CONFIG_RECAPTCHA_TIMEOUT = "celastrinajs.http.recaptcha.request.timeout";
+
+    constructor() {
+        super(RecaptchaAddOn.CELASTRINA_RECAPTCHA_ADDON);
+    }
+    wrap(config) {
+        super.wrap(config);
+        this._config[RecaptchaAddOn.CONFIG_RECAPTCHA_URL] = "https://www.google.com/recaptcha/api/siteverify";
+        this._config[RecaptchaAddOn.CONFIG_RECAPTCHA_THRESHOLD] = .8;
+        this._config[RecaptchaAddOn.CONFIG_RECAPTCHA_TIMEOUT] = 1500;
+    }
+    getAttributeParser() {
+        return super.getAttributeParser();
+    }
+}
 
 // const axios       = require("axios").default;
 // const querystring = require("querystring");

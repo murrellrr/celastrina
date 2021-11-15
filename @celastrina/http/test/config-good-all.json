@@ -42,6 +42,14 @@
       "name": "authorization",
       "scheme": "Bearer",
       "removeScheme": true
+    },
+    {
+      "_content": {"type": "application/vnd.celastrinajs.config+json;HMAC"},
+        "hmac": {"_content": {"type": "application/vnd.celastrinajs.attribute+json;HMAC"},
+          "secret": "",
+          "parameter": {"_content": {"type": "application/vnd.celastrinajs.attribute+json;HTTPParameter"},
+                        "parameter":  "header"}
+        }
     }
   ]
 }

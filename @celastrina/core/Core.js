@@ -974,26 +974,26 @@ class PropertyManagerFactory {
  * @author Robert R Murrell
  */
 class AppConfigPropertyManagerFactory extends PropertyManagerFactory {
-    constructor(name = "celastrinajs.core.property.appconfig.config") {
+    static PROP_USE_APP_CONFIG = "celastrinajs.core.property.appconfig.config";
+    constructor(name = AppConfigPropertyManagerFactory.PROP_USE_APP_CONFIG) {
         super(name);
     }
     /**@return{string}*/getName() {return "AppConfigPropertyManagerFactory";}
     /**
-     * @param {{subscriptionId:string, resourceGroupName:string, configStoreName:string, label:(null|undefined|string),
-     *          useVault:(null|undefined|boolean)}} source
+     * @param {{store:string, label:(null|undefined|string), useVault:(null|undefined|boolean)}} source
      * @return {PropertyManager}
      */
     _createPropertyManager(source) {
-        if(!source.hasOwnProperty("configStoreName") || typeof source.configStoreName !== "string" ||
-                source.configStoreName.trim().length === 0)
-            throw CelastrinaValidationError.newValidationError("Invalid AppConfigPropertyManagerFactory, missing 'configStoreName'.", "configStoreName");
+        if(!source.hasOwnProperty("store") || typeof source.store !== "string" ||
+                source.store.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Attribute 'store' is required.", "store");
         let _label = "development";
         let _useVault = false;
         if(source.hasOwnProperty("label") && typeof source.label === "string" && source.label.trim().length > 0)
             _label = source.label;
         if(source.hasOwnProperty("useVault") && typeof source.useVault === "boolean")
             _useVault = source.useVault;
-        return new AppConfigPropertyManager(source.configStoreName, _label, _useVault);
+        return new AppConfigPropertyManager(source.store, _label, _useVault);
     }
 }
 /**
@@ -1035,7 +1035,11 @@ class ParserChain {
      * @param {ParserChain} link
      */
     addLink(link) {
-        (this._link == null)? this._link = link : this._link.addLink(link);
+        if(typeof link !== "undefined" && link != null) {
+            if((link._mime !== this._mime) || (link._type !== this._type) || (link._version !== this._version)) {
+                (this._link == null) ? this._link = link : this._link.addLink(link);
+            }
+        }
     }
     /**@return{string}*/get mime() {return this._mime;}
     /**@return{string}*/get type() {return this._type;}
@@ -1436,6 +1440,7 @@ class AddOn {
     }
     /**@return{string}*/get name() {return this._name;}
     /**@return{boolean}*/get wrapping() {return this._config != null;}
+    /**@return{Set<string>}*/getDependancies() {return null;}
     /**
      * @return {ConfigParser}
      */
@@ -1586,12 +1591,6 @@ class Configuration {
                                                                        AddOn.CELASTRINAJS_TYPE + "'.", "addOn");
         this._addOns[addOn.name] = addOn;
         addOn.wrap(this._config);
-        if(this._property != null) {
-            let _acfp = addOn.getConfigParser();
-            if (_acfp != null) this._cfp.addLink(_acfp);
-            let _aatp = addOn.getAttributeParser();
-            if (_aatp != null) this._atp.addLink(_aatp);
-        }
         return this;
     }
     /**
@@ -1612,13 +1611,16 @@ class Configuration {
      */
     static async _replace(parser, _Object, _value, _prop) {
         let _lvalue = await parser.parse(_value);
-        if(typeof _lvalue === "undefined") _lvalue = null;
-        if(Array.isArray(_lvalue) && Array.isArray(_Object) && _value._content.hasOwnProperty("expand") &&
-            (typeof _value._content.expand === "boolean") && _value._content.expand) {
-            _Object.splice(_prop, 1, ..._lvalue);
+        if(typeof _lvalue === "undefined" || _lvalue == null)
+            _Object[_prop] = null;
+        else {
+            if(Array.isArray(_lvalue) && Array.isArray(_Object) && _value._content.hasOwnProperty("expand") &&
+                    (typeof _value._content.expand === "boolean") && _value._content.expand) {
+                _Object.splice(_prop, 1, ..._lvalue);
+            }
+            else
+                _Object[_prop] = _lvalue;
         }
-        else
-            _Object[_prop] = _lvalue;
     }
     /**
      * @param {AttributeParser} parser
@@ -1631,7 +1633,7 @@ class Configuration {
                 if(prop !== "_content") {
                     let value = _object[prop];
                     if(typeof value === "object" && value != null) {
-                        if (value.hasOwnProperty("_content") && (typeof value._content === "object") &&
+                        if(value.hasOwnProperty("_content") && (typeof value._content === "object") &&
                             value._content != null) {
                             await this._parseProperties(parser, value);
                             await Configuration._replace(parser, _object, value, prop);
@@ -1655,12 +1657,12 @@ class Configuration {
         /**@type{(null|undefined|Object)}*/let _funcconfig = await _pm.getObject(this._property);
         if (_funcconfig == null)
             throw CelastrinaValidationError.newValidationError(
-                "[Configuration.load(azcontext, pm)][_funcconfig]: Invalid object. Attribute _funcconfig cannot be 'undefined' or null.",
-                this._property);
+                "[Configuration.load(azcontext, pm)][_funcconfig]: Invalid object. Property '" + this._property +
+                        "' cannot be 'undefined' or null.", this._property);
         if (!_funcconfig.hasOwnProperty("configurations") || !Array.isArray(_funcconfig.configurations))
             throw CelastrinaValidationError.newValidationError(
-                "[Configuration.load(azcontext, pm)][configurations]: Invalid object. Attribute is required and must be an array.",
-                "configurations");
+                "[Configuration.load(azcontext, pm)][configurations]: Invalid object. Attribute 'configurations' is required and must be an array.",
+                    "configurations");
         /**@type{Array<Object>}*/let _configurations = _funcconfig.configurations;
         await Configuration._parseProperties(this._atp, _configurations);
         let _promises = [];
@@ -1676,17 +1678,6 @@ class Configuration {
      */
     async _initLoadConfiguration(azcontext, pm) {
         if(this._property != null) return this._load(azcontext, pm);
-    }
-    /**
-     * @return {boolean}
-     * @private
-     */
-    _OverridePropertyManager() {
-        let overridden = false;
-        let development = /**@type{(null|undefined|string)}*/process.env[Configuration.PROP_LOCAL_DEV];
-        if(typeof development === "string")
-            overridden = (development.trim().toLowerCase() === "true");
-        return overridden;
     }
     /**
      * @param {_AzureFunctionContext} azcontext
@@ -1717,14 +1708,44 @@ class Configuration {
         return _manager;
     }
     /**
+     * @return {boolean}
+     * @private
+     */
+    _devOverridePropertyManager() {
+        let overridden = false;
+        let development = /**@type{(null|undefined|string)}*/process.env[Configuration.PROP_LOCAL_DEV];
+        if(typeof development === "string") overridden = (development.trim().toLowerCase() === "true");
+        return overridden;
+    }
+    /**
+     * @return {boolean}
+     * @private
+     */
+    _appConfigOverridePropertyManager() {
+        let overridden = false;
+        let appconfig = /**@type{(null|undefined|string)}*/process.env[AppConfigPropertyManagerFactory.PROP_USE_APP_CONFIG];
+        if(typeof appconfig === "string") {
+            appconfig = appconfig.trim();
+            overridden = (appconfig.startsWith("{") && appconfig.endsWith("}"));
+        }
+        return overridden;
+    }
+    /**
      * @param {_AzureFunctionContext} azcontext
      * @return {PropertyManager}
      * @private
      */
     _getPropertyManager(azcontext) {
-        if(this._OverridePropertyManager()) {
-            azcontext.log.warn("[Configuration._getPropertyManager(azcontext)]: Local development override, using AppSettingsPropertyManager.");
+        if(this._devOverridePropertyManager()) {
+            azcontext.log.info("[Configuration._getPropertyManager(azcontext)]: Local development override, using AppSettingsPropertyManager.");
             return new AppSettingsPropertyManager();
+        }
+        else if(this._appConfigOverridePropertyManager()) {
+            azcontext.log.info("[Configuration._getPropertyManager(azcontext)]: AppConfigPropertyManager override, using AppConfigPropertyManager.");
+            let _factory = new AppConfigPropertyManagerFactory();
+            let _manager = _factory.createPropertyManager();
+            this._config[Configuration.CONFIG_PROPERTY] = _manager;
+            return _manager;
         }
         else {
             /**@type{PropertyManager}*/let _manager = this._config[Configuration.CONFIG_PROPERTY];
@@ -1734,7 +1755,7 @@ class Configuration {
                 this._config[Configuration.CONFIG_PROPERTY] = _manager;
             }
             else {
-                if (instanceOfCelastringType(PropertyManagerFactory.CELASTRINAJS_TYPE, _manager)) {
+                if(instanceOfCelastringType(PropertyManagerFactory.CELASTRINAJS_TYPE, _manager)) {
                     /**@type{PropertyManagerFactory}*/let _factory = /**@type{PropertyManagerFactory}*/_manager;
                     _manager = _factory.createPropertyManager();
                     this._config[Configuration.CONFIG_PROPERTY] = _manager;
@@ -1751,9 +1772,7 @@ class Configuration {
      * @param {_AzureFunctionContext} azcontext
      * @return {Promise<void>}
      */
-    async _preInitialize(azcontext) {
-        // do nothing
-    }
+    async beforeInitialize(azcontext) {}
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {PropertyManager} pm
@@ -1797,6 +1816,70 @@ class Configuration {
         return _sentry.initialize(this);
     }
     /**
+     * @return {Set<string>}
+     * @private
+     */
+    _createAddOnSet() {
+        /**@type{Set<string>}*/let _set = new Set();
+        for (let prop in this._addOns) {
+            if(this._addOns.hasOwnProperty(prop)) {
+                _set.add(prop);
+            }
+        }
+        return _set;
+    }
+    /**
+     * @param {Set<string>} source
+     * @param {Set<string>} target
+     * @return {Set<string>}
+     * @private
+     */
+    _compareSets(source, target) {
+        /**@type{Set<string>}*/let _delta = new Set();
+        for(let _src of source) {
+            if(!target.has(_src)) _delta.add(_src);
+        }
+        return _delta;
+    }
+    _getUnsatisfiedDependanciesString(_deltas) {
+        let _unsatisfied = "";
+        for(let _dep of _deltas) {
+            _unsatisfied += "\r\n\tFailed to resolve Add-On '" + _dep + "'.";
+        }
+        return _unsatisfied;
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @return {Promise<void>}
+     * @private
+     */
+    async _installAddOns(azcontext) {
+        /**@type{Set<string>}*/let _target = this._createAddOnSet();
+        if(_target.size > 0) { // Do we even have any addons...
+            for (let prop in this._addOns) {
+                if(this._addOns.hasOwnProperty(prop)) {
+                    /**@type{AddOn}*/let _addon = this._addOns[prop];
+                    /**@type{Set<string>}*/let _source = _addon.getDependancies();
+                    if(_source instanceof Set) {
+                        /**@type{Set<string>}*/let _deltas = this._compareSets(_source, _target);
+                        if(_deltas.size > 0) {
+                            let _unsatisfied = this._getUnsatisfiedDependanciesString(_deltas);
+                            azcontext.log.error("[Configuration._installAddOns(azcontext)] Unresolved dependancies for Add-On '" +
+                                                _addon.name + "': " + _unsatisfied + "\r\nPlease resolve dependancies, update configuration, and restart.");
+                            throw CelastrinaError.newError("Unresolved dependancies for Add-On '" + _addon.name + "'.", 500, true);
+                        }
+                    }
+                    if(this._property != null) {
+                        let _acfp = _addon.getConfigParser();
+                        if (_acfp != null) this._cfp.addLink(_acfp);
+                        let _aatp = _addon.getAttributeParser();
+                        if (_aatp != null) this._atp.addLink(_aatp);
+                    }
+                }
+            }
+        }
+    }
+    /**
      * @param {_AzureFunctionContext} azcontext
      * @param {PropertyManager} pm
      * @param {ResourceManager} rm
@@ -1820,9 +1903,7 @@ class Configuration {
      * @param {ResourceManager} rm
      * @return {Promise<void>}
      */
-    async _postInitialize(azcontext, pm, rm) {
-        //
-    }
+    async afterInitialize(azcontext, pm, rm) {}
     /**
      * @param {_AzureFunctionContext} azcontext
      * @return {Promise<void>}
@@ -1836,17 +1917,18 @@ class Configuration {
                 azcontext.log.error("[Configuration.load(azcontext)]: Invalid Configuration. Name cannot be undefined, null, or empty.");
                 throw CelastrinaValidationError.newValidationError("Name cannot be undefined, null, or 0 length.", Configuration.CONFIG_NAME);
             }
-            await this._preInitialize(azcontext);
+            await this.beforeInitialize(azcontext);
             /**@type{PropertyManager}*/let _pm = this._getPropertyManager(azcontext);
             /**@type{PermissionManager}*/let _prm = this._getPermissionManager(azcontext);
             /**@type{ResourceManager}*/let _rm = this._getResourceManager(azcontext);
             await this._initPropertyManager(azcontext, _pm);
+            await this._installAddOns(azcontext);
             await this._initLoadConfiguration(azcontext, _pm);
             await this._initPermissionManager(azcontext, _prm);
             await this._initResourceManager(azcontext, _rm);
             await this._initSentry(azcontext, _pm, _rm, _prm);
             await this._initAddOns(azcontext, _pm, _rm, _prm);
-            await this._postInitialize(azcontext, _pm, _rm);
+            await this.afterInitialize(azcontext, _pm, _rm);
             azcontext.log.info("[" + azcontext.bindingData.invocationId + "][Configuration.initialize(azcontext)]: Initialization successful.");
         }
     }

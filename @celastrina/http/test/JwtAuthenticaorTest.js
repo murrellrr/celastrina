@@ -1,5 +1,5 @@
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration, AddOn} = require("../../core/Core");
-const {LocalJwtIssuer, HTTPContext, Cookie, JwtSubject, JwtAddOn, JwtAuthenticator} = require("../HTTP");
+const {LocalJwtIssuer, HTTPContext, Cookie, JwtSubject, JwtAddOn, JwtAuthenticator, HTTPAddOn} = require("../HTTP");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockHTTPContext} = require("./HTTPContextTest");
 const assert = require("assert");
@@ -14,10 +14,11 @@ describe("JwtAuthenticator", () => {
             let _azctx  = new MockAzureFunctionContext();
             _azctx.req.headers["authorization"] = "Bearer " + _mocktoken;
             /**@type{Configuration}*/let _config = new Configuration("JwtAuthenticator");
+            /**@type{HTTPAddOn}*/let _httpconfig = new HTTPAddOn();
             /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _config.addOn(_jwtconfig);
+            _config.addOn(_jwtconfig).addOn(_httpconfig);
             _jwtconfig.addIssuer(new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]));
             await _config.initialize(_azctx);
             await _config.ready();
@@ -35,9 +36,10 @@ describe("JwtAuthenticator", () => {
             _azctx.req.headers["authorization"] = "Bearer " + _mocktoken + "_foozled";
             /**@type{Configuration}*/let _config = new Configuration("JwtSentryTest");
             /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
+            /**@type{HTTPAddOn}*/let _httpconfig = new HTTPAddOn();
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _config.addOn(_jwtconfig);
+            _config.addOn(_jwtconfig).addOn(_httpconfig);
             _jwtconfig.addIssuer(new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]));
             await _config.initialize(_azctx);
             await _config.ready();
@@ -58,9 +60,10 @@ describe("JwtAuthenticator", () => {
             _azctx.req.headers["authorization"] = "Bearer " + _mocktoken;
             /**@type{Configuration}*/let _config = new Configuration("JwtSentryTest");
             /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
+            /**@type{HTTPAddOn}*/let _httpconfig = new HTTPAddOn();
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _config.addOn(_jwtconfig);
+            _config.addOn(_jwtconfig).addOn(_httpconfig);
             _jwtconfig.addIssuer(new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]));
             await _config.initialize(_azctx);
             await _config.ready();
@@ -81,9 +84,10 @@ describe("JwtAuthenticator", () => {
             _azctx.req.headers["authorization"] = "Bearer " + _mocktoken;
             /**@type{Configuration}*/let _config = new Configuration("JwtSentryTest");
             /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
+            /**@type{HTTPAddOn}*/let _httpconfig = new HTTPAddOn();
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _config.addOn(_jwtconfig);
+            _config.addOn(_jwtconfig).addOn(_httpconfig);
             _jwtconfig.addIssuer(new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]));
             await _config.initialize(_azctx);
             await _config.ready();
@@ -103,9 +107,10 @@ describe("JwtAuthenticator", () => {
             let _azctx  = new MockAzureFunctionContext();
             /**@type{Configuration}*/let _config = new Configuration("JwtSentryTest");
             /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
+            /**@type{HTTPAddOn}*/let _httpconfig = new HTTPAddOn();
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _config.addOn(_jwtconfig);
+            _config.addOn(_jwtconfig).addOn(_httpconfig);
             _jwtconfig.addIssuer(new LocalJwtIssuer("@celastrinajs/issuer/mock", "celastrinajsmocktoken", ["aefff932-5d4e-4216-a117-0d42e47b06b7"], ["mock_user_role"]));
             await _config.initialize(_azctx);
             await _config.ready();

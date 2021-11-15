@@ -27,8 +27,77 @@
  * @license MIT
  */
 "use strict";
-
-
+const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL} = require("@celastrina/core");
+const {JSONHTTPContext, JSONHTTPFunction, HTTPAddOn} = require("@celastrina/http");
+const {CloudEvent} = require("cloudevents");
+/**
+ * EventContext
+ * @author Robert R Murrell
+ */
+class CloudEventHTTPContext extends JSONHTTPContext {
+    constructor(config) {
+        super(config);
+        /**@type{CloudEvent}*/this._event = null;
+    }
+    /**@return{CloudEvent}*/get event() {return this._event;}
+    /**@param{CloudEvent}event*/set event(event) {this._event = event;}
+}
+/**
+ * EventFunction
+ * @author Robert R Murrell
+ */
+class CloudEventHTTPFunction extends JSONHTTPFunction {
+    /**
+     * @param {Configuration} config
+     */
+    constructor(config) {super(config);}
+    /**
+     * @param {Configuration} config
+     * @return {Promise<CloudEventHTTPContext>}
+     */
+    async createContext(config) {
+        return new CloudEventHTTPContext(config);
+    }
+    /**
+     * @param {(Context|CloudEventHTTPContext)} context
+     * @param exception
+     * @return {Promise<void>}
+     */
+    async exception(context, exception) {
+        await super.exception(context, exception);
+        if(context.event != null ) {
+            // going to dead-letter it if its a "drop"
+        }
+    }
+    /**
+     * @param {(JSONHTTPContext|CloudEventHTTPContext)} context
+     * @return {Promise<void>}
+     * @private
+     */
+    async _post(context) {
+        let _event = CloudEvent.toEvent({headers: context.headers, body: context.requestBody});
+        if(_event == null) {
+            // TODO: Do something here, but I dont know what yet
+        }
+        else {
+            context.event = _event;
+            return this.onEvent(context);
+        }
+    }
+    /**
+     * @param {CloudEventHTTPContext} context
+     * @return {Promise<void>}
+     */
+    async onEvent(context) {throw CelastrinaError.newError("Not Implemented.", 501);}
+}
+/**
+ * JSONHTTPEventAddOn
+ * @author Robert R Murrell
+ */
+class CloudEventHTTPAddOn extends HTTPAddOn {
+    static CONFIG_ADDON_EVENT = HTTPAddOn.CONFIG_ADDON_HTTP;
+    constructor() {super();}
+}
 
 // const moment = require("moment");
 // const { v4: uuidv4 } = require('uuid');

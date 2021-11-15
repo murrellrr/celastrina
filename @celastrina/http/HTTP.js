@@ -38,6 +38,7 @@ const {CelastrinaError, CelastrinaValidationError, PropertyManager, ResourceMana
        LOG_LEVEL, Configuration, Subject, Sentry, Algorithm, AES256Algorithm, Cryptography, RoleFactory,
        RoleFactoryParser, Context, BaseFunction, ValueMatch, MatchAny, MatchAll, MatchNone,
        AttributeParser, ConfigParser, Authenticator, instanceOfCelastringType} = require("@celastrina/core");
+const crypto = require("crypto");
 /**
  * @typedef __AzureRequestBinging
  * @property {string} originalUrl
@@ -1162,6 +1163,34 @@ class HTTPConfigurationParser extends ConfigParser {
         }
     }
 }
+class HMAC {
+    static CELASTRINAJS_TYPE = "cellastrinajs.HMAC";
+    /**
+     * @param {string} secret
+     * @param {HTTPParameter} parameter
+     * @param {string} name
+     * @param {string} algorithm
+     * @param {BinaryToTextEncoding|string} encoding
+     * @param {Set<string>} assignments
+     */
+    constructor(secret, parameter = new HeaderParameter(), name = "x-ms-content-sha256",
+                algorithm = "sha256", encoding = "hex", assignments = new Set([])) {
+        this._parameter = parameter;
+        this._name = name;
+        this._secret = secret;
+        this._algorithm = algorithm;
+        this._assignments = assignments;
+        /**@type{BinaryToTextEncoding}*/this._encoding = encoding;
+        this.__type = HMAC.CELASTRINAJS_TYPE;
+    }
+    /**@return{string}*/get name() {return this._name;}
+    /**@return{string}*/get secret() {return this._secret;}
+    /**@return{string}*/get algorithm() {return this._algorithm;}
+    /**@return{BinaryToTextEncoding}*/get encoding() {return this._encoding;}
+    /**@return{HTTPParameter}*/get parameter() {return this._parameter;}
+    /**@type{Set<string>}*/get assignments() {return this._assignments;}
+    /**@param{Set<string>}assignments*/set assignments(assignments) {return this._assignments = assignments;}
+}
 /**
  * HTTPAddOn
  * @author Robert R Murrell
@@ -1173,7 +1202,9 @@ class HTTPAddOn extends AddOn {
         super(HTTPAddOn.CONFIG_ADDON_HTTP);
     }
     /**@return {ConfigParser}*/getConfigParser() {return new HTTPConfigurationParser();}
-    /**@return {AttributeParser}*/getAttributeParser() {return new AESSessionManagerParser(new SessionRoleFactoryParser())}
+    /**@return {AttributeParser}*/getAttributeParser() {
+        return new AESSessionManagerParser(new SessionRoleFactoryParser());
+    }
     wrap(config) {
         super.wrap(config);
         this._config[HTTPAddOn.CONFIG_HTTP_SESSION_MANAGER] = null;
@@ -1184,6 +1215,7 @@ class HTTPAddOn extends AddOn {
             return _sm.initialize(azcontext, pm, rm);
     }
     /**@return{SessionManager}*/get sessionManager() {return this._config[HTTPAddOn.CONFIG_HTTP_SESSION_MANAGER];}
+    /**@param{SessionManager}sm*/set sesionManager(sm) {this._config[HTTPAddOn.CONFIG_HTTP_SESSION_MANAGER] = sm;}
     /**
      * @param {SessionManager} [sm=null]
      * @return {HTTPAddOn}
@@ -1227,15 +1259,15 @@ class JwtConfigurationParser extends ConfigParser {
  * JwtAddOn
  * @author Robert R Murrell
  */
-class JwtAddOn extends HTTPAddOn {
-    static CONFIG_ADDON_JWT = HTTPAddOn.CONFIG_ADDON_HTTP;
+class JwtAddOn extends AddOn {
+    static CONFIG_ADDON_JWT = "celastrinajs.addon.http.jwt";
     static CONFIG_JWT_ISSUERS = "celastrinajs.http.jwt.issuers";
     static CONFIG_JWT_TOKEN_PARAMETER = "celastrinajs.http.jwt.authorization.token.parameter";
     static CONFIG_JWT_TOKEN_NAME = "celastrinajs.http.jwt.authorization.token.name";
     static CONFIG_JWT_TOKEN_SCHEME = "celastrinajs.http.jwt.authorization.token.scheme";
     static CONFIG_JWT_TOKEN_SCHEME_REMOVE = "celastrinajs.http.jwt.authorization.token.scheme.remove";
     constructor() {
-        super();
+        super(JwtAddOn.CONFIG_ADDON_JWT);
     }
     wrap(config) {
         super.wrap(config);
@@ -1261,8 +1293,8 @@ class JwtAddOn extends HTTPAddOn {
         else _parser = local;
         return _parser;
     }
+    /**@type{Set<string>}*/getDependancies() {return new Set([HTTPAddOn.CONFIG_ADDON_HTTP]);}
     async initialize(azcontext, pm, rm, prm) {
-        await super.initialize(azcontext, pm, rm, prm);
         /**@type{Sentry}*/let _sentry = this._config[Configuration.CONFIG_SENTRY];
         _sentry.addAuthenticator(new JwtAuthenticator());
     }
@@ -1325,6 +1357,7 @@ class HTTPContext extends Context {
     /**@return{string}*/get url(){return this._config.context.req.originalUrl;}
     /**@return{Object}*/get request(){return this._config.context.req;}
     /**@return{Object}*/get response(){return this._config.context.res;}
+    /**@return{Object}*/get headers() {return this._config.context.req.headers;}
     /**@return{Object}*/get params(){return this._config.context.req.params;}
     /**@return{Object}*/get query(){return this._config.context.req.query;}
     /**@return{string}*/get raw(){return this._config.context.req.rawBody;}
@@ -1793,8 +1826,8 @@ class HTTPFunction extends BaseFunction {
             ex = CelastrinaError.wrapError(ex);
             context.sendServerError(ex);
         }
-        context.log("Request failed to process. \r\n (MESSAGE: " + ex.message + ") \r\n (STACK: " + ex.stack + ")" + " \r\n (CAUSE: " + ex.cause + ")", LOG_LEVEL.ERROR,
-                     "HTTP.exception(context, exception)");
+        context.log("Request failed to process. \r\n (MESSAGE: " + ex.message + ") \r\n (STACK: " + ex.stack + ")" +
+                            " \r\n (CAUSE: " + ex.cause + ")", LOG_LEVEL.ERROR, "HTTP.exception(context, exception)");
     }
     /**
      * @param {Context & HTTPContext} context
@@ -1855,6 +1888,131 @@ class MatchAlways extends ValueMatch {
         return true;
     }
 }
+/**
+ * HMACAuthenticator
+ * @author Robert R Murrell
+ */
+class HMACAuthenticator extends Authenticator {
+    constructor(required = false, link = null) {
+        super("HMAC", required, link);
+    }
+    /**
+     * @param {Asserter} assertion
+     * @return {Promise<void>}
+     * @private
+     */
+    async _authenticate(assertion) {
+        /**@type{HTTPContext}*/let _context = /**@type{HTTPContext}*/assertion.context;
+        /**@type{HTTPAddOn}*/let _http  = /**@type{JwtAddOn}*/await assertion.context.config.getAddOn(
+                                                                                            HTTPAddOn.CONFIG_ADDON_HTTP);
+        /**@type{HMAC}*/let _hmac = _http.hmac;
+        /**@type{string}*/let _signature = crypto.createHmac(_hmac.algorithm, _hmac.secret).update(
+                                                                        _context.raw).digest(_hmac.encoding).toString();
+        let _challange = await _hmac.parameter.getParameter(_context, _hmac.name);
+        let _authenticated = (_challange.toUpperCase() === _signature.toUpperCase());
+        /**@type{Set<string>}*/let _assignments = null;
+        if(!_authenticated)
+            assertion.context.log("'" + assertion.subject.id + "' has an invalid HMAC signature.", LOG_LEVEL.THREAT,
+                                   "HMACAuthenticator._authenticate(assertion)");
+        else
+            _assignments = _hmac.assignments;
+        assertion.assert(this._name, _authenticated, _assignments);
+    }
+}
+/**
+ * HMACAttributeParser
+ * @author Robert R Murrell
+ */
+class HMACConfigurationParser extends ConfigParser {
+    /**
+     * @param {ConfigParser} [link=null]
+     * @param {string} [version="1.0.0"]
+     */
+    constructor(link = null, version = "1.0.0") {
+        super("HMAC", link, version);
+    }
+    /**
+     * @param {Object} _Object
+     * @return {Promise<void>}
+     * @private
+     */
+    async _create(_Object) {
+        if(_Object.hasOwnProperty("hmac") && (typeof _Object.hmac === "object") && _Object.hmac != null) {
+            this._config[HMACAddOn.CONFIG_HMAC] = _Object.hmac;
+        }
+    }
+}
+/**
+ * HMACAttributeParser
+ * @author Robert R Murrell
+ */
+class HMACParser extends AttributeParser {
+    /**
+     * @param {AttributeParser} link
+     * @param {string} version
+     */
+    constructor(link = null, version = "1.0.0") {
+        super("HMAC", link, version);
+    }
+    /**
+     * @param {Object} _HMAC
+     * @return {Promise<HMAC>}
+     * @private
+     */
+    async _create(_HMAC) {
+        if(!_HMAC.hasOwnProperty("secret") || (typeof _HMAC.secret !== "string") || _HMAC.secret.length === 0)
+            throw CelastrinaValidationError.newValidationError("Argument 'secret' is required.", "_HMAC.secret");
+        let _name = "x-celastrinajs-hmac";
+        let _parameter = new HeaderParameter();
+        let _algo = "sha256";
+        let _encoding = "hex";
+        let _assignments;
+        if(_HMAC.hasOwnProperty("parameter") && (instanceOfCelastringType(HTTPParameter.CELASTRINAJS_TYPE, _HMAC.parameter)))
+            _parameter = _HMAC.parameter;
+        if(_HMAC.hasOwnProperty("name") && (typeof _HMAC.name === "string") && _HMAC.name.trim().length > 0)
+            _name = _HMAC.name.trim();
+        if(_HMAC.hasOwnProperty("algorithm") && (typeof _HMAC.algorithm === "string") && _HMAC.algorithm.trim().length > 0)
+            _algo = _HMAC.algorithm.trim();
+        if(_HMAC.hasOwnProperty("encoding") && (typeof _HMAC.encoding === "string") && _HMAC.encoding.trim().length > 0)
+            _encoding = _HMAC.encoding.trim();
+        if(_HMAC.hasOwnProperty("assignments") && Array.isArray(_HMAC.assignments))
+            _assignments = new Set([..._HMAC.assignments]);
+        else
+            _assignments = new Set();
+        return new HMAC(_HMAC.secret, _parameter, _name, _algo, _encoding, _assignments);
+    }
+}
+/**
+ * HMACAddOn
+ * @author Robert R Murrell
+ */
+class HMACAddOn extends AddOn {
+    static CONFIG_ADDON_HMAC = "celastrinajs.addon.http.hmac";
+    static CONFIG_HMAC = "celastrinajs.http.hmac";
+    constructor() {
+        super(HMACAddOn.CONFIG_ADDON_HMAC);
+    }
+    /**@return{ConfigParser}*/getConfigParser() {return new HMACConfigurationParser();}
+    /**@return{AttributeParser}*/getAttributeParser() {return new HMACParser();}
+    /**@return{Set<string>}*/getDependancies() {return new Set([HTTPAddOn.CONFIG_ADDON_HTTP]);}
+    /**
+     * @param {Object} config
+     */
+    wrap(config) {
+        super.wrap(config);
+        this._config[HMACAddOn.CONFIG_HMAC] = null;
+    }
+    /**@return{HMAC}*/get hmac() {return this._config[HMACAddOn.CONFIG_HMAC];}
+    /**@param{HMAC}hmac*/set hmac(hmac) {this._config[HMACAddOn.CONFIG_HMAC] = hmac;}
+    async initialize(azcontext, pm, rm, prm) {
+        /**@type{Sentry}*/let _sentry = this._config[Configuration.CONFIG_SENTRY];
+        /**@type{HMAC}*/let _hmac = this._config[HMACAddOn.CONFIG_HMAC];
+        if((typeof _hmac == "undefined" || _hmac == null) || ((typeof _hmac.secret === "undefined") || _hmac.secret == null ||
+                _hmac.secret.length === 0))
+            throw CelastrinaError.newError("Cannot load HMAC Add-On, missing required HMAC configuration.");
+        _sentry.addAuthenticator(new HMACAuthenticator());
+    }
+}
 module.exports = {
     MatchAlways: MatchAlways,
     Cookie: Cookie,
@@ -1881,6 +2039,11 @@ module.exports = {
     SessionRoleFactoryParser: SessionRoleFactoryParser,
     HTTPConfigurationParser: HTTPConfigurationParser,
     HTTPAddOn: HTTPAddOn,
+    HMAC: HMAC,
+    HMACAuthenticator: HMACAuthenticator,
+    HMACParser: HMACParser,
+    HMACConfigurationParser: HMACConfigurationParser,
+    HMACAddOn: HMACAddOn,
     JwtAuthenticator: JwtAuthenticator,
     JwtConfigurationParser: JwtConfigurationParser,
     JwtAddOn: JwtAddOn,

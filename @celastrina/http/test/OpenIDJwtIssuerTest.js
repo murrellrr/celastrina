@@ -1,5 +1,5 @@
 const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration} = require("../../core/Core");
-const {OpenIDJwtIssuer, HTTPContext, Cookie, JwtSubject, JwtAddOn, JwtSentry} = require("../HTTP");
+const {OpenIDJwtIssuer, HTTPContext, Cookie, JwtSubject, JwtAddOn, JwtSentry, HTTPAddOn} = require("../HTTP");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockHTTPContext} = require("./HTTPContextTest");
 const {MockPropertyManager} = require("../../core/test/PropertyManagerTest");
@@ -34,7 +34,8 @@ describe("OpenIDJwtIssuer", () => {
             let _response = await _mockopenid.setHeader(_azcontext.bindings.req.headers);
             /**@type{Configuration}*/let _config = new Configuration("OpenIDJwtIssuerTest");
             /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
-            _config.addOn(_jwtconfig);
+            /**@type{HTTPAddOn}*/let _httpconfig = new HTTPAddOn();
+            _config.addOn(_jwtconfig).addOn(_httpconfig);
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             await _config.initialize(_azcontext);
@@ -56,7 +57,8 @@ describe("OpenIDJwtIssuer", () => {
             let _response = await _mockopenid.setHeader(_azcontext.bindings.req.headers);
             /**@type{Configuration}*/let _config = new Configuration("OpenIDJwtIssuerTest");
             /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
-            _config.addOn(_jwtconfig);
+            /**@type{HTTPAddOn}*/let _httpconfig = new HTTPAddOn();
+            _config.addOn(_jwtconfig).addOn(_httpconfig);
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             await _config.initialize(_azcontext);
@@ -78,7 +80,8 @@ describe("OpenIDJwtIssuer", () => {
             let _response = await _mockopenid.setHeader(_azcontext.bindings.req.headers);
             /**@type{Configuration}*/let _config = new Configuration("OpenIDJwtIssuerTest");
             /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
-            _config.addOn(_jwtconfig);
+            /**@type{HTTPAddOn}*/let _httpconfig = new HTTPAddOn();
+            _config.addOn(_jwtconfig).addOn(_httpconfig);
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             await _config.initialize(_azcontext);
@@ -100,7 +103,8 @@ describe("OpenIDJwtIssuer", () => {
             let _response = await _mockopenid.setHeader(_azcontext.bindings.req.headers);
             /**@type{Configuration}*/let _config = new Configuration("OpenIDJwtIssuerTest");
             /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
-            _config.addOn(_jwtconfig);
+            /**@type{HTTPAddOn}*/let _httpconfig = new HTTPAddOn();
+            _config.addOn(_jwtconfig).addOn(_httpconfig);
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             await _config.initialize(_azcontext);
@@ -122,7 +126,8 @@ describe("OpenIDJwtIssuer", () => {
             let _response = await _mockopenid.setHeader(_azcontext.bindings.req.headers);
             /**@type{Configuration}*/let _config = new Configuration("OpenIDJwtIssuerTest");
             /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
-            _config.addOn(_jwtconfig);
+            /**@type{HTTPAddOn}*/let _httpconfig = new HTTPAddOn();
+            _config.addOn(_jwtconfig).addOn(_httpconfig);
             let _pm = new MockPropertyManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             await _config.initialize(_azcontext);

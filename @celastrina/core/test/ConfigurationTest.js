@@ -1,6 +1,7 @@
-const {CelastrinaError, AddOn, Configuration, AppSettingsPropertyManager, ResourceManager, PermissionManager,
-       AttributeParser, ConfigParser, CelastrinaValidationError, AppRegistrationResource, Permission, MatchAny,
-       MatchAll, MatchNone} = require("../Core");
+const {CelastrinaError, AddOn, Configuration, AppSettingsPropertyManager, AppConfigPropertyManagerFactory,
+       ResourceManager, PermissionManager, AttributeParser, ConfigParser, CelastrinaValidationError,
+       AppRegistrationResource, Permission, MatchAny, MatchAll, MatchNone, AppConfigPropertyManager
+} = require("../Core");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockPropertyManager} = require("./PropertyManagerTest");
 const {MockResourceManager} = require("./ResourceAuthorizationTest");
@@ -10,6 +11,7 @@ const fs = require("fs");
 class MockAddOn extends AddOn {
     constructor() {
         super("MockAddOn");
+        /**@type{Set<string>}*/this._depends = new Set();
         this.invokedGetConfigParser = false;
         this.invokedGetAttributeParser = false;
         this.invokedWrap = false;
@@ -21,6 +23,48 @@ class MockAddOn extends AddOn {
         this.invokedWrap = false;
         this.invokedInitialize = false;
     }
+    /**@param{string}name*/mockDependancy(name) {
+        this._depends.add(name);
+        return this;
+    }
+    /**@return{Set<string>}*/getDependancies() {return this._depends;}
+    getConfigParser() {
+        this.invokedGetConfigParser = true;
+        return null;
+    }
+    getAttributeParser() {
+        this.invokedGetAttributeParser = true;
+        return null;
+    }
+    wrap(config) {
+        this.invokedWrap = true;
+        super.wrap(config);
+    }
+    async initialize(azcontext, pm, rm, prm) {
+        this.invokedInitialize = true;
+    }
+}
+
+class MockAddOnTwo extends AddOn {
+    constructor() {
+        super("MockAddOn2");
+        /**@type{Set<string>}*/this._depends = new Set();
+        this.invokedGetConfigParser = false;
+        this.invokedGetAttributeParser = false;
+        this.invokedWrap = false;
+        this.invokedInitialize = false;
+    }
+    reset() {
+        this.invokedGetConfigParser = false;
+        this.invokedGetAttributeParser = false;
+        this.invokedWrap = false;
+        this.invokedInitialize = false;
+    }
+    /**@param{string}name*/mockDependancy(name) {
+        this._depends.add(name);
+        return this;
+    }
+    /**@return{Set<string>}*/getDependancies() {return this._depends;}
     getConfigParser() {
         this.invokedGetConfigParser = true;
         return null;
@@ -153,10 +197,9 @@ describe("Configuration", () => {
             });
         });
     });
-
     describe("#initialize(azcontext)", () => {
         let _azcontext = new MockAzureFunctionContext();
-        it("Should initialize specified property and authorization managers", async () => {
+        it("Should initialize specified property and resource managers", async () => {
             let _config = new Configuration("mock_configuration");
             let _pm = new MockPropertyManager();
             let _rm = new MockResourceManager();
@@ -168,6 +211,24 @@ describe("Configuration", () => {
             assert.strictEqual(_config.loaded, false, "Should not be loaded yet.");
             assert.strictEqual(_pm.initialized, true, "PropertyManager Initialized.");
             assert.strictEqual(_pm.readied, true, "PropertyManager Readied.");
+            assert.strictEqual(_rm.initialized, true, "AuthorizationManager Initialized.");
+            assert.strictEqual(_rm.readied, true, "AuthorizationManager Readied.");
+        });
+
+        it("should initialize app config property manager", async () => {
+            let _config = new Configuration("mock_configuration");
+            let _rm = new MockResourceManager();
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
+            process.env[AppConfigPropertyManagerFactory.PROP_USE_APP_CONFIG] = "{\"store\": \"celastrinajs.storename\"}";
+            process.env["IDENTITY_ENDPOINT"] = "https://fake-azure-security-endpoint/";
+            process.env["IDENTITY_HEADER"] = "celastrinajs";
+            await _config.initialize(_azcontext);
+            delete process.env[AppConfigPropertyManagerFactory.PROP_USE_APP_CONFIG];
+            delete process.env["IDENTITY_ENDPOINT"];
+            delete process.env["IDENTITY_HEADER"];
+            assert.deepStrictEqual(_config.resources, _rm);
+            assert.strictEqual(_config.loaded, false, "Should not be loaded yet.");
+            assert.strictEqual(_config.properties instanceof AppConfigPropertyManager, true, "Expected AppConfigPropertyManager.")
             assert.strictEqual(_rm.initialized, true, "AuthorizationManager Initialized.");
             assert.strictEqual(_rm.readied, true, "AuthorizationManager Readied.");
         });
@@ -339,6 +400,67 @@ describe("Configuration", () => {
             assert.strictEqual(_addon.invokedGetConfigParser, true, "Expected to invoke initialize.");
             assert.strictEqual(_addon.invokedGetAttributeParser, true, "Expected to invoke initialize.");
             assert.strictEqual(_addon.invokedInitialize, true, "Expected to invoke initialize.");
+        });
+        it("Should fail missing dependancy", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config = new Configuration("mock_configuration", "mock_property");
+            let _pm = new MockPropertyManager();
+            let _rm = new MockResourceManager();
+            _pm.mockProperty("mock_process-1-roles", "[\"role-1\", \"role-2\", \"role-3\"]");
+            _pm.mockProperty("mock_resources", "[{\"id\": \"mock-resource-1\", \"authority\": \"authority1\", \"tenant\":  \"tenant1\", \"secret\": \"secret1\"},{\"id\": \"mock-resource-2\", \"authority\": \"authority2\", \"tenant\":  \"tenant2\", \"secret\": \"secret2\"}]");
+            _pm.mockProperty("mock_permission", "{\"action\": \"mock-process-3\", \"roles\": [\"role-7\", \"role-8\", \"role-9\"], \"match\": {\"type\": \"MatchNone\"}}");
+            _pm.mockProperty("mock_permission_expand", "[{\"action\": \"mock-process-4\", \"roles\": [\"role-10\", \"role-11\", \"role-12\"], \"match\": {\"type\": \"MatchAny\"}}, {\"action\": \"mock-process-5\", \"roles\": [\"role-13\", \"role-14\", \"role-15\"], \"match\": {\"type\": \"MatchAny\"}}]");
+            _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good-all.json", "utf8"));
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
+            let _addon = new MockAddOn();
+            _addon.mockDependancy("MissingAddOnDependantName");
+            _config.addOn(_addon);
+            await assert.rejects(() => {
+                return _config.initialize(_azcontext);
+            });
+        });
+        it("Should fail missing multiple dependancy", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config = new Configuration("mock_configuration", "mock_property");
+            let _pm = new MockPropertyManager();
+            let _rm = new MockResourceManager();
+            _pm.mockProperty("mock_process-1-roles", "[\"role-1\", \"role-2\", \"role-3\"]");
+            _pm.mockProperty("mock_resources", "[{\"id\": \"mock-resource-1\", \"authority\": \"authority1\", \"tenant\":  \"tenant1\", \"secret\": \"secret1\"},{\"id\": \"mock-resource-2\", \"authority\": \"authority2\", \"tenant\":  \"tenant2\", \"secret\": \"secret2\"}]");
+            _pm.mockProperty("mock_permission", "{\"action\": \"mock-process-3\", \"roles\": [\"role-7\", \"role-8\", \"role-9\"], \"match\": {\"type\": \"MatchNone\"}}");
+            _pm.mockProperty("mock_permission_expand", "[{\"action\": \"mock-process-4\", \"roles\": [\"role-10\", \"role-11\", \"role-12\"], \"match\": {\"type\": \"MatchAny\"}}, {\"action\": \"mock-process-5\", \"roles\": [\"role-13\", \"role-14\", \"role-15\"], \"match\": {\"type\": \"MatchAny\"}}]");
+            _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good-all.json", "utf8"));
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
+            let _addon = new MockAddOn();
+            _addon.mockDependancy("MissingAddOnDependantName")
+                  .mockDependancy("MissingAddOnDependantName2")
+                  .mockDependancy("MissingAddOnDependantName3");
+            _config.addOn(_addon);
+            await assert.rejects(() => {
+                return _config.initialize(_azcontext);
+            });
+        });
+        it("should succeed dependancy", async () => {
+            let _azcontext = new MockAzureFunctionContext();
+            let _config = new Configuration("mock_configuration", "mock_property");
+            let _pm = new MockPropertyManager();
+            let _rm = new MockResourceManager();
+            _pm.mockProperty("mock_process-1-roles", "[\"role-1\", \"role-2\", \"role-3\"]");
+            _pm.mockProperty("mock_resources", "[{\"id\": \"mock-resource-1\", \"authority\": \"authority1\", \"tenant\":  \"tenant1\", \"secret\": \"secret1\"},{\"id\": \"mock-resource-2\", \"authority\": \"authority2\", \"tenant\":  \"tenant2\", \"secret\": \"secret2\"}]");
+            _pm.mockProperty("mock_permission", "{\"action\": \"mock-process-3\", \"roles\": [\"role-7\", \"role-8\", \"role-9\"], \"match\": {\"type\": \"MatchNone\"}}");
+            _pm.mockProperty("mock_permission_expand", "[{\"action\": \"mock-process-4\", \"roles\": [\"role-10\", \"role-11\", \"role-12\"], \"match\": {\"type\": \"MatchAny\"}}, {\"action\": \"mock-process-5\", \"roles\": [\"role-13\", \"role-14\", \"role-15\"], \"match\": {\"type\": \"MatchAny\"}}]");
+            _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good-all.json", "utf8"));
+            _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
+            let _addon = new MockAddOn();
+            let _addon2 = new MockAddOnTwo();
+            _addon.mockDependancy("MockAddOn2");
+            _config.addOn(_addon);
+            _config.addOn(_addon2);
+            await assert.doesNotReject(() => {
+                return _config.initialize(_azcontext);
+            });
         });
     });
 });

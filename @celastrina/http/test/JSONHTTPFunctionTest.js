@@ -495,11 +495,12 @@ describe("JSONHTTPFunction", () => {
             let _azctx  = new MockAzureFunctionContext();
             let _config = new Configuration("JSONHTTPFunctionTest", "jwt_config");
             let _jwtconfig = new JwtAddOn();
+            let _httpconfig = new HTTPAddOn();
             let _pm = new MockPropertyManager();
             _pm.mockProperty("jwt_config", fs.readFileSync("./test/config-good-all.json").toString());
             _pm.mockProperty("celastrinajs_mock_action", "session_subject");
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _config.addOn(_jwtconfig);
+            _config.addOn(_jwtconfig).addOn(_httpconfig);
             let _function = new MockJSONHTTPFunction(_config);
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";
@@ -524,11 +525,12 @@ describe("JSONHTTPFunction", () => {
             let _azctx  = new MockAzureFunctionContext();
             let _config = new Configuration("JSONHTTPFunctionTest", "jwt_config");
             let _jwtconfig = new JwtAddOn();
+            let _httpconfig = new HTTPAddOn();
             let _pm = new MockPropertyManager();
             _pm.mockProperty("jwt_config", fs.readFileSync("./test/config-good-all.json").toString());
             _pm.mockProperty("celastrinajs_mock_action", "session_subject");
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
-            _config.addOn(_jwtconfig);
+            _config.addOn(_jwtconfig).addOn(_httpconfig);
 
             _azctx.req.headers["host"] = "celastrinajs.com";
             _azctx.req.headers["user-agent"] = "Mocha Celastrinajs Test / 0.0.0";

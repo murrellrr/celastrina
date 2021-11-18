@@ -27,20 +27,89 @@
  * @license MIT
  */
 "use strict";
-const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL} = require("@celastrina/core");
+const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, AddOn, instanceOfCelastringType} = require("@celastrina/core");
 const {JSONHTTPContext, JSONHTTPFunction, HTTPAddOn} = require("@celastrina/http");
 const {CloudEvent} = require("cloudevents");
+const moment = require("moment");
+
 /**
- * EventContext
+ * Response
  * @author Robert R Murrell
  */
-class CloudEventHTTPContext extends JSONHTTPContext {
-    constructor(config) {
-        super(config);
-        /**@type{CloudEvent}*/this._event = null;
+class EventResult {
+    constructor() {
+        this._total = 0;
+        this._failed = 0;
+        /**@type{Object}*/this._failedEvents = {};
     }
-    /**@return{CloudEvent}*/get event() {return this._event;}
-    /**@param{CloudEvent}event*/set event(event) {this._event = event;}
+    /**
+     * @param {CloudEvent} event
+     */
+    accept(event) {
+        ++this._total;
+    }
+    /**
+     * @param {CloudEvent} event
+     * @param {Object} cause
+     */
+    reject(event, cause) {
+        this._failedEvents[event.id] = {event: event, cause: cause};
+        ++this._total;
+        ++this._failed;
+    }
+    /**
+     * @param {CloudEvent} event
+     * @return {{rejected:boolean, cause?:Object}}
+     */
+    rejected(event) {
+        let _response = {rejected: false};
+        let _result = typeof this._failedEvents[event.id];
+        (typeof _result === "object")? _response = {rejected: true, cause: _result.cause} : _response = {rejected: false};
+        return _response;
+    }
+}
+/**
+ * @typedef CloudEventContext
+ * @property {CloudEvent} event
+ * @property {EventResult} eventResult
+ */
+/**
+ * EventHandler
+ * @author Robert R Murrell
+ */
+class EventHandler {
+    /**
+     * @param {CloudEventHTTPFunction} event
+     * @param {JSONHTTPContext & CloudEventContext} context
+     * @param {CloudEventAddOn} config
+     * @param {Object} body
+     * @return {Promise<void>}
+     * @abstract
+     */
+    async handleEvent(event, context, config, body) {};
+}
+/**
+ * AsyncEventHandler
+ * @author Robert R Murrell
+ */
+class AsyncEventHandler extends EventHandler {
+    async handleEvent(event, context, config, body) {
+        let _promises = [];
+        for(let _event of body) {
+            _promises.unshift(event._handleEvent(context, config, body));
+        }
+        await Promise.all(_promises);
+    };
+}
+/**
+ * AsyncEventHandler
+ * @author Robert R Murrell
+ */
+class SyncEventHandler extends EventHandler {
+    async handleEvent(event, context, config, body) {
+        // TODO: Check to see if we need to order temporally
+        await event._handleEvent(context, config, body);
+    };
 }
 /**
  * EventFunction
@@ -53,13 +122,17 @@ class CloudEventHTTPFunction extends JSONHTTPFunction {
     constructor(config) {super(config);}
     /**
      * @param {Configuration} config
-     * @return {Promise<CloudEventHTTPContext>}
+     * @return {Promise<JSONHTTPContext & CloudEventContext>}
      */
     async createContext(config) {
-        return new CloudEventHTTPContext(config);
+        /**@type{JSONHTTPContext & CloudEventContext}*/
+        let _context = /**@type{JSONHTTPContext & CloudEventContext}*/new JSONHTTPContext(config);
+        _context.event = null;
+        _context.eventResult = new EventResult();
+        return _context;
     }
     /**
-     * @param {(Context|CloudEventHTTPContext)} context
+     * @param {(Context|CloudEventContext)} context
      * @param exception
      * @return {Promise<void>}
      */
@@ -70,35 +143,179 @@ class CloudEventHTTPFunction extends JSONHTTPFunction {
         }
     }
     /**
-     * @param {(JSONHTTPContext|CloudEventHTTPContext)} context
+     * @param {JSONHTTPContext & CloudEventContext} context
+     * @param {CloudEventAddOn} config
+     * @param {Object} body
+     * @return {Promise<void>}
+     */
+    async _handleEvent(context, config, body) {
+        try {
+            context.event = new CloudEvent(body);
+            await this.onEvent(context);
+            let _result = context.response.eventResult.rejected(context.event);
+            if(_result.rejected) {
+                if(config.abortOnReject) {
+                    context.log("Event '" + context.event.id + "' caused abort. Cause: " + _result.cause, LOG_LEVEL.ERROR,
+                                 "CloudEventHTTPFunction._handleEvent(context, config, body)");
+                    // TODO: Finish message
+                    throw CelastrinaError.newError("", 500, false, CelastrinaError.wrapError(_result.cause));
+                }
+            }
+            // TODO: Check to see if we abort on failure
+        }
+        catch(exception) {
+            if(instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, exception))
+                throw exception;
+            else {
+                if(exception instanceof TypeError) {
+                    // TODO: Get to a detailed set of causes for the rejection.
+                }
+                else
+                    throw CelastrinaError.wrapError(exception);
+            }
+        }
+    }
+    /**
+     * @param {JSONHTTPContext & CloudEventContext} context
+     * @param {CloudEventAddOn} config
+     * @param {Array<Object>} body
+     * @return {Promise<void>}
+     * @private
+     */
+    async _batchEvents(context, config, body) {
+        if(config.allowBatch) {
+            /**@type{BatchConfig}*/let _batchConfig = config.batch;
+            if(Array.isArray(body)) {
+                if (body.length < _batchConfig.limit) {
+                    // Checking to see if they need to be syn processing?
+                    /**@type{EventHandler}*/let _eventHandler;
+                    (_batchConfig.processAsync) ? _eventHandler = new AsyncEventHandler() : _eventHandler = new SyncEventHandler();
+                    await _eventHandler.handleEvent(this, context, config, body);
+                }
+                else {
+                    context.log("Batch limit of Batch limit of '" + _batchConfig.limit + "' exceeded.", LOG_LEVEL.WARN,
+                        "CloudEventHTTPFunction._post(context)");
+                    context.sendValidationError(CelastrinaValidationError.newValidationError(
+                        "Invalid Payload. Batch limit of '" + _batchConfig.limit + "' message(s) exceeded.", "body"));
+                    context.done();
+                }
+            }
+            else {
+                context.log("Invalid body content. Content-Type indicates batch but body does not contain an array.", LOG_LEVEL.ERROR,
+                    "CloudEventHTTPFunction._post(context)");
+                context.sendValidationError(CelastrinaValidationError.newValidationError(
+                    "Invalid body content. Content-Type indicates batch but body does not contain an array.", "body"));
+                context.done();
+            }
+        }
+        else {
+            context.log("Batch messaging not supported.", LOG_LEVEL.WARN, "CloudEventHTTPFunction._post(context)");
+            context.sendValidationError(CelastrinaValidationError.newValidationError("Batch messaging not supported.",
+                "body", true));
+            context.done();
+        }
+
+    }
+    /**
+     * @param {JSONHTTPContext & CloudEventContext} context
      * @return {Promise<void>}
      * @private
      */
     async _post(context) {
-        let _event = CloudEvent.toEvent({headers: context.headers, body: context.requestBody});
-        if(_event == null) {
-            // TODO: Do something here, but I dont know what yet
+        /**@type{CloudEventAddOn}*/let _config = /**@type{CloudEventAddOn}*/await context.config.getAddOn(CloudEventAddOn.CONFIG_ADDON_CLOUDEVENT);
+        let _body = context.requestBody;
+        if(typeof _body === "undefined" || _body == null) {
+            context.log("Received empty request body.", LOG_LEVEL.WARN, "CloudEventHTTPFunction._post(context)");
+            context.sendValidationError(CelastrinaValidationError.newValidationError("Body is required.", "body", true));
+            context.done();
         }
         else {
-            context.event = _event;
-            return this.onEvent(context);
+            let _ct = context.getRequestHeader("content-type");
+            if(_ct === "application/cloudevents-batch+json")
+                await this._batchEvents(context, _config, _body);
+            else if(_ct === "application/cloudevents+json")
+                await this._handleEvent(context, _config, _body);
+            else {
+                context.log("Invalid Content-Type '" + _ct + "' received.", LOG_LEVEL.ERROR,
+                             "CloudEventHTTPFunction._post(context)");
+                context.sendValidationError(CelastrinaValidationError.newValidationError(
+                    "Invalid Payload.",
+                        "body", true));
+                context.done();
+            }
         }
     }
     /**
-     * @param {CloudEventHTTPContext} context
+     * @param {CloudEventContext & JSONHTTPContext} context
      * @return {Promise<void>}
      */
     async onEvent(context) {throw CelastrinaError.newError("Not Implemented.", 501);}
 }
 /**
+ * BatchConfig
+ * @author Robert R Murrell
+ */
+class BatchConfig {
+    static CELASTRINAJS_EVENT_BATCH_CONFIG_TYPE = "celastrinajs.addon.cloudevent.config.batch";
+    /**
+     * @param {number} [limit=10]
+     * @param {boolean} [abortOnReject=false]
+     * @param {boolean} [processAsync=true]
+     * @param {boolean} [orderTemporally=false] Order message by time, only followed if processAsync is false, set to false if
+     *                                          processAsync is true.
+     */
+    constructor(limit = 10, abortOnReject = false, processAsync = true, orderTemporally = false) {
+        this._limit = limit;
+        this._abortOnReject = abortOnReject;
+        this._processAsync = processAsync;
+        (this._processAsync) ? this._orderTemporally = orderTemporally : this._orderTemporally = false;
+        this.__type = BatchConfig.CELASTRINAJS_EVENT_BATCH_CONFIG_TYPE;
+    }
+    /**@type{number}*/get limit() {return this._limit;}
+    /**@type{boolean}*/get processAsync() {return this._processAsync;}
+}
+/**
  * JSONHTTPEventAddOn
  * @author Robert R Murrell
  */
-class CloudEventHTTPAddOn extends HTTPAddOn {
-    static CONFIG_ADDON_EVENT = HTTPAddOn.CONFIG_ADDON_HTTP;
-    constructor() {super();}
+class CloudEventAddOn extends AddOn {
+    static CONFIG_ADDON_CLOUDEVENT = "celastrinajs.addon.cloudevent";
+    static CONFIG_CLOUDEVENT_BATCH = "celastrinajs.addon.cloudevent.batch";
+    static CONFIG_CLOUDEVENT_EXPIRES = "celastrinajs.addon.cloudevent.expires";
+    static CONFIG_CLOUDEVENT_TYPE = "celastrinajs.addon.cloudevent.type";
+    static CONFIG_CLOUDEVENT_SUBJECT = "celastrinajs.addon.cloudevent.subject";
+    static CONFIG_CLOUDEVENT_ABORT_ON_REJECT = "celastrinajs.addon.cloudevent.abortOnReject";
+    static CONFIG_CLOUDEVENT_CONTENTTYPE = "celastrinajs.addon.cloudevent.data.contentType";
+    static CONFIG_CLOUDEVENT_EMPTY_DATA = "celastrinajs.addon.cloudevent.data.allowEmpty";
+
+    constructor() {
+        super(CloudEventAddOn.CONFIG_ADDON_CLOUDEVENT);
+    }
+    wrap(config) {
+        super.wrap(config);
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_BATCH] = null;
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_ABORT_ON_REJECT] = false;
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EXPIRES] = 86400; // 24 hours
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EMPTY_DATA] = true;
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EMPTY_DATA] = false;
+    }
+    /**@type{BatchConfig}*/get batch() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_BATCH];}
+    /**@type{boolean}*/get allowBatch() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_BATCH] != null;}
+    /**@type{number}*/get expires() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EXPIRES];}
+    /**@type{string}*/get type() {}
+    /**@type{string}*/get subject() {}
+    /**@type{string}*/get contentType() {}
+    /**@type{boolean}*/get allowEmpty() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EMPTY_DATA];}
+    /**@type{boolean}*/get abortOnReject() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_ABORT_ON_REJECT];}
 }
 
+
+
+
+
+module.exports = {
+
+}
 // const moment = require("moment");
 // const { v4: uuidv4 } = require('uuid');
 // const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration,

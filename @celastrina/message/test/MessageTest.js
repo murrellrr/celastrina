@@ -35,18 +35,23 @@ const {Header, Message} = require("../Message");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const assert = require("assert");
 
-const MessageSameple = "{\"_header\":{\"_resource\":\"robert\",\"_action\":\"update\",\"_source\":\"https://function.com\",\"_published\":\"2021-03-06T21:57:20.176Z\",\"_messageId\":\"b78b5241-99ac-4565-936d-494803fa3f33\",\"_traceId\":\"f33f107d-ec63-4a45-8ba4-1fa7328f9c9d\",\"_environment\":2,\"_expires\":\"2022-03-06T21:57:20.176Z\",\"_object\":{\"_mime\":\"application/json; com.celastrinajs.message.header\"}},\"_payload\":{\"test\":\"value\"},\"_object\":{\"_mime\":\"application/json; com.celastrinajs.message\"}}";
+class MockMessageContext extends MockAzureFunctionContext {
+    constructor() {
+        super();
+    }
 
-describe("Message", () => {
-    describe("#unmarshall", () => {
-        it("should unmarshall to Message successfully with valid JSON.", () => {
-            Message.unmarshall(MessageSameple)
-                .then((message) => {
-                    //
-                })
-                .catch((exception) => {
-                    assert.fail(exception);
-                });
-        });
-    });
+    set body(message) {
+        this.bindings.req.body = message;
+        this.bindings.req.body.rawBody = JSON.stringify(message);
+        this.bindings.req.headers["content-type"] = "application/json; charset=utf-8";
+        this.bindings.req.headers["ce-id"] = message.id;
+        this.bindings.req.headers["ce-time"] = message.time;
+        this.bindings.req.headers["ce-type"] = message.type;
+        this.bindings.req.headers["ce-source"] = message.source;
+        this.bindings.req.headers["ce-specversion"] = message.specversion;
+    }
+}
+
+describe("", () => {
+
 });

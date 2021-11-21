@@ -43,7 +43,7 @@ class MockMessageContext extends MockAzureFunctionContext {
     set body(message) {
         this.bindings.req.body = message;
         this.bindings.req.body.rawBody = JSON.stringify(message);
-        this.bindings.req.headers["content-type"] = "application/json; charset=utf-8";
+        this.bindings.req.headers["content-type"] = "application/cloudevents+json; charset=utf-8";
         this.bindings.req.headers["ce-id"] = message.id;
         this.bindings.req.headers["ce-time"] = message.time;
         this.bindings.req.headers["ce-type"] = message.type;

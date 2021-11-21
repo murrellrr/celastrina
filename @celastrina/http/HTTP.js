@@ -654,7 +654,7 @@ class HTTPParameter {
      * @return {*}
      * @abstract
      */
-    _getParameter(context, key) {
+    async _getParameter(context, key) {
         throw CelastrinaError.newError("Not Implemented.", 501);
     }
     /**
@@ -664,7 +664,7 @@ class HTTPParameter {
      * @return {Promise<*>}
      */
     async getParameter(context, key, defaultValue = null) {
-        let _value = this._getParameter(context, key);
+        let _value = await this._getParameter(context, key);
         if(typeof _value === "undefined" || _value == null) _value = defaultValue;
         return _value;
     }
@@ -674,7 +674,7 @@ class HTTPParameter {
      * @param {*} [value = null]
      * @abstract
      */
-    _setParameter(context, key, value = null) {}
+    async _setParameter(context, key, value = null) {}
     /**
      * @param {HTTPContext} context
      * @param {string} key
@@ -684,7 +684,7 @@ class HTTPParameter {
     async setParameter(context, key, value = null) {
         if(this._readOnly)
             throw CelastrinaError.newError("Set Parameter not supported.");
-        this._setParameter(context, key, value);
+        await this._setParameter(context, key, value);
     }
 }
 /**
@@ -698,7 +698,7 @@ class HeaderParameter extends HTTPParameter {
      * @param {string} key
      * @return {(null|string)}
      */
-    _getParameter(context, key) {
+    async _getParameter(context, key) {
         return context.getRequestHeader(key);
     }
     /**
@@ -706,8 +706,8 @@ class HeaderParameter extends HTTPParameter {
      * @param {string} key
      * @param {(null|string)} [value = null]
      */
-    _setParameter(context, key, value = null) {
-        context.setResponseHeader(key, value);
+    async _setParameter(context, key, value = null) {
+        await context.setResponseHeader(key, value);
     }
 }
 /**
@@ -721,8 +721,8 @@ class CookieParameter extends HTTPParameter {
      * @param {string} key
      * @return {Cookie}
      */
-    _getParameter(context, key) {
-        let cookie = context.getCookie(key, null);
+    async _getParameter(context, key) {
+        let cookie = await context.getCookie(key, null);
         if(cookie != null) cookie = cookie.value;
         return cookie;
     }
@@ -731,13 +731,13 @@ class CookieParameter extends HTTPParameter {
      * @param {string} key
      * @param {null|string} [value = null]
      */
-    _setParameter(context, key, value = null) {
-        let cookie = context.getCookie(key, null);
+    async _setParameter(context, key, value = null) {
+        let cookie = await context.getCookie(key, null);
         if(cookie == null)
             cookie = Cookie.newCookie(key, value);
         else
             cookie.value = value;
-        context.setCookie(cookie);
+        await context.setCookie(cookie);
     }
 }
 /**
@@ -751,7 +751,7 @@ class QueryParameter extends HTTPParameter {
      * @param {string} key
      * @return {(null|string)}
      */
-    _getParameter(context, key) {
+    async _getParameter(context, key) {
         return context.getQuery(key);
     }
     /**
@@ -759,7 +759,7 @@ class QueryParameter extends HTTPParameter {
      * @param {string} key
      * @param {(null|string)} [value = null]
      */
-    _setParameter(context, key, value = null) {
+    async _setParameter(context, key, value = null) {
         throw CelastrinaError.newError("QueryParameter.setParameter not supported.", 501);
     }
 }
@@ -774,7 +774,7 @@ class BodyParameter extends HTTPParameter {
      * @param {string} key
      * @return {*}
      */
-    _getParameter(context, key) {
+    async _getParameter(context, key) {
         let _value = context.requestBody;
         /**@type{Array<string>}*/let _attrs = key.split(".");
         for(const _attr of _attrs) {
@@ -787,7 +787,7 @@ class BodyParameter extends HTTPParameter {
      * @param {string} key
      * @param {*} [value = null]
      */
-    _setParameter(context, key, value = null) {
+    async _setParameter(context, key, value = null) {
         let _value = context.responseBody;
         /**@type{Array<string>}*/let _attrs = key.trim().split(".");
         for(let idx = 0; idx < _attrs.length - 2; ++idx) {
@@ -1392,7 +1392,7 @@ class HTTPContext extends Context {
      * @private
      */
     async _parseCookies() {
-        let cookies = cookie.parse(this.getRequestHeader("cookie", ""), "");
+        let cookies = cookie.parse(await this.getRequestHeader("cookie", ""), "");
         for(let prop in cookies) {
             if(cookies.hasOwnProperty(prop)) {
                 let local = cookies[prop];
@@ -1469,9 +1469,9 @@ class HTTPContext extends Context {
     /**
      * @param {string} name
      * @param {null|string} [defaultValue=null]
-     * @return {null|string}
+     * @return {Promise<null|string>}
      */
-    getURIBinding(name, defaultValue = null) {
+    async getURIBinding(name, defaultValue = null) {
         let uirbinding = this._config.context.bindingData[name];
         if(typeof uirbinding === "undefined" || uirbinding == null) return defaultValue
         else return uirbinding;
@@ -1479,9 +1479,9 @@ class HTTPContext extends Context {
     /**
      * @param {string} name
      * @param {Cookie} [defaultValue=null]
-     * @return {Cookie}
+     * @return {Promise<Cookie>}
      */
-    getCookie(name, defaultValue = null) {
+    async getCookie(name, defaultValue = null) {
         let cookie = this._cookies[name];
         if(typeof cookie === "undefined" || cookie == null)
             return defaultValue;
@@ -1490,34 +1490,82 @@ class HTTPContext extends Context {
     }
     /**
      * @param {Cookie} cookie
+     * @return {Promise<void>}
      */
-    setCookie(cookie) {
+    async setCookie(cookie) {
         this._cookies[cookie.name] = cookie;
     }
     /**
      * @param {string} name
      * @param {null|string} [defaultValue=null]
-     * @return {null|string}
+     * @return {Promise<(null|string)>}
      */
-    getQuery(name, defaultValue = null) {
+    async getQuery(name, defaultValue = null) {
         let qry = this._config.context.req.query[name];
         if(typeof qry !== "string") return defaultValue;
         else return qry;
+    }
+    /**
+     * @param {(null|string)} value
+     * @param {string} [chr = ";"]
+     * @param {boolean} [trim = true]
+     * @return {Promise<Array<string>>}
+     */
+    async splitHeader(value, chr = ";", trim = true) {
+        if(value != null) {
+            /**@type{Array<string>}*/let _values = value.split(chr);
+            if(trim) {
+                for (let index = 0; index < _values.length; ++index) {
+                    _values[index] = _values[index].trim();
+                }
+            }
+            return _values;
+        }
+        else return [];
     }
     /**
      * @param {string} name
      * @param {null|string|Array.<string>} [defaultValue=null]
      * @return {null|string|Array.<string>}
      */
-    getRequestHeader(name, defaultValue = null) {
+    async getRequestHeader(name, defaultValue = null) {
         let header = this._config.context.req.headers[name];
         if(typeof header !== "string") return defaultValue;
         else return header;
     }
     /**
      * @param {string} name
+     * @param {(null|string)} [defaultValue = null] The default header value to split into an array of strings.
+     * @param {string} [chr = ";"]
+     * @param {boolean} [trim = true]
+     * @return {Promise<Array<string>>}
      */
-    deleteResponseHeader(name) {
+    async splitRequestHeader(name, defaultValue = null, chr = ";", trim = true) {
+        return this.splitHeader(await this.getRequestHeader(name, defaultValue), chr, trim);
+    }
+    /**
+     * @param {string} name
+     * @param {string} value
+     * @param {boolean} [defaultValue = false]
+     * @return {Promise<boolean>}
+     */
+    async requestHeaderContains(name, value, defaultValue = false) {
+        /**@type{string}*/let _header = await this.getRequestHeader(name);
+        if(_header != null) return (_header.search(value) !== -1);
+        else return false;
+    }
+    /**
+     * @param {string} name
+     * @return {Promise<boolean>}
+     */
+    async containsRequestHeader(name) {
+        return this.config.context.req.headers.hasOwnProperty(name);
+    }
+    /**
+     * @param {string} name
+     * @return {Promise<void>}
+     */
+    async deleteResponseHeader(name) {
         try {
             delete this._config.context.res.headers[name];
         }
@@ -1528,19 +1576,29 @@ class HTTPContext extends Context {
     }
     /**
      * @param {string} name
-     * @param {null|string|Array.<string>} [defaultValue=null]
-     * @return {null|string|Array.<string>}
+     * @param {null|string} [defaultValue=null]
+     * @return {null|string}
      */
-    getResponseHeader(name, defaultValue = null) {
+    async getResponseHeader(name, defaultValue = null) {
         let header = this._config.context.res.headers[name];
         if(typeof header !== "string") return defaultValue;
         else return header;
     }
     /**
      * @param {string} name
+     * @param {(null|string)} [defaultValue = null] The default header value to split into an array of strings.
+     * @param {string} [chr = ";"]
+     * @param {boolean} [trim = true]
+     * @return {Promise<Array<string>>}
+     */
+    async splitResponseHeader(name, defaultValue = null, chr = ";", trim = true) {
+        return this.splitHeader(await this.getResponseHeader(name, defaultValue), chr, trim);
+    }
+    /**
+     * @param {string} name
      * @param {string|Array.<string>} value
      */
-    setResponseHeader(name, value) {
+    async setResponseHeader(name, value) {
         this._config.context.res.headers[name] = value;
     }
     /**

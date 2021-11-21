@@ -33,26 +33,30 @@ const {CloudEvent} = require("cloudevents");
 const moment = require("moment");
 
 /**
- * Response
+ * EventHandler
  * @author Robert R Murrell
  */
-class EventResult {
+class EventInvocation {
     constructor() {
         this._total = 0;
         this._failed = 0;
         /**@type{Object}*/this._failedEvents = {};
+        this._rootCause = null;
     }
     /**
      * @param {CloudEvent} event
      */
-    accept(event) {
+    acceptEvent(event) {
         ++this._total;
+    }
+    rejectInvocation(cause) {
+        this._rootCause = cause;
     }
     /**
      * @param {CloudEvent} event
      * @param {Object} cause
      */
-    reject(event, cause) {
+    rejectEvent(event, cause) {
         this._failedEvents[event.id] = {event: event, cause: cause};
         ++this._total;
         ++this._failed;
@@ -61,196 +65,23 @@ class EventResult {
      * @param {CloudEvent} event
      * @return {{rejected:boolean, cause?:Object}}
      */
-    rejected(event) {
+    isEventRejected(event) {
         let _response = {rejected: false};
         let _result = typeof this._failedEvents[event.id];
         (typeof _result === "object")? _response = {rejected: true, cause: _result.cause} : _response = {rejected: false};
         return _response;
     }
+    /**@return{boolean}*/get invocationRejected() {return (this._rootCause != null);}
+    /**@return{*}*/get rootCause() {return this._rootCause;}
+    /**@return{number}*/get total() {return this._total;}
+    /**@return{number}*/get failed() {return this._failed;}
+    /**@return{Object}*/get failedEvents() {return this._failedEvents}
 }
 /**
  * @typedef CloudEventContext
  * @property {CloudEvent} event
- * @property {EventResult} eventResult
+ * @property {EventInvocation} invocation
  */
-/**
- * EventHandler
- * @author Robert R Murrell
- */
-class EventHandler {
-    /**
-     * @param {CloudEventHTTPFunction} event
-     * @param {JSONHTTPContext & CloudEventContext} context
-     * @param {CloudEventAddOn} config
-     * @param {Object} body
-     * @return {Promise<void>}
-     * @abstract
-     */
-    async handleEvent(event, context, config, body) {};
-}
-/**
- * AsyncEventHandler
- * @author Robert R Murrell
- */
-class AsyncEventHandler extends EventHandler {
-    async handleEvent(event, context, config, body) {
-        let _promises = [];
-        for(let _event of body) {
-            _promises.unshift(event._handleEvent(context, config, body));
-        }
-        await Promise.all(_promises);
-    };
-}
-/**
- * AsyncEventHandler
- * @author Robert R Murrell
- */
-class SyncEventHandler extends EventHandler {
-    async handleEvent(event, context, config, body) {
-        // TODO: Check to see if we need to order temporally
-        await event._handleEvent(context, config, body);
-    };
-}
-/**
- * EventFunction
- * @author Robert R Murrell
- */
-class CloudEventHTTPFunction extends JSONHTTPFunction {
-    /**
-     * @param {Configuration} config
-     */
-    constructor(config) {super(config);}
-    /**
-     * @param {Configuration} config
-     * @return {Promise<JSONHTTPContext & CloudEventContext>}
-     */
-    async createContext(config) {
-        /**@type{JSONHTTPContext & CloudEventContext}*/
-        let _context = /**@type{JSONHTTPContext & CloudEventContext}*/new JSONHTTPContext(config);
-        _context.event = null;
-        _context.eventResult = new EventResult();
-        return _context;
-    }
-    /**
-     * @param {(Context|CloudEventContext)} context
-     * @param exception
-     * @return {Promise<void>}
-     */
-    async exception(context, exception) {
-        await super.exception(context, exception);
-        if(context.event != null ) {
-            // going to dead-letter it if its a "drop"
-        }
-    }
-    /**
-     * @param {JSONHTTPContext & CloudEventContext} context
-     * @param {CloudEventAddOn} config
-     * @param {Object} body
-     * @return {Promise<void>}
-     */
-    async _handleEvent(context, config, body) {
-        try {
-            context.event = new CloudEvent(body);
-            await this.onEvent(context);
-            let _result = context.response.eventResult.rejected(context.event);
-            if(_result.rejected) {
-                if(config.abortOnReject) {
-                    context.log("Event '" + context.event.id + "' caused abort. Cause: " + _result.cause, LOG_LEVEL.ERROR,
-                                 "CloudEventHTTPFunction._handleEvent(context, config, body)");
-                    // TODO: Finish message
-                    throw CelastrinaError.newError("", 500, false, CelastrinaError.wrapError(_result.cause));
-                }
-            }
-            // TODO: Check to see if we abort on failure
-        }
-        catch(exception) {
-            if(instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, exception))
-                throw exception;
-            else {
-                if(exception instanceof TypeError) {
-                    // TODO: Get to a detailed set of causes for the rejection.
-                }
-                else
-                    throw CelastrinaError.wrapError(exception);
-            }
-        }
-    }
-    /**
-     * @param {JSONHTTPContext & CloudEventContext} context
-     * @param {CloudEventAddOn} config
-     * @param {Array<Object>} body
-     * @return {Promise<void>}
-     * @private
-     */
-    async _batchEvents(context, config, body) {
-        if(config.allowBatch) {
-            /**@type{BatchConfig}*/let _batchConfig = config.batch;
-            if(Array.isArray(body)) {
-                if (body.length < _batchConfig.limit) {
-                    // Checking to see if they need to be syn processing?
-                    /**@type{EventHandler}*/let _eventHandler;
-                    (_batchConfig.processAsync) ? _eventHandler = new AsyncEventHandler() : _eventHandler = new SyncEventHandler();
-                    await _eventHandler.handleEvent(this, context, config, body);
-                }
-                else {
-                    context.log("Batch limit of Batch limit of '" + _batchConfig.limit + "' exceeded.", LOG_LEVEL.WARN,
-                        "CloudEventHTTPFunction._post(context)");
-                    context.sendValidationError(CelastrinaValidationError.newValidationError(
-                        "Invalid Payload. Batch limit of '" + _batchConfig.limit + "' message(s) exceeded.", "body"));
-                    context.done();
-                }
-            }
-            else {
-                context.log("Invalid body content. Content-Type indicates batch but body does not contain an array.", LOG_LEVEL.ERROR,
-                    "CloudEventHTTPFunction._post(context)");
-                context.sendValidationError(CelastrinaValidationError.newValidationError(
-                    "Invalid body content. Content-Type indicates batch but body does not contain an array.", "body"));
-                context.done();
-            }
-        }
-        else {
-            context.log("Batch messaging not supported.", LOG_LEVEL.WARN, "CloudEventHTTPFunction._post(context)");
-            context.sendValidationError(CelastrinaValidationError.newValidationError("Batch messaging not supported.",
-                "body", true));
-            context.done();
-        }
-
-    }
-    /**
-     * @param {JSONHTTPContext & CloudEventContext} context
-     * @return {Promise<void>}
-     * @private
-     */
-    async _post(context) {
-        /**@type{CloudEventAddOn}*/let _config = /**@type{CloudEventAddOn}*/await context.config.getAddOn(CloudEventAddOn.CONFIG_ADDON_CLOUDEVENT);
-        let _body = context.requestBody;
-        if(typeof _body === "undefined" || _body == null) {
-            context.log("Received empty request body.", LOG_LEVEL.WARN, "CloudEventHTTPFunction._post(context)");
-            context.sendValidationError(CelastrinaValidationError.newValidationError("Body is required.", "body", true));
-            context.done();
-        }
-        else {
-            let _ct = context.getRequestHeader("content-type");
-            if(_ct === "application/cloudevents-batch+json")
-                await this._batchEvents(context, _config, _body);
-            else if(_ct === "application/cloudevents+json")
-                await this._handleEvent(context, _config, _body);
-            else {
-                context.log("Invalid Content-Type '" + _ct + "' received.", LOG_LEVEL.ERROR,
-                             "CloudEventHTTPFunction._post(context)");
-                context.sendValidationError(CelastrinaValidationError.newValidationError(
-                    "Invalid Payload.",
-                        "body", true));
-                context.done();
-            }
-        }
-    }
-    /**
-     * @param {CloudEventContext & JSONHTTPContext} context
-     * @return {Promise<void>}
-     */
-    async onEvent(context) {throw CelastrinaError.newError("Not Implemented.", 501);}
-}
 /**
  * BatchConfig
  * @author Robert R Murrell
@@ -273,10 +104,12 @@ class BatchConfig {
     }
     /**@type{number}*/get limit() {return this._limit;}
     /**@type{boolean}*/get processAsync() {return this._processAsync;}
+    /**@type{boolean}*/get abortOnReject() {return this._abortOnReject;}
 }
 /**
  * JSONHTTPEventAddOn
  * @author Robert R Murrell
+ * @abstract
  */
 class CloudEventAddOn extends AddOn {
     static CONFIG_ADDON_CLOUDEVENT = "celastrinajs.addon.cloudevent";
@@ -284,10 +117,11 @@ class CloudEventAddOn extends AddOn {
     static CONFIG_CLOUDEVENT_EXPIRES = "celastrinajs.addon.cloudevent.expires";
     static CONFIG_CLOUDEVENT_TYPE = "celastrinajs.addon.cloudevent.type";
     static CONFIG_CLOUDEVENT_SUBJECT = "celastrinajs.addon.cloudevent.subject";
+    static CONFIG_CLOUDEVENT_VERSION = "celastrinajs.addon.cloudevent.version";
     static CONFIG_CLOUDEVENT_ABORT_ON_REJECT = "celastrinajs.addon.cloudevent.abortOnReject";
     static CONFIG_CLOUDEVENT_CONTENTTYPE = "celastrinajs.addon.cloudevent.data.contentType";
     static CONFIG_CLOUDEVENT_EMPTY_DATA = "celastrinajs.addon.cloudevent.data.allowEmpty";
-
+    static CONFIG_CLOUDEVENT_RESPONSE = "celastrinajs.addon.cloudevent.response";
     constructor() {
         super(CloudEventAddOn.CONFIG_ADDON_CLOUDEVENT);
     }
@@ -297,284 +131,301 @@ class CloudEventAddOn extends AddOn {
         this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_ABORT_ON_REJECT] = false;
         this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EXPIRES] = 86400; // 24 hours
         this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EMPTY_DATA] = true;
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EMPTY_DATA] = false;
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_RESPONSE] = 200;
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_TYPE] = new RegExp("^.*$");
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_SUBJECT] = new RegExp("^.*$");
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_VERSION] = new RegExp("^.*$");
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_CONTENTTYPE] = new RegExp("^.*$");
+    }
+    async initialize(azcontext, pm, rm, prm) {
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_TYPE].compile();
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_SUBJECT].compile();
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_VERSION].compile();
+        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_CONTENTTYPE].compile();
     }
     /**@type{BatchConfig}*/get batch() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_BATCH];}
     /**@type{boolean}*/get allowBatch() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_BATCH] != null;}
     /**@type{number}*/get expires() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EXPIRES];}
-    /**@type{string}*/get type() {}
-    /**@type{string}*/get subject() {}
-    /**@type{string}*/get contentType() {}
+    /**@type{RegExp}*/get type() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_TYPE];}
+    /**@type{RegExp}*/get subject() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_SUBJECT];}
+    /**@type{RegExp}*/get specversion() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_VERSION];}
+    /**@type{RegExp}*/get contentType() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_CONTENTTYPE];}
     /**@type{boolean}*/get allowEmpty() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EMPTY_DATA];}
     /**@type{boolean}*/get abortOnReject() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_ABORT_ON_REJECT];}
+    /**@type{number}*/get responceCode() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_RESPONSE];}
 }
+/**
+ * CloudEventEventEmitter
+ * @author Robert R Murrell
+ * @abstract
+ */
+class CloudEventEmitter {
+    constructor() {}
+    /**
+     * @param {CloudEventBaseFunction} func
+     * @param {JSONHTTPContext & CloudEventContext} context
+     * @param {CloudEventAddOn} config
+     * @param {Object} body
+     * @return {Promise<void>}
+     * @abstract
+     */
+    async emit(func, context, config, body) {};
+}
+/**
+ * AsyncEventHandler
+ * @author Robert R Murrell
+ */
+class AsyncEventEmitter extends CloudEventEmitter {
+    constructor() {super();}
+    async emit(func, context, config, body) {
+        let _promises = [];
+        for(let _event of body) {
+            _promises.unshift(func._handleEvent(context, config, body));
+        }
+        await Promise.all(_promises);
+    }
+}
+/**
+ * AsyncEventHandler
+ * @author Robert R Murrell
+ */
+class SyncEventEmitter extends CloudEventEmitter {
+    constructor() {super();}
+    async emit(func, context, config, body) {
+        // TODO: Check to see if we need to order temporally
+        await func._handleEvent(context, config, body);
+    }
+}
+/**
+ * EventFunction
+ * @author Robert R Murrell
+ */
+class CloudEventBaseFunction {
+    constructor() {}
+    /**
+     * @param {Configuration} config
+     * @return {Promise<JSONHTTPContext & CloudEventContext>}
+     */
+    async createContext(config) {
+        /**@type{JSONHTTPContext & CloudEventContext}*/
+        let _context = /**@type{JSONHTTPContext & CloudEventContext}*/new JSONHTTPContext(config);
+        _context.event = null;
+        _context.invocation = new EventInvocation();
+        return _context;
+    }
+    /**
+     * @param {(Context|CloudEventContext)} context
+     * @param exception
+     * @return {Promise<void>}
+     */
+    async exception(context, exception) {
+        await super.exception(context, exception);
+        if(context.event != null ) {
+            // going to dead-letter it if its a "drop"
+        }
+    }
 
+    /**
+     * @param {JSONHTTPContext & CloudEventContext} context
+     * @param {CloudEventAddOn} config
+     * @param {Object} body
+     * @return {Promise<{rejected:boolean, event?:CloudEvent, cause?:Object}>}
+     */
+    async _createEvent(context, config, body) {
+        let _event = new CloudEvent(body);
+        if(!_event.specversion.match(config.specversion)) {
+            //
+        }
+        else if(!_event.type.match(config.type)) {
+            //
+        }
+        else if(!_event.subject.match(config.subject)) {
+            //
+        }
+        else if(!_event.datacontenttype.match(config.contentType)) {
+            //
+        }
+        else {
+            (typeof _event.time === "undefined" || _event.time == null)? _event.time = moment() : _event.time = moment(_event.time);
+            // TODO: Check if expired.
+        }
+    }
 
+    /**
+     * @param {JSONHTTPContext & CloudEventContext} context
+     * @param {CloudEventAddOn} config
+     * @param {Object} body
+     * @return {Promise<void>}
+     */
+    async _handleEvent(context, config, body) {
+        try {
 
+            let _result = await this._createEvent(context, config, body);
+            if(!_result.rejected) {
+                await this.onEvent(context);
+            }
 
-
+            // await this.onEvent(context);
+            // _result = context.response.eventResult.rejected(context.event);
+            //
+            // if(_result.rejected) {
+            //     if(config.abortOnReject) {
+            //         context.log("Event '" + context.event.id + "' caused abort. Cause: " + _result.cause, LOG_LEVEL.ERROR,
+            //                      "CloudEventHTTPFunction._handleEvent(context, config, body)");
+            //         // TODO: Finish message
+            //         throw CelastrinaError.newError("", 500, false, CelastrinaError.wrapError(_result.cause));
+            //     }
+            // }
+        }
+        catch(exception) {
+            if(instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, exception))
+                throw exception;
+            else {
+                if(exception instanceof TypeError) {
+                    // TODO: Get to a detailed set of causes for the rejection.
+                }
+                else
+                    throw CelastrinaError.wrapError(exception);
+            }
+        }
+    }
+    /**
+     * @param {JSONHTTPContext & CloudEventContext} context
+     * @param {CloudEventAddOn} config
+     * @param {Array<Object>} body
+     * @return {Promise<void>}
+     * @private
+     */
+    async _batchEvents(context, config, body) {
+        /**@type{BatchConfig}*/let _batchConfig = config.batch;
+        /**@type{CloudEventEmitter}*/let _eventHandler;
+        (_batchConfig.processAsync) ? _eventHandler = new AsyncEventEmitter() : _eventHandler = new SyncEventEmitter();
+        await _eventHandler.emit(this, context, config, body);
+    }
+    /**
+     * @param {JSONHTTPContext & CloudEventContext} context
+     * @param {undefined|null|Object} body
+     * @param {string} contentType
+     * @return {Promise<void>}
+     */
+    async _emit(context, body, contentType) {
+        /**@type{CloudEventAddOn}*/let _config = /**@type{CloudEventAddOn}*/await context.config.getAddOn(CloudEventAddOn.CONFIG_ADDON_CLOUDEVENT);
+        if(contentType === "application/cloudevents-batch+json") return this._batchEvents(context, _config, body);
+        else return this._handleEvent(context, _config, body);
+    }
+    /**
+     * @param {Context & CloudEventContext} context
+     * @param {undefined|null|Object} body
+     * @param {string} contentType
+     * @return {Promise<void>}
+     */
+    async _validateEvent(context, body, contentType) {
+        /**@type{CloudEventAddOn}*/let _config = /**@type{CloudEventAddOn}*/await context.config.getAddOn(CloudEventAddOn.CONFIG_ADDON_CLOUDEVENT);
+        if(typeof body === "undefined" || body == null) {
+            context.log("Received empty request body.", LOG_LEVEL.WARN, "CloudEventHTTPFunction._doEvent(context, _body, contentType)");
+            context.invocation.rejectInvocation(CelastrinaValidationError.newValidationError("Body is required.", "body", true));
+        }
+        else {
+            if(contentType === "application/cloudevents-batch+json") {
+                if(!_config.allowBatch) {
+                    context.log("Batch messaging not supported.", LOG_LEVEL.WARN, "CloudEventHTTPFunction._batchEvents(context, config, body)");
+                    context.invocation.rejectInvocation(CelastrinaValidationError.newValidationError("Batch messaging not supported.",
+                        "body", true));
+                }
+                else if(!Array.isArray(body)) {
+                    context.log("Invalid body content. Content-Type indicates batch but body does not contain an array.", LOG_LEVEL.ERROR,
+                        "CloudEventHTTPFunction._batchEvents(context, config, body)");
+                    context.invocation.rejectInvocation(CelastrinaValidationError.newValidationError(
+                        "Invalid body content. Content-Type indicates batch but body does not contain an array.", "body",
+                        true));
+                }
+                else if(body.length < _config.batch.limit) {
+                    context.log("Batch limit of Batch limit of '" + _config.batch.limit + "' exceeded.", LOG_LEVEL.WARN,
+                    "CloudEventHTTPFunction._batchEvents(context, config, body)");
+                    context.invocation.rejectInvocation(CelastrinaValidationError.newValidationError(
+                        "Invalid Payload. Batch limit of '" + _config.batch.limit + "' message(s) exceeded.", "body"));
+                }
+            }
+            else if(contentType !== "application/cloudevents+json") {
+                context.log("Invalid Content-Type '" + contentType + "' received.", LOG_LEVEL.ERROR,
+                             "CloudEventHTTPFunction._doEvent(context, _body, contentType)");
+                context.invocation.rejectInvocation(CelastrinaValidationError.newValidationError("Invalid Payload.",
+                                                    "body", true));
+            }
+        }
+    }
+    /**
+     * @param {CloudEventContext & JSONHTTPContext} context
+     * @return {Promise<void>}
+     */
+    async onEvent(context) {throw CelastrinaError.newError("Not Implemented.", 501);}
+}
+/**
+ * HTTPCloudEventFunction
+ * @author Robert R Murrell
+ */
+class HTTPCloudEventFunction extends JSONHTTPFunction {
+    constructor(config) {
+        super(config);
+        this._base = new CloudEventBaseFunction();
+    }
+    /**
+     * @param {Configuration} config
+     * @return {Promise<JSONHTTPContext & CloudEventContext>}
+     */
+    async createContext(config) {
+        return this._base.createContext(config);
+    }
+    /**
+     * @param {(Context | JSONHTTPContext | CloudEventContext)} context
+     * @return {Promise<void>}
+     */
+    async validate(context) {
+        await this._base._validateEvent(context, context.responseBody, await context.getRequestHeader("content-type"));
+        if(context.invocation.invocationRejected) throw context.invocation.rootCause;
+    }
+    /**
+     * @param {(JSONHTTPContext | CloudEventContext)} context
+     * @return {Promise<void>}
+     * @private
+     */
+    async _post(context) {
+        await this._base._emit(context, context.responseBody, await context.getRequestHeader("content-type"));
+        /**@type{EventInvocation}*/let _incovation = context.invocation;
+        if(context.invocation.invocationRejected) throw context.invocation.rootCause;
+        else {
+            /**@type{CloudEventAddOn}*/let _config = /**@type{CloudEventAddOn}*/await context.config.getAddOn(CloudEventAddOn.CONFIG_ADDON_CLOUDEVENT);
+            let _code = _config.responceCode;
+            if(_incovation.failed === 0) {
+                context.send({accepted: _incovation.total}, _code);
+            }
+            else {
+                let _response = {accepted: _incovation.total, rejected: _incovation.failed, events: []};
+                for(let _event of _incovation.failedEvents) {
+                    _response.events.unshift(_event);
+                }
+                context.send(_response, _code);
+            }
+            context.done();
+        }
+    }
+}
+/**
+ * HTTPCloudEventAddOn
+ * @author Robert R Murrell
+ */
+class HTTPCloudEventAddOn extends CloudEventAddOn {
+    constructor() {super();}
+    getDependancies() {return new Set([HTTPAddOn.CONFIG_ADDON_HTTP]);}
+}
 module.exports = {
-
+    EventInvocation: EventInvocation,
+    BatchConfig: BatchConfig,
+    CloudEventAddOn: CloudEventAddOn,
+    CloudEventEmitter: CloudEventEmitter,
+    AsyncEventEmitter: AsyncEventEmitter,
+    SyncEventEmitter: SyncEventEmitter,
+    CloudEventBaseFunction: CloudEventBaseFunction,
+    HTTPCloudEventFunction: HTTPCloudEventFunction,
+    HTTPCloudEventAddOn: HTTPCloudEventAddOn
 }
-// const moment = require("moment");
-// const { v4: uuidv4 } = require('uuid');
-// const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration,
-//       BaseContext, BaseFunction} = require("@celastrina/core");
-//
-// /**
-//  * @typedef {_AzureFunctionContext} _AzureMessageContext
-//  * @property {string} message
-//  */
-// /**
-//  * @type {{TEST: number, MONITOR: number, DEVELOPMENT: number, PRODUCTION: number}}
-//  */
-// const MESSAGE_ENVIRONMENT = {
-//     PRODUCTION: 0,
-//     MONITOR: 1,
-//     TEST: 2,
-//     DEVELOPMENT: 3
-// };
-// /**
-//  * Header
-//  * @property {Object} _object
-//  * @author Robert R Murrell
-//  */
-// class Header {
-//     /**
-//      * @param {null|string} resource
-//      * @param {null|string} action
-//      * @param {null|string} source
-//      * @param {number} [environment=MESSAGE_ENVIRONMENT.PRODUCTION]
-//      * @param {moment.Moment} [published=moment()]
-//      * @param {null|moment.Moment} [expires=null]
-//      * @param {string} [messageId=uuidv4()]
-//      * @param {string} [traceId=uuidv4()]
-//      */
-//     constructor(resource = null, action = null, source = null, environment = MESSAGE_ENVIRONMENT.PRODUCTION,
-//                 published = moment(), expires = null, messageId = uuidv4(), traceId = uuidv4()) {
-//         /**@type{string}*/this._resource = resource;
-//         /**@type{string}*/this._action = action;
-//         /**@type{string}*/this._source = source;
-//         /**@type{moment.Moment}*/this._published = published;
-//         /**@type{string}*/this._messageId = messageId;
-//         /**@type{string}*/this._traceId = traceId;
-//         /**@type{number}*/this._environment = environment;
-//         if(expires == null)
-//             /**@type{moment.Moment}*/this._expires = moment(published).add(1, "year");
-//         else
-//             /**@type{moment.Moment}*/this._expires = expires;
-//     }
-//     /**@returns{string}*/get resource() {return this._resource;}
-//     /**@returns{string}*/get action() {return this._action;}
-//     /**@returns{string}*/get source() {return this._source;}
-//     /**@type{moment.Moment}*/get published() {return this._published;}
-//     /**@type{moment.Moment}*/get expires() {return this._expires;}
-//     /**@returns{string}*/get messageId() {return this._messageId}
-//     /**@returns{string}*/get traceId() {return this._traceId}
-//     /**@type{number}*/get environment() {return this._environment;}
-//     /**@type{boolean}*/get isExpired() {return moment().isSameOrAfter(this._expires);}
-//     /**
-//      * @param {Object} _oheader
-//      * @returns {Header}
-//      */
-//     static create(_oheader) {
-//         let _lheader = new Header();
-//         Object.assign(_lheader, _oheader);
-//         _lheader._published = moment(_lheader._published); // Convert from string to moment.
-//         _lheader._expires = moment(_lheader._expires);
-//         return _lheader;
-//     }
-// }
-// /**
-//  * Message
-//  * @property {Object} _object
-//  * @author Robert R Murrell
-//  */
-// class Message {
-//     /**
-//      * @param {Header} [header=null]
-//      * @param {*} [payload=null]
-//      */
-//     constructor(header = null, payload = null) {
-//         /**@type{Header}*/this._header = header;
-//         /**@type{*}*/this._payload = payload;
-//     }
-//     /**@returns{Header}*/get header() {return this._header;}
-//     /**@param{Header}header*/set header(header) {this._header = header;}
-//     /**@returns{*}*/get payload() {return this._payload;}
-//     /**@param{*}payload*/set payload(payload) {this._payload = payload;}
-//     /**
-//      * @param {Header} _header
-//      * @param {*} _opayload
-//      * @returns {Message}
-//      */
-//     static create(_header, _opayload) {
-//         return new Message(_header, _opayload);
-//     }
-//     /**
-//      * @param {Message} message
-//      * @returns {Promise<string>}
-//      */
-//     static async marshall(message) {
-//         return new Promise((resolve, reject) => {
-//             if(typeof message === "undefined" || message == null)
-//                 reject(CelastrinaValidationError.newValidationError("Invalid Message.", "Message"));
-//             else if (typeof message._header === "undefined" || message._header == null)
-//                 reject(CelastrinaValidationError.newValidationError("Invalid Message Header.", "Message._header"));
-//             else {
-//                 message._object = {_mime: "application/json; com.celastrinajs.message"};
-//                 message._header._object = {_mime: "application/json; com.celastrinajs.message.header"};
-//                 resolve(JSON.stringify(message));
-//             }
-//         });
-//     }
-//     /**
-//      * @param {*} message
-//      * @returns {Promise<Message>}
-//      */
-//     static async unmarshall(message) {
-//         return new Promise((resolve, reject) => {
-//             try {
-//                 let msg;
-//                 if(typeof message === "string")
-//                     msg = JSON.parse(message);
-//                 else msg = message;
-//
-//                 if(typeof msg !== "object" || msg == null)
-//                     reject(CelastrinaValidationError.newValidationError("Invalid message.", "Message"));
-//                 else {
-//                     if(!msg.hasOwnProperty("_object") || typeof msg._object !== "object")
-//                         reject(CelastrinaValidationError.newValidationError("Invalid Message object.", "Message._object"));
-//                     if(!msg._object.hasOwnProperty("_mime") || msg._object._mime !== "application/json; com.celastrinajs.message")
-//                         reject(CelastrinaValidationError.newValidationError("Invalid Message type.", "Message._object._mime"));
-//                     if(!msg.hasOwnProperty("_header") || typeof msg._header !== "object")
-//                         reject(CelastrinaValidationError.newValidationError("Invalid Header.", "Message._header"));
-//                     if(!msg._header.hasOwnProperty("_object") || typeof msg._header._object !== "object")
-//                         reject(CelastrinaValidationError.newValidationError("Invalid Header.", "Message._header._object"));
-//                     if(!msg._header._object.hasOwnProperty("_mime") || msg._header._object._mime !== "application/json; com.celastrinajs.message.header")
-//                         reject(CelastrinaValidationError.newValidationError("Invalid type.", "Message._header._object._mime"));
-//                     resolve(Message.create(Header.create(msg._header), msg._payload));
-//                 }
-//             }
-//             catch(exception) {
-//                 reject(CelastrinaError.newError(exception));
-//             }
-//         });
-//     }
-// }
-// /**
-//  * MessageContext
-//  * @extends {BaseContext}
-//  * @author Robert R Murrell
-//  */
-// class MessageContext extends BaseContext {
-//     /**
-//      * @param {Object} azcontext
-//      * @param {Configuration} config
-//      */
-//     constructor(azcontext, config) {
-//         super(azcontext, config);
-//         /**@type{null|Message}*/this._message = null;
-//     }
-//     /**@returns{string}*/get raw() {return this._funccontext.message;}
-//     /**@returns{null|Message}*/get message() {return this._message;}
-//     /**@param{Message}message*/set message(message) {this._message = message;}
-// }
-// /**
-//  * MessageFunction
-//  * @extends {BaseFunction}
-//  * @abstract
-//  * @author Robert R Murrell
-//  */
-// class MessageFunction extends BaseFunction {
-//     /**@param {Configuration} configuration*/
-//     constructor(configuration) {super(configuration);}
-//     /**
-//      * @param {_AzureMessageContext} azcontext
-//      * @param {Configuration} config
-//      * @returns {Promise<MessageContext>}
-//      */
-//     async createContext(azcontext, config) {
-//         return new Promise((resolve, reject) => {
-//             resolve(new MessageContext(azcontext, config));
-//         });
-//     }
-//     /**
-//      * @param {MessageContext} context
-//      * @returns {Promise<void>}
-//      * @private
-//      */
-//     async _onMonitor(context) {
-//         return new Promise((resolve, reject) => {
-//             context.log("Not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "MessageFunction._onMessage(context)");
-//             resolve();
-//         });
-//     }
-//     /**
-//      * @param {MessageContext} context
-//      * @returns {Promise<void>}
-//      * @private
-//      */
-//     async _onMessage(context) {
-//         return new Promise((resolve, reject) => {
-//             context.log("Not implemented.", LOG_LEVEL.LEVEL_VERBOSE, "MessageFunction._onMessage(context)");
-//             reject(CelastrinaError.newError("Not Implemented.", 501));
-//         });
-//     }
-//
-//     /**
-//      * @param {MessageContext} context
-//      * @returns {Promise<void>}
-//      * @private
-//      */
-//     async _onPoisonMessage(context) {
-//         return new Promise((resolve, reject) => {
-//             context.log("Dropping poison message: " + context.raw +"'. Override this method to take different action", LOG_LEVEL.LEVEL_WARN, "MessageFunction._onMessage(context)");
-//             context.done();
-//             resolve();
-//         });
-//     }
-//     /**
-//      * @param {BaseContext | MessageContext} context
-//      * @returns {Promise<void>}
-//      */
-//     async process(context) {
-//         return new Promise((resolve, reject) => {
-//             Message.unmarshall(context.getBinding("message"))
-//                 .then((message) => {
-//                     context.message = message;
-//                     /**@type{Promise<void>}*/let promise;
-//                     if(context.message.header.isExpired) {
-//                         context.log("Message '" + context.message.header.messageId + "' is expired.", LOG_LEVEL.LEVEL_WARN, "MessageFunction.process(context)");
-//                         promise = this._onPoisonMessage(context);
-//                     }
-//                     else if (context.message.header.environment === MESSAGE_ENVIRONMENT.MONITOR) {
-//                         context.log("Message '" + context.message.header.messageId + "' is a monitor message.", LOG_LEVEL.LEVEL_INFO, "MessageFunction.process(context)");
-//                         promise = this._onMonitor(context);
-//                     }
-//                     else promise = this._onMessage(context);
-//                     promise
-//                         .then(() => {
-//                             resolve();
-//                         })
-//                         .catch((exception) => {
-//                             reject(exception);
-//                         });
-//                 })
-//                 .catch((exception) => {
-//                     this._onPoisonMessage(context)
-//                         .then(() => {
-//                             resolve();
-//                         })
-//                         .catch((exception) => {
-//                             reject(exception);
-//                         });
-//                 });
-//         });
-//     }
-// }
-//
-// module.exports = {
-//     MESSAGE_ENVIRONMENT: MESSAGE_ENVIRONMENT, Header: Header, Message: Message, MessageContext: MessageContext,
-//     MessageFunction: MessageFunction
-// };

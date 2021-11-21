@@ -296,7 +296,7 @@ describe("JSONHTTPContext", () => {
             await _config.ready();
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
-            assert.strictEqual(_context.getQuery("param1"), "test123", "Expected 'test123'.");
+            assert.strictEqual(await _context.getQuery("param1"), "test123", "Expected 'test123'.");
         });
         it("Gets Query default", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -317,7 +317,7 @@ describe("JSONHTTPContext", () => {
             await _config.ready();
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
-            assert.strictEqual(_context.getQuery("param100", "test456"), "test456", "Expected 'test456'.");
+            assert.strictEqual(await _context.getQuery("param100", "test456"), "test456", "Expected 'test456'.");
         });
         it("Gets Query null", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -338,7 +338,7 @@ describe("JSONHTTPContext", () => {
             await _config.ready();
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
-            assert.strictEqual(_context.getQuery("param100"), null, "Expected null.");
+            assert.strictEqual(await _context.getQuery("param100"), null, "Expected null.");
         });
         it("Gets Request Header", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -359,7 +359,7 @@ describe("JSONHTTPContext", () => {
             await _config.ready();
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
-            assert.strictEqual(_context.getRequestHeader("header1"), "testRequest123", "Expected 'testRequest123'.");
+            assert.strictEqual(await _context.getRequestHeader("header1"), "testRequest123", "Expected 'testRequest123'.");
         });
         it("Gets Request Header default", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -380,7 +380,7 @@ describe("JSONHTTPContext", () => {
             await _config.ready();
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
-            assert.strictEqual(_context.getRequestHeader("header100", "testHeadr456"), "testHeadr456", "Expected 'testHeadr456'.");
+            assert.strictEqual(await _context.getRequestHeader("header100", "testHeadr456"), "testHeadr456", "Expected 'testHeadr456'.");
         });
         it("Gets Request Header null", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -401,7 +401,7 @@ describe("JSONHTTPContext", () => {
             await _config.ready();
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
-            assert.strictEqual(_context.getRequestHeader("header100"), null, "Expected null.");
+            assert.strictEqual(await _context.getRequestHeader("header100"), null, "Expected null.");
         });
         it("Gets Response Header", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -422,7 +422,7 @@ describe("JSONHTTPContext", () => {
             await _config.ready();
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
-            assert.strictEqual(_context.getResponseHeader("header1"), "testResponse123", "Expected 'testResponse123'.");
+            assert.strictEqual(await _context.getResponseHeader("header1"), "testResponse123", "Expected 'testResponse123'.");
         });
         it("Gets Response Header default", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -443,7 +443,7 @@ describe("JSONHTTPContext", () => {
             await _config.ready();
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
-            assert.strictEqual(_context.getResponseHeader("header100", "testHeadr456"), "testHeadr456", "Expected 'testHeadr456'.");
+            assert.strictEqual(await _context.getResponseHeader("header100", "testHeadr456"), "testHeadr456", "Expected 'testHeadr456'.");
         });
         it("Gets Response Header null", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -464,7 +464,7 @@ describe("JSONHTTPContext", () => {
             await _config.ready();
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
-            assert.strictEqual(_context.getResponseHeader("header100"), null, "Expected null.");
+            assert.strictEqual(await _context.getResponseHeader("header100"), null, "Expected null.");
         });
         it("Gets URI Binding", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -485,7 +485,7 @@ describe("JSONHTTPContext", () => {
             await _config.ready();
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
-            assert.deepStrictEqual(_context.getURIBinding("status"), {key: "value"}, "Expected {key: 'value'}.");
+            assert.deepStrictEqual(await _context.getURIBinding("status"), {key: "value"}, "Expected {key: 'value'}.");
         });
         it("S/Gets Cookie", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -507,8 +507,8 @@ describe("JSONHTTPContext", () => {
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
             let _cookie = new Cookie("newCookie", "test123");
-            _context.setCookie(_cookie);
-            assert.deepStrictEqual(_context.getCookie("newCookie"), _cookie, "Expected cookie.");
+            await _context.setCookie(_cookie);
+            assert.deepStrictEqual(await _context.getCookie("newCookie"), _cookie, "Expected cookie.");
         });
     });
     describe("Request/Response functions", () => {
@@ -532,8 +532,8 @@ describe("JSONHTTPContext", () => {
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
 
-            _context.setResponseHeader("header2", "testHeadr456");
-            assert.strictEqual(_context.getResponseHeader("header2"), "testHeadr456", "Expected 'testHeadr456'.");
+            await _context.setResponseHeader("header2", "testHeadr456");
+            assert.strictEqual(await _context.getResponseHeader("header2"), "testHeadr456", "Expected 'testHeadr456'.");
         });
         it("Sets a new response header", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -555,8 +555,8 @@ describe("JSONHTTPContext", () => {
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
 
-            _context.setResponseHeader("header3", "testHeadr789");
-            assert.strictEqual(_context.getResponseHeader("header3"), "testHeadr789", "Expected 'testHeadr789'.");
+            await _context.setResponseHeader("header3", "testHeadr789");
+            assert.strictEqual(await _context.getResponseHeader("header3"), "testHeadr789", "Expected 'testHeadr789'.");
         });
         it("Deletes a response header", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -578,8 +578,8 @@ describe("JSONHTTPContext", () => {
             let _context = new JSONHTTPContext(_config);
             await _context.initialize();
 
-            _context.deleteResponseHeader("header4");
-            assert.strictEqual(_context.getResponseHeader("header4"), null, "Expected null.");
+            await _context.deleteResponseHeader("header4");
+            assert.strictEqual(await _context.getResponseHeader("header4"), null, "Expected null.");
         });
     });
     describe("Cookies", () => {
@@ -604,7 +604,7 @@ describe("JSONHTTPContext", () => {
             await _context.initialize();
 
             let _cookie = new Cookie("cookie-name", "cookie-value");
-            _context.setCookie(_cookie);
+            await _context.setCookie(_cookie);
             assert.deepStrictEqual(_context._cookies["cookie-name"], _cookie, "Expected cookie 'cookie-name'.");
         });
         it("Sets cookie", async () => {
@@ -628,8 +628,8 @@ describe("JSONHTTPContext", () => {
             await _context.initialize();
 
             let _cookie = new Cookie("cookie-name", "cookie-value");
-            _context.setCookie(_cookie);
-            assert.deepStrictEqual(_context.getCookie("cookie-name"), _cookie, "Expected cookie 'cookie-name'.");
+            await _context.setCookie(_cookie);
+            assert.deepStrictEqual(await _context.getCookie("cookie-name"), _cookie, "Expected cookie 'cookie-name'.");
         });
     });
     describe("Sending", () => {
@@ -778,7 +778,7 @@ describe("JSONHTTPContext", () => {
 
             _context.sendRedirect("https://www.google.com");
             assert.strictEqual(_azcontext.res.status, 302, "Expected status code 302.");
-            assert.deepStrictEqual(_context.getResponseHeader("Location"), "https://www.google.com", "Expected location header 'https://www.google.com'.");
+            assert.deepStrictEqual(await _context.getResponseHeader("Location"), "https://www.google.com", "Expected location header 'https://www.google.com'.");
             assert.deepStrictEqual(_azcontext.res.body, {code: 302, url: "https://www.google.com"}, "Expected default body.");
         });
         it("Sends redirect", async () => {
@@ -803,7 +803,7 @@ describe("JSONHTTPContext", () => {
 
             _context.sendRedirect("https://www.google.com", {code: 1234});
             assert.strictEqual(_azcontext.res.status, 302, "Expected status code 302.");
-            assert.deepStrictEqual(_context.getResponseHeader("Location"), "https://www.google.com", "Expected location header 'https://www.google.com'.");
+            assert.deepStrictEqual(await _context.getResponseHeader("Location"), "https://www.google.com", "Expected location header 'https://www.google.com'.");
             assert.deepStrictEqual(_azcontext.res.body, {code: 1234}, "Expected {code: 1234} body.");
         });
         it("Sends redirect forward request body", async () => {
@@ -829,7 +829,7 @@ describe("JSONHTTPContext", () => {
             _azcontext.req.body = {code: 1234};
             _context.sendRedirectForwardBody("https://www.google.com");
             assert.strictEqual(_azcontext.res.status, 302, "Expected status code 302.");
-            assert.deepStrictEqual(_context.getResponseHeader("Location"), "https://www.google.com", "Expected location header 'https://www.google.com'.");
+            assert.deepStrictEqual(await _context.getResponseHeader("Location"), "https://www.google.com", "Expected location header 'https://www.google.com'.");
             assert.deepStrictEqual(_azcontext.res.body, {code: 1234}, "Expected {code: 1234} body.");
         });
         it("Sends server error, error null", async () => {

@@ -2702,10 +2702,35 @@ class Context {
     /**@return{ResourceManager}*/get authorizations(){return this._config.resources;}
     /**@return{_AzureFunctionContext}*/get azureFunctionContext(){return this._config.context;}
     /**
+     * @param {string} resource
+     * @param {string} [id = ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY]
+     * @return {Promise<string>}
+     */
+    async getAuthorizationToken(resource, id = ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY) {
+        return this._config.resources.getToken(resource, id);
+    }
+    /**
+     * @param {string} key
+     * @param {(null|string)} [defaultValue=null]
+     * @return {Promise<(null|string)>}
+     */
+    async getProperty(key, defaultValue = null) {
+        return this._config.properties.getProperty(key, defaultValue);
+    }
+    /**
+     * @param {string} key
+     * @param {Object} [defaultValue=null]
+     * @return {Promise<Object>}
+     */
+    async getObject(key, defaultValue = null) {
+        return this._config.properties.getObject(key, defaultValue);
+    }
+    /**
      * @param{string} name
      * @param {*} [defaultValue=null]
+     * @return {Promise<*>}
      */
-    getBinding(name, defaultValue = null) {
+    async getBinding(name, defaultValue = null) {
         let _value = this._config.context.bindings[name];
         if(typeof _value === "undefined" || _value == null)
             _value = defaultValue;
@@ -2714,8 +2739,9 @@ class Context {
     /**
      * @param {string} name
      * @param {*} [value=null]
+     * @return {Promise<void>}
      */
-    setBinding(name, value = null) {
+    async setBinding(name, value = null) {
         this._config.context.bindings[name] = value;
     }
     /**

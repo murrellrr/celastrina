@@ -29,8 +29,8 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/core": "^4.6.25",
-    "@celastrina/http": "^4.2.4",
+    "@celastrina/core": "^4.6.26",
+    "@celastrina/http": "^4.3.4",
     "cloudevents": "^5.0.0",
     "moment": "^2.29.1",
     "uuid": "^8.3.2"

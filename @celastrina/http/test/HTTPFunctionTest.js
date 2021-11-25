@@ -16,29 +16,62 @@ const {MockMicrosoftOpenIDIDPServer} = require("./AzureOpenIDIPDMock");
 class MockHTTPFunction extends HTTPFunction {
     constructor(config) {
         super(config);
+        this._invokedDummyFunction = false;
+        this._monitorInvoked = false;
+        this._exceptionInvoked = false;
+        this._unhandledRequestMethodInvoked = false;
+        this._processInvoked = false;
+        this._initializeInvoked = false
+        this._getInvoked = false;
+        this._putInvoked = false;
+        this._postInvoked = false;
+        this._deleteInvoked = false;
+        this._headInvoked = false;
+        this._optionInvoked = false;
+        this._patchInvoked = false;
+        this._connectInvoked = false;
+        this._traceInvoked = false;
+    }
+    dummyFunction(context) {
+        this._invokedDummyFunction = true;
     }
     async createContext(config) {
         config.context._createContextInvoked = true;
         return super.createContext(config);
     }
+    async load(context) {
+        this.dummyFunction(context);
+    }
+    async save(context) {
+        this.dummyFunction(context);
+    }
+    async terminate(context) {
+        await super.terminate(context);
+        this.dummyFunction(context);
+    }
     async monitor(context) {
-        context.azureFunctionContext._monitorInvoked = false;
+        this.dummyFunction(context);
+        this._monitorInvoked = false;
         return super.monitor(context);
     }
     async exception(context, exception) {
-        context.azureFunctionContext._exceptionInvoked = true;
+        this.dummyFunction(context);
+        this._exceptionInvoked = true;
         return super.exception(context, exception);
     }
     async unhandledRequestMethod(context) {
-        context.azureFunctionContext._unhandledRequestMethodInvoked = true;
+        this.dummyFunction(context);
+        this._unhandledRequestMethodInvoked = true;
         return super.unhandledRequestMethod(context);
     }
     async process(context) {
-        context.azureFunctionContext._processInvoked = true;
+        this.dummyFunction(context);
+        this._processInvoked = true;
         return super.process(context);
     }
     async initialize(context) {
-        context.azureFunctionContext._initializeInvoked = true;
+        this.dummyFunction(context);
+        this._initializeInvoked = true;
         return super.initialize(context);
     }
     /**
@@ -46,7 +79,8 @@ class MockHTTPFunction extends HTTPFunction {
      * @return {Promise<void>}
      */
     async _get(context) {
-        context.azureFunctionContext._getInvoked = true;
+        this.dummyFunction(context);
+        this._getInvoked = true;
         let smocka;
         let smockb;
         switch(await context.properties.getProperty("celastrinajs_mock_action", "default")) {
@@ -84,35 +118,43 @@ class MockHTTPFunction extends HTTPFunction {
         }
     }
     async _put(context) {
-        context.azureFunctionContext._putInvoked = true;
+        this.dummyFunction(context);
+        this._putInvoked = true;
         context.done();
     }
     async _post(context) {
-        context.azureFunctionContext._postInvoked = true;
+        this.dummyFunction(context);
+        this._postInvoked = true;
         context.done();
     }
     async _delete(context) {
-        context.azureFunctionContext._deleteInvoked = true;
+        this.dummyFunction(context);
+        this._deleteInvoked = true;
         context.done();
     }
     async _head(context) {
-        context.azureFunctionContext._headInvoked = true;
+        this.dummyFunction(context);
+        this._headInvoked = true;
         context.done();
     }
     async _options(context) {
-        context.azureFunctionContext._optionInvoked = true;
+        this.dummyFunction(context);
+        this._optionInvoked = true;
         context.done();
     }
     async _patch(context) {
-        context.azureFunctionContext._patchInvoked = true;
+        this.dummyFunction(context);
+        this._patchInvoked = true;
         context.done();
     }
     async _connect(context) {
-        context.azureFunctionContext._connectInvoked = true;
+        this.dummyFunction(context);
+        this._connectInvoked = true;
         context.done();
     }
     async _trace(context) {
-        context.azureFunctionContext._traceInvoked = true;
+        this.dummyFunction(context);
+        this._traceInvoked = true;
         context.done();
     }
 }

@@ -1903,7 +1903,7 @@ class HTTPFunction extends BaseFunction {
         if(typeof _handler === "undefined" || _handler == null)
             await this.unhandledRequestMethod(context);
         else
-            await _handler(context);
+            await this["_" + context.method](context);
     }
 
     /**

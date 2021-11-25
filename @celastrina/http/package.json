@@ -1,6 +1,6 @@
 {
   "name": "@celastrina/http",
-  "version": "4.3.4",
+  "version": "4.3.5",
   "description": "HTTP Function Package for Celastrina",
   "main": "HTTP.js",
   "scripts": {

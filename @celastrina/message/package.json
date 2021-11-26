@@ -29,8 +29,8 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/core": "^4.6.26",
-    "@celastrina/http": "^4.3.5",
+    "@celastrina/core": "^4.7.27",
+    "@celastrina/http": "^4.4.5",
     "cloudevents": "^5.0.0",
     "axios-mock-adapter": "^1.20.0",
     "moment": "^2.29.1",

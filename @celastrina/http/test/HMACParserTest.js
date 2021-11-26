@@ -33,7 +33,7 @@ describe("HMACParserTest", () => {
             assert.strictEqual(_hmac.name, "x-celastrinajs-hmac", "Expected 'x-celastrinajs-hmac'.");
             assert.strictEqual(_hmac.algorithm, "sha256", "Expected 'sha256'.");
             assert.strictEqual(_hmac.encoding, "hex", "Expected 'hex'.");
-            assert.deepStrictEqual(instanceOfCelastringType(HTTPParameter.CELASTRINAJS_TYPE, _hmac.parameter), true, "Expected true.");
+            assert.deepStrictEqual(instanceOfCelastringType(HTTPParameter, _hmac.parameter), true, "Expected true.");
             assert.deepStrictEqual(_hmac.assignments.size === 0, true, "Expected size 0.");
         });
         it("should create hmac config", async () => {

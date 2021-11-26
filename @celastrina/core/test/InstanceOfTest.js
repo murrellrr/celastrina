@@ -1,44 +1,47 @@
 const {instanceOfCelastringType} = require("../Core");
 const assert = require("assert");
 
+class MockTypeA {
+    static get celastrinaType() {return "MockTypeA";}
+    constructor() {}
+}
+class MockTypeB {
+    static get celastrinaType() {return "MockTypeB";}
+    constructor() {}
+}
+class MockTypeC {
+    constructor() {}
+}
+
 describe("instanceOfCelastringType", () => {
     describe("works correctly!", () => {
-        it("should evaluate type equality correctly", () => {
-            let _test = {__type: "mock.type"};
-            assert.strictEqual(instanceOfCelastringType("mock.type", _test), true, "Expected true.");
-        });
-        it("should fail string null", () => {
-            let _test = {__type: "mock.type"};
+        it("should fail type null", () => {
+            let _test = new MockTypeA();
             assert.strictEqual(instanceOfCelastringType(null, _test), false, "Expected false.");
         });
-        it("should fail string empty", () => {
-            let _test = {__type: "mock.type"};
-            assert.strictEqual(instanceOfCelastringType("", _test), false, "Expected false.");
+        it("should fail source null", () => {
+            let _test = new MockTypeA();
+            assert.strictEqual(instanceOfCelastringType(MockTypeA, null), false, "Expected false.");
         });
-        it("should fail string not equal", () => {
-            let _test = {__type: "mock.type"};
-            assert.strictEqual(instanceOfCelastringType("mock.type.new", _test), false, "Expected false.");
+        it("should fail source not an object, numeric", () => {
+            let _test = new MockTypeA();
+            assert.strictEqual(instanceOfCelastringType(MockTypeA, 100), false, "Expected false.");
         });
-        it("should fail object null", () => {
-            let _test = {__type: "mock.type"};
-            assert.strictEqual(instanceOfCelastringType("mock.type", null), false, "Expected false.");
+        it("should fail source not an object, string", () => {
+            let _test = new MockTypeA();
+            assert.strictEqual(instanceOfCelastringType(MockTypeA, "100"), false, "Expected false.");
         });
-        it("should fail object undefined", () => {
-            let _test = {__type: "mock.type"};
-            let _newobj = _test.doesNotExist;
-            assert.strictEqual(instanceOfCelastringType("mock.type", _newobj), false, "Expected false.");
+        it("should fail non-celatrina type", () => {
+            let _test = new MockTypeA();
+            assert.strictEqual(instanceOfCelastringType(MockTypeA, new MockTypeC()), false, "Expected false.");
         });
-        it("should fail object no '__type' attribute", () => {
-            let _test = {name: "mock.type"};
-            assert.strictEqual(instanceOfCelastringType("mock.type", _test), false, "Expected false.");
+        it("should fail celatrina type different", () => {
+            let _test = new MockTypeA();
+            assert.strictEqual(instanceOfCelastringType(MockTypeA, new MockTypeB()), false, "Expected false.");
         });
-        it("should fail object null '__type' attribute", () => {
-            let _test = {__type: null};
-            assert.strictEqual(instanceOfCelastringType("mock.type", _test), false, "Expected false.");
-        });
-        it("should fail object '__type' attribute not a string", () => {
-            let _test = {__type: {}};
-            assert.strictEqual(instanceOfCelastringType("mock.type", _test), false, "Expected false.");
+        it("should pass celatrina type same", () => {
+            let _test = new MockTypeA();
+            assert.strictEqual(instanceOfCelastringType(MockTypeA, new MockTypeA()), true, "Expected true.");
         });
     });
 });

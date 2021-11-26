@@ -8,8 +8,6 @@ describe("ResourceManager", () => {
         it("sets defaults", () => {
             let _rm = new ResourceManager();
             assert.deepStrictEqual(_rm._resources, {}, "Expected empty object.");
-            assert.strictEqual(_rm.__type, "celastrinajs.core.ResourceManager", "Expected empty object.");
-            assert.strictEqual(_rm.__type, ResourceManager.CELASTRINAJS_TYPE, "Expected empty object.");
         });
     });
     describe("resources", () => {

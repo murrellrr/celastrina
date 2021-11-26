@@ -13,11 +13,12 @@ describe("JwtAddOn", () => {
             /**@type{JwtAddOn}*/let _jwtconfig = new JwtAddOn();
             _config.addOn(_jwtconfig);
             let _mtoken = new HeaderParameter();
-            assert.deepStrictEqual(_config._config[JwtAddOn.CONFIG_JWT_ISSUERS], [], "Expected empty array.");
-            assert.deepStrictEqual(_config._config[JwtAddOn.CONFIG_JWT_TOKEN_PARAMETER], _mtoken, "Expected HeaderParameter.");
-            assert.strictEqual(_config._config[JwtAddOn.CONFIG_JWT_TOKEN_NAME], "authorization", "Expected 'authorization'.");
-            assert.strictEqual(_config._config[JwtAddOn.CONFIG_JWT_TOKEN_SCHEME], "Bearer", "Expected 'Bearer'.");
-            assert.strictEqual(_config._config[JwtAddOn.CONFIG_JWT_TOKEN_SCHEME_REMOVE], true, "Expected true.");
+
+            assert.deepStrictEqual(_jwtconfig.issuers, [], "Expected empty array.");
+            assert.deepStrictEqual(_jwtconfig.parameter, _mtoken, "Expected HeaderParameter.");
+            assert.strictEqual(_jwtconfig.token, "authorization", "Expected 'authorization'.");
+            assert.strictEqual(_jwtconfig.scheme, "Bearer", "Expected 'Bearer'.");
+            assert.strictEqual(_jwtconfig.removeScheme, true, "Expected true.");
         });
     });
     describe("Accessors", () => {

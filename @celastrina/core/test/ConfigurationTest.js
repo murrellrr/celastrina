@@ -9,18 +9,19 @@ const assert = require("assert");
 const fs = require("fs");
 
 class MockAddOn extends AddOn {
+    /**@type{string}*/static get addOnName() {return "MockAddOn";}
     constructor() {
-        super("MockAddOn");
+        super();
         /**@type{Set<string>}*/this._depends = new Set();
         this.invokedGetConfigParser = false;
         this.invokedGetAttributeParser = false;
-        this.invokedWrap = false;
+        this.invokedCopy = false;
         this.invokedInitialize = false;
     }
     reset() {
         this.invokedGetConfigParser = false;
         this.invokedGetAttributeParser = false;
-        this.invokedWrap = false;
+        this.invokedCopy = false;
         this.invokedInitialize = false;
     }
     /**@param{string}name*/mockDependancy(name) {
@@ -36,18 +37,14 @@ class MockAddOn extends AddOn {
         this.invokedGetAttributeParser = true;
         return null;
     }
-    wrap(config) {
-        this.invokedWrap = true;
-        super.wrap(config);
-    }
-    async initialize(azcontext, pm, rm, prm) {
+    async initialize(azcontext, config) {
         this.invokedInitialize = true;
     }
 }
-
 class MockAddOnTwo extends AddOn {
+    /**@type{string}*/static get addOnName() {return "MockAddOnTwo";}
     constructor() {
-        super("MockAddOn2");
+        super();
         /**@type{Set<string>}*/this._depends = new Set();
         this.invokedGetConfigParser = false;
         this.invokedGetAttributeParser = false;
@@ -73,11 +70,7 @@ class MockAddOnTwo extends AddOn {
         this.invokedGetAttributeParser = true;
         return null;
     }
-    wrap(config) {
-        this.invokedWrap = true;
-        super.wrap(config);
-    }
-    async initialize(azcontext, pm, rm, prm) {
+    async initialize(azcontext, config) {
         this.invokedInitialize = true;
     }
 }
@@ -344,8 +337,8 @@ describe("Configuration", () => {
             _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
             let _addon = new MockAddOn();
             assert.deepStrictEqual(_config.addOn(_addon), _config, "Returns _config.");
-            assert.strictEqual(_addon.invokedWrap, true, "Expected to invoke wrap.");
-            assert.strictEqual(_config._addOns.hasOwnProperty("MockAddOn"), true, "Expected add-on to be in the config addOns.");
+            assert.strictEqual(_addon.invokedCopy, false, "Expected not to invoke copy.");
+            assert.strictEqual(_config._config.hasOwnProperty("MockAddOn"), true, "Expected add-on to be in the config addOns.");
         });
         it("gets add-on", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -356,7 +349,7 @@ describe("Configuration", () => {
             _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
             let _addon = new MockAddOn();
             _config.addOn(_addon);
-            assert.deepStrictEqual(await _config.getAddOn(_addon.name), _addon, "Expected _addon.");
+            assert.deepStrictEqual(await _config.getAddOn("MockAddOn"), _addon, "Expected _addon.");
         });
         it("not found add-on returns null", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -365,7 +358,7 @@ describe("Configuration", () => {
             let _rm = new MockResourceManager();
             _config.setValue(Configuration.CONFIG_PROPERTY, _pm);
             _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
-            assert.deepStrictEqual(await _config.getAddOn("_addon.name"), null, "Expected null.");
+            assert.deepStrictEqual(await _config.getAddOn("MockAddOnFoozled"), null, "Expected null.");
         });
         it("should fail with null AddOn", () => {
             let _config = new Configuration("mock_configuration");
@@ -455,7 +448,7 @@ describe("Configuration", () => {
             _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
             let _addon = new MockAddOn();
             let _addon2 = new MockAddOnTwo();
-            _addon.mockDependancy("MockAddOn2");
+            _addon.mockDependancy("MockAddOnTwo");
             _config.addOn(_addon);
             _config.addOn(_addon2);
             await assert.doesNotReject(() => {

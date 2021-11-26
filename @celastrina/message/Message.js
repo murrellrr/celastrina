@@ -88,10 +88,8 @@ class CelastrinaCloudRollbackEvent extends CelastrinaEvent {
  * @abstract
  */
 class CloudEventListener {
-    static CELASTRINAJS_TYPE = "celastrinajs.message.CloudEventListener"
-    constructor() {
-        this.__type = CloudEventListener.CELASTRINAJS_TYPE;
-    }
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.message.CloudEventListener";}
+    constructor() {}
     /**
      * @param {CelastrinaCloudEvent} event
      * @return {Promise<void>}
@@ -115,16 +113,15 @@ class CloudEventListener {
  * @author Robert R Murrell
  */
 class CloudEventInvocation {
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.message.CloudEventInvocation";}
     /**
      * @param {Context} context
      * @param {CloudEventAddOn} config
-     * @param {(Object|Array<Object>)} events
      * @param {string} [contentType="application/cloudevents+json"]
      */
-    constructor(context, config, events, contentType = "application/cloudevents+json") {
+    constructor(context, config, contentType = "application/cloudevents+json") {
         /**@type{Context}*/this._context = context;
         /**@type{CloudEventAddOn}*/this._config = config;
-        /**@type{(Object|Array<Object>)}*/this._events = events;
         /**@type{string}*/this._contentType = contentType;
         /**@type{(Array<(Object|CloudEvent)>)}*/this._rejectedEvents = [];
         /**@type{(Array<CloudEvent>)}*/this._acceptedEvents = [];
@@ -145,31 +142,68 @@ class CloudEventInvocation {
     reject(event, cause) {
         this._rejectedEvents.unshift({event: event, cause: cause});
     }
-    /**@return{(Object|Array<Object>)}*/get events() {return this._events;}
     /**@return{Array<CloudEvent>}*/get accepted() {return this._acceptedEvents;}
     /**@return{Array<(Object|CloudEvent)>}*/get rejected() {return this._rejectedEvents;}
     /**@return{number}*/get rejectedCount() {return this._rejectedEvents.length;}
     /**@return{number}*/get totalCount() {return this.rejectedCount + this._acceptedEvents.length;}
 }
 /**
- * CloudEventProxy
+ * CloudEventEmitter
  * @author Robert R Murrell
  * @abstract
  */
-class CloudEventProxy {
+class CloudEventEmitter {
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.message.CloudEventEmitter";}
     /**
      * @param {CloudEventListener} listener
      */
     constructor(listener) {
         this._listener = listener;
-    };
+    }
     /**
      * @param {CloudEventInvocation} invocation
      * @param {(Object|Array<Object>)} event
-     * @return {Promise<void>}
+     * @return {Promise<CloudEventInvocation>}
      * @abstract
      */
     async fireCloudEvent(invocation, event) {}
+    /**
+     * @param {CloudEventInvocation}invocation
+     * @param {(Object|Array<Object>)} event
+     * @return {Promise<CloudEventInvocation>}
+     */
+    async validateEvent(invocation, event) {
+        if(typeof event === "undefined" || event == null) {
+            invocation.context.log("Received empty request body.", LOG_LEVEL.WARN, "CloudEventEmitter.validateEvent(invocation, event)");
+            throw CelastrinaValidationError.newValidationError("Body is required.", "body", true);
+        }
+        else {
+            if(invocation.contentType.search("application/cloudevents-batch\\+json") !== -1) {
+                if(!invocation.config.allowBatch) {
+                    invocation.context.log("Batch messaging not supported.", LOG_LEVEL.WARN, "CloudEventEmitter.validateEvent(invocation, event)");
+                    throw CelastrinaValidationError.newValidationError("Batch messaging not supported.", "body", true);
+                }
+                else if(!Array.isArray(event)) {
+                    invocation.context.log("Invalid body content. Content-Type indicates batch but body does not contain an array.", LOG_LEVEL.ERROR,
+                        "CloudEventEmitter.validateEvent(invocation, event)");
+                    throw CelastrinaValidationError.newValidationError(
+                        "Invalid body content. Content-Type indicates batch but body does not contain an array.", "body",
+                        true);
+                }
+                else if(event.length < invocation.config.batch.limit) {
+                    invocation.context.log("Batch limit of Batch limit of '" + invocation.config.batch.limit + "' exceeded.", LOG_LEVEL.WARN,
+                        "CloudEventEmitter.validateEvent(invocation, event)");
+                    throw CelastrinaValidationError.newValidationError("Invalid Payload. Batch limit of '" +
+                        invocation.config.batch.limit + "' message(s) exceeded.", "body");
+                }
+            }
+            else if(invocation.contentType.search("application/cloudevents\\+json") === -1) {
+                invocation.context.log("Invalid Content-Type '" + invocation.contentType + "' received.", LOG_LEVEL.ERROR,
+                    "CloudEventEmitter.validateEvent(invocation, event)");
+                throw CelastrinaValidationError.newValidationError("Invalid Payload.", "body", true);
+            }
+        }
+    }
     /**
      * @param {CloudEventInvocation} invocation
      * @param {(Object|Array<Object>)} event
@@ -248,11 +282,11 @@ class CloudEventProxy {
     }
 }
 /**
- * BatchCloudEventProxy
+ * BatchCloudEventEmitter
  * @author Robert R Murrell
  * @abstract
  */
-class BatchCloudEventProxy extends CloudEventProxy {
+class BatchCloudEventEmitter extends CloudEventEmitter {
     constructor(listener) {super(listener);}
     /**
      * @param {CloudEventInvocation} invocation
@@ -275,10 +309,10 @@ class BatchCloudEventProxy extends CloudEventProxy {
     async fireBatchCloudEvent(invocation, event) {};
 }
 /**
- * AsyncBatchCloudEventProxy
+ * AsyncBatchCloudEventEmitter
  * @author Robert R Murrell
  */
-class AsyncBatchCloudEventProxy extends BatchCloudEventProxy {
+class AsyncBatchCloudEventEmitter extends BatchCloudEventEmitter {
     constructor(listener) {super(listener);}
     /**
      * @param {CloudEventInvocation} invocation
@@ -294,12 +328,11 @@ class AsyncBatchCloudEventProxy extends BatchCloudEventProxy {
         await Promise.all(_promises);
     }
 }
-
 /**
- * AsyncBatchCloudEventProxy
+ * SyncBatchCloudEventEmitter
  * @author Robert R Murrell
  */
-class SyncBatchCloudEventProxy extends BatchCloudEventProxy {
+class SyncBatchCloudEventEmitter extends BatchCloudEventEmitter {
     constructor(listener) {super(listener);}
     /**
      * @param {CloudEventInvocation} invocation
@@ -314,12 +347,11 @@ class SyncBatchCloudEventProxy extends BatchCloudEventProxy {
         }
     }
 }
-
 /**
- * AsyncBatchCloudEventProxy
+ * SyncBatchOrderedCloudEventEmitter
  * @author Robert R Murrell
  */
-class SyncBatchOrderedCloudEventProxy extends SyncBatchCloudEventProxy {
+class SyncBatchOrderedCloudEventEmitter extends SyncBatchCloudEventEmitter {
     constructor(listener) {super(listener);}
     /**
      * @param {CloudEventInvocation} invocation
@@ -339,13 +371,12 @@ class SyncBatchOrderedCloudEventProxy extends SyncBatchCloudEventProxy {
         await super.fireBatchCloudEvent(invocation, event);
     }
 }
-
 /**
  * BatchConfig
  * @author Robert R Murrell
  */
 class BatchConfig {
-    static CELASTRINAJS_EVENT_BATCH_CONFIG_TYPE = "celastrinajs.addon.cloudevent.config.batch";
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.addon.cloudevent.config.BatchConfig";}
     /**
      * @param {number} [limit=10]
      * @param {boolean} [abortOnReject=false]
@@ -358,11 +389,11 @@ class BatchConfig {
         this._abortOnReject = abortOnReject;
         this._processAsync = processAsync;
         (this._processAsync) ? this._orderTemporally = orderTemporally : this._orderTemporally = false;
-        this.__type = BatchConfig.CELASTRINAJS_EVENT_BATCH_CONFIG_TYPE;
     }
     /**@type{number}*/get limit() {return this._limit;}
     /**@type{boolean}*/get processAsync() {return this._processAsync;}
     /**@type{boolean}*/get abortOnReject() {return this._abortOnReject;}
+    /**@type{boolean}*/get orderTemporally() {return this._orderTemporally;}
 }
 /**
  * JSONHTTPEventAddOn
@@ -370,136 +401,71 @@ class BatchConfig {
  * @abstract
  */
 class CloudEventAddOn extends AddOn {
-    static CONFIG_ADDON_CLOUDEVENT = "celastrinajs.addon.cloudevent";
-    static CONFIG_CLOUDEVENT_EMITTER = "celastrinajs.addon.cloudevent.emitter";
-    static CONFIG_CLOUDEVENT_LISTNER = "celastrinajs.addon.cloudevent.listener";
-    static CONFIG_CLOUDEVENT_BATCH = "celastrinajs.addon.cloudevent.batch";
-    static CONFIG_CLOUDEVENT_TIME = "celastrinajs.addon.cloudevent.time.required";
-    static CONFIG_CLOUDEVENT_EXPIRES = "celastrinajs.addon.cloudevent.expires";
-    static CONFIG_CLOUDEVENT_EXPIRE_TIME = "celastrinajs.addon.cloudevent.expires.time";
-    static CONFIG_CLOUDEVENT_TYPE = "celastrinajs.addon.cloudevent.type";
-    static CONFIG_CLOUDEVENT_SUBJECT = "celastrinajs.addon.cloudevent.subject";
-    static CONFIG_CLOUDEVENT_SUBJECT_REQUIRED = "celastrinajs.addon.cloudevent.subject.required";
-    static CONFIG_CLOUDEVENT_VERSION = "celastrinajs.addon.cloudevent.version";
-    static CONFIG_CLOUDEVENT_ABORT_ON_REJECT = "celastrinajs.addon.cloudevent.abortOnReject";
-    static CONFIG_CLOUDEVENT_CONTENTTYPE = "celastrinajs.addon.cloudevent.data.contentType";
-    static CONFIG_CLOUDEVENT_EMPTY_DATA = "celastrinajs.addon.cloudevent.data.allowEmpty";
-    static CONFIG_CLOUDEVENT_RESPONSE = "celastrinajs.addon.cloudevent.response";
+    /**@type{string}*/static get addOnName() {return "celastrinajs.message.addon.cloudevent";}
     constructor() {
-        super(CloudEventAddOn.CONFIG_ADDON_CLOUDEVENT);
+        super();
+        this._batchConfig = null;
+        this._listener = null;
+        this._abortOnReject = false;
+        this._requireTime = false;
+        this._expires = false;
+        this._expireTime = 86400; // 24 hours
+        this._allowEmptyData = true;
+        this._responseCode = 200;
+        this._type = new RegExp("^.*$");
+        this._requireSubject = false;
+        this._subject = new RegExp("^.*$");
+        this._version = new RegExp("^.*$");
+        this._dataContentType = new RegExp("^.*$");
+        this._emitter = null;
     }
-    wrap(config) {
-        super.wrap(config);
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_BATCH] = null;
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_ABORT_ON_REJECT] = false;
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_TIME] = false;
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EXPIRE_TIME] = 86400; // 24 hours
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EMPTY_DATA] = true;
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_RESPONSE] = 200;
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_TYPE] = new RegExp("^.*$");
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_SUBJECT_REQUIRED] = false;
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_SUBJECT] = new RegExp("^.*$");
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_VERSION] = new RegExp("^.*$");
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_CONTENTTYPE] = new RegExp("^.*$");
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EMITTER] = new CloudEventEmitter();
-    }
-    async initialize(azcontext, pm, rm, prm) {
-        if(!instanceOfCelastringType(CloudEventListener.CELASTRINAJS_TYPE, this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_LISTNER]))
-            throw CelastrinaValidationError.newValidationError("Listener is required.", CloudEventAddOn.CONFIG_CLOUDEVENT_LISTNER);
+    async initialize(azcontext, config) {
+        if(!instanceOfCelastringType(CloudEventListener, this._listener))
+            throw CelastrinaValidationError.newValidationError("Listener is required.", "_listener");
         if(this.allowBatch) {
-            // Set up the batch configuration.
+            let _batch = this.batch;
+            if(_batch.processAsync) this._emitter = new AsyncBatchCloudEventEmitter(this._listener);
+            else if(_batch.orderTemporally) this._emitter = new SyncBatchOrderedCloudEventEmitter(this._listener);
+            else this._emitter = new SyncBatchCloudEventEmitter(this._listener);
         }
         else
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_TYPE].compile();
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_SUBJECT].compile();
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_VERSION].compile();
-        this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_CONTENTTYPE].compile();
-        let _listener = this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EMITTER];
+            this._emitter = new SyncBatchCloudEventEmitter(this._listener);
+        this._type.compile();
+        this._subject.compile();
+        this._version.compile();
+        this._dataContentType.compile();
         // TODO: Need to require time if we batch order temporally.
         if(!this.timeRequired && this.expires) this.timeRequired = true;
     }
-    /**@return{CloudEventEmitter}*/get emitter() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EMITTER];}
-    /**@param{CloudEventEmitter}emitter*/set emitter(emitter) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EMITTER] = emitter;}
-    /**@return{CloudEventListener}*/get listener() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_LISTNER];}
-    /**@param{CloudEventListener}listener*/set listener(listener) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_LISTNER] = listener;}
-    /**@return{BatchConfig}*/get batch() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_BATCH];}
-    /**@param{BatchConfig}batch*/set batch(batch) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_BATCH] = batch;}
-    /**@return{boolean}*/get allowBatch() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_BATCH] != null;}
-    /**@return{boolean}*/get timeRequired() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_TIME];}
-    /**@param{boolean}req*/set timeRequired(req) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_TIME] = req;}
-    /**@return{boolean}*/get expires() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EXPIRE_TIME];}
-    /**@param{boolean}expires*/set expires(expires) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EXPIRE_TIME] = expires;}
-    /**@return{number}*/get expireTime() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EXPIRE_TIME];}
-    /**@param{number}time*/set expireTime(time) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EXPIRE_TIME] = time;}
-    /**@return{RegExp}*/get type() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_TYPE];}
-    /**@param{RegExp}type*/set type(type) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_TYPE] = type;}
-    /**@return{boolean}*/get subjectRequired() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_SUBJECT_REQUIRED];}
-    /**@param{boolean}req*/set subjectRequired(req) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_SUBJECT_REQUIRED] = req;}
-    /**@return{RegExp}*/get subject() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_SUBJECT];}
-    /**@param{RegExp}subject*/set subject(subject) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_SUBJECT] = subject;}
-    /**@return{RegExp}*/get specversion() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_VERSION];}
-    /**@param{RegExp}version*/set specversion(version) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_VERSION] = version;}
-    /**@return{RegExp}*/get contentType() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_CONTENTTYPE];}
-    /**@param{RegExp}type*/set contentType(type) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_CONTENTTYPE] = type;}
-    /**@return{boolean}*/get allowEmpty() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EMPTY_DATA];}
-    /**@param{boolean}allow*/set allowEmpty(allow) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_EMPTY_DATA] = allow;}
-    /**@return{boolean}*/get abortOnReject() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_ABORT_ON_REJECT];}
-    /**@param{boolean}abort*/set abortOnReject(abort) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_ABORT_ON_REJECT] = abort;}
-    /**@return{number}*/get responceCode() {return this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_RESPONSE];}
-    /**@param{number}code*/set responceCode(code) {this._config[CloudEventAddOn.CONFIG_CLOUDEVENT_RESPONSE] = code;}
-}
-/**
- * EventFunction
- * @author Robert R Murrell
- */
-class CloudEventEmitter {
-    constructor() {}
-    /**
-     * @param {CloudEventInvocation} invocation
-     * @return {Promise<CloudEventInvocation>}
-     */
-    async fireCloudEvent(invocation) {
-        // /**@type{CloudEventAddOn}*/let _config = /**@type{CloudEventAddOn}*/await context.config.getAddOn(CloudEventAddOn.CONFIG_ADDON_CLOUDEVENT);
-        // if(contentType.search("application/cloudevents-batch\\+json") !== -1) return this._batchFireOnEvent(context, _config, body);
-        // else return this._singleFireOnEvent(context, _config, body);
-        return invocation;
-    }
-    /**
-     * @param {CloudEventInvocation}invocation
-     * @return {Promise<void>}
-     */
-    async validateEvent(invocation) {
-        if(typeof invocation.events === "undefined" || invocation.events == null) {
-            invocation.context.log("Received empty request body.", LOG_LEVEL.WARN, "CloudEventHTTPFunction._doEvent(context, _body, contentType)");
-            throw CelastrinaValidationError.newValidationError("Body is required.", "body", true);
-        }
-        else {
-            if(invocation.contentType.search("application/cloudevents-batch\\+json") !== -1) {
-                if(!invocation.config.allowBatch) {
-                    invocation.context.log("Batch messaging not supported.", LOG_LEVEL.WARN, "CloudEventHTTPFunction._batchEvents(context, config, body)");
-                    throw CelastrinaValidationError.newValidationError("Batch messaging not supported.", "body", true);
-                }
-                else if(!Array.isArray(invocation.events)) {
-                    invocation.context.log("Invalid body content. Content-Type indicates batch but body does not contain an array.", LOG_LEVEL.ERROR,
-                        "CloudEventHTTPFunction._batchEvents(context, config, body)");
-                    throw CelastrinaValidationError.newValidationError(
-                         "Invalid body content. Content-Type indicates batch but body does not contain an array.", "body",
-                         true);
-                }
-                else if(invocation.events.length < invocation.config.batch.limit) {
-                    invocation.context.log("Batch limit of Batch limit of '" + invocation.config.batch.limit + "' exceeded.", LOG_LEVEL.WARN,
-                    "CloudEventHTTPFunction._batchEvents(context, config, body)");
-                    throw CelastrinaValidationError.newValidationError("Invalid Payload. Batch limit of '" +
-                                 invocation.config.batch.limit + "' message(s) exceeded.", "body");
-                }
-            }
-            else if(invocation.contentType.search("application/cloudevents\\+json") === -1) {
-                invocation.context.log("Invalid Content-Type '" + invocation.contentType + "' received.", LOG_LEVEL.ERROR,
-                             "CloudEventHTTPFunction._doEvent(context, _body, contentType)");
-                throw CelastrinaValidationError.newValidationError("Invalid Payload.", "body", true);
-            }
-        }
-    }
+    /**@return{CloudEventEmitter}*/get emitter() {return this._emitter;}
+    /**@param{CloudEventEmitter}emitter*/set emitter(emitter) {this._emitter = emitter;}
+    /**@return{CloudEventListener}*/get listener() {return this._listener;}
+    /**@param{CloudEventListener}listener*/set listener(listener) {this._listener = listener;}
+    /**@return{BatchConfig}*/get batch() {return this._batchConfig;}
+    /**@param{BatchConfig}batch*/set batch(batch) {this._batchConfig = batch;}
+    /**@return{boolean}*/get allowBatch() {return this._batchConfig != null;}
+    /**@return{boolean}*/get timeRequired() {return this._requireTime;}
+    /**@param{boolean}req*/set timeRequired(req) {this._requireTime = req;}
+    /**@return{boolean}*/get expires() {return this._expires;}
+    /**@param{boolean}expires*/set expires(expires) {this._expires = expires;}
+    /**@return{number}*/get expireTime() {return this._expireTime;}
+    /**@param{number}time*/set expireTime(time) {this._expireTime = time;}
+    /**@return{RegExp}*/get type() {return this._type;}
+    /**@param{RegExp}type*/set type(type) {this._type = type;}
+    /**@return{boolean}*/get subjectRequired() {return this._requireSubject;}
+    /**@param{boolean}req*/set subjectRequired(req) {this._requireSubject = req;}
+    /**@return{RegExp}*/get subject() {return this._subject;}
+    /**@param{RegExp}subject*/set subject(subject) {this._subject = subject;}
+    /**@return{RegExp}*/get specversion() {return this._version;}
+    /**@param{RegExp}version*/set specversion(version) {this.this._version = version;}
+    /**@return{RegExp}*/get contentType() {return this._dataContentType;}
+    /**@param{RegExp}type*/set contentType(type) {this._dataContentType = type;}
+    /**@return{boolean}*/get allowEmpty() {return this._allowEmptyData;}
+    /**@param{boolean}allow*/set allowEmpty(allow) {this._allowEmptyData = allow;}
+    /**@return{boolean}*/get abortOnReject() {return this._abortOnReject;}
+    /**@param{boolean}abort*/set abortOnReject(abort) {this._abortOnReject = abort;}
+    /**@return{number}*/get responseCode() {return this._responseCode;}
+    /**@param{number}code*/set responseCode(code) {this._responseCode = code;}
 }
 /**
  * HTTPCloudEventFunction
@@ -514,15 +480,16 @@ class HTTPCloudEventFunction extends JSONHTTPFunction {
      * @return {Promise<void>}
      */
     async initialize(context) {
-        /**@type{CloudEventAddOn}*/let _config = /**@type{CloudEventAddOn}*/await context.config.getAddOn(HTTPCloudEventAddOn.CONFIG_ADDON_CLOUDEVENT);
-        context.invocation = new CloudEventInvocation(context, _config, context.requestBody, await context.getRequestHeader("content-type"));
+        /**@type{CloudEventAddOn}*/let _config = /**@type{CloudEventAddOn}*/await context.config.getAddOn(
+                HTTPCloudEventAddOn);
+        context.invocation = new CloudEventInvocation(context, _config, await context.getRequestHeader("content-type"));
     }
     /**
      * @param {(Context|JSONHTTPContext|{invocation?:CloudEventInvocation})} context
      * @return {Promise<void>}
      */
     async validate(context) {
-        await context.invocation.config.emitter.validateEvent(context.invocation);
+        //await context.invocation.config.emitter.validateEvent(context.invocation);
     }
     /**
      * @param {JSONHTTPContext|{invocation?:CloudEventInvocation}} context
@@ -530,15 +497,15 @@ class HTTPCloudEventFunction extends JSONHTTPFunction {
      * @private
      */
     async _post(context) {
-        let _invocation = await context.invocation.config.emitter.fireCloudEvent(context.invocation);
-        let _response = {
-            accepted: _invocation.totalCount,
-            rejected: _invocation.rejectedCount
-        };
-        let _code = _invocation.config.responceCode;
-        if(_invocation.rejectedCount > 0) _response.events = _invocation.rejected;
-        context.send(_response, _code);
-        context.done();
+        // let _invocation = await context.invocation.config.emitter.fireCloudEvent(context.invocation);
+        // let _response = {
+        //     accepted: _invocation.totalCount,
+        //     rejected: _invocation.rejectedCount
+        // };
+        // let _code = _invocation.config.responceCode;
+        // if(_invocation.rejectedCount > 0) _response.events = _invocation.rejected;
+        // context.send(_response, _code);
+        // context.done();
     }
 }
 /**
@@ -547,7 +514,7 @@ class HTTPCloudEventFunction extends JSONHTTPFunction {
  */
 class HTTPCloudEventAddOn extends CloudEventAddOn {
     constructor() {super();}
-    getDependancies() {return new Set([HTTPAddOn.CONFIG_ADDON_HTTP]);}
+    getDependancies() {return new Set([HTTPAddOn.addOnName]);}
 }
 module.exports = {
     CloudEventListener: CloudEventListener,

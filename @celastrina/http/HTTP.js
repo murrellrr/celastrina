@@ -105,7 +105,7 @@ const crypto = require("crypto");
  * @author Robert R Murrell
  */
 class Cookie {
-    static CELASTRINAJS_TYPE = "celastrinajs.http.Cookie";
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.http.Cookie";}
     /**
      * @param {string} name
      * @param {(null|string)} [value=null]
@@ -119,7 +119,6 @@ class Cookie {
         this._value = value;
         this._options = options;
         this._dirty = dirty;
-        this.__type = Cookie.CELASTRINAJS_TYPE;
     }
     /**@return{boolean}*/get doSetCookie() {return this._dirty};
     /**@return{string}*/get name() {return this._name;}
@@ -227,7 +226,7 @@ class Cookie {
  * @author Robert R murrell
  */
 class JwtSubject {
-    static CELASTRINAJS_TYPE = "celastrinajs.http.JwtSubject";
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.http.JwtSubject";}
     static PROP_JWT_HEADER = "celastrinajs.jwt.header";
     static PROP_JWT_SIGNATURE = "celastrinajs.jwt.signature";
     static PROP_JWT_NONCE = "nonce";
@@ -242,7 +241,6 @@ class JwtSubject {
      */
     constructor(subject) {
         /**@type{Subject}*/this._subject = subject
-        this.__type = JwtSubject.CELASTRINAJS_TYPE;
     }
     /**@return{Subject}*/get subject() {return this._subject;}
     /**@return{Object}*/get header() {return this._subject.getClaimSync(JwtSubject.PROP_JWT_HEADER);}
@@ -324,7 +322,7 @@ class JwtSubject {
  * @author Robert R Murrell
  */
 class Issuer {
-    static CELASTRINAJS_TYPE = "celastrinajs.http.Issuer";
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.http.Issuer";}
     /**
      * @param {null|string} issuer
      * @param {(Array.<string>|null)} [audiences=null]
@@ -338,7 +336,6 @@ class Issuer {
         this._audiences = audiences;
         this._roles = assignments;
         this._validateNonce = validateNonce;
-        this.__type = Issuer.CELASTRINAJS_TYPE;
     }
     /**@return{string}*/get issuer(){return this._issuer;}
     /**@param{string}issuer*/set issuer(issuer){this._issuer = issuer;}
@@ -636,7 +633,7 @@ class OpenIDJwtIssuerParser extends IssuerParser {
  * @author Robert R Murrell
  */
 class HTTPParameter {
-    static CELASTRINAJS_TYPE = "celastrinajs.http.HTTPParameter";
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.http.HTTPParameter";}
     /**
      * @param{string}[type]
      * @param{boolean}[readOnly]
@@ -644,7 +641,6 @@ class HTTPParameter {
     constructor(type = "HTTPParameter", readOnly = false) {
         this._type = type;
         this._readOnly = readOnly
-        this.__type = HTTPParameter.CELASTRINAJS_TYPE;
     }
     /**@return{string}*/get type() {return this._type;}
     /**@return{boolean}*/get readOnly() {return this._readOnly;}
@@ -803,14 +799,13 @@ class BodyParameter extends HTTPParameter {
  * @author Robert R Murrell
  */
 class HTTPParameterParser extends AttributeParser {
-    static CELASTRINAJS_TYPE = "celastrinajs.http.HTTPParameterParser";
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.http.HTTPParameterParser";}
     /**
      * @param {AttributeParser} [link=null]
      * @param {string} [version="1.0.0"]
      */
     constructor(link = null, version = "1.0.0") {
         super("HTTPParameter", link, version);
-        this.__type = HTTPParameterParser.CELASTRINAJS_TYPE;
     }
     /**
      * @param {Object} _HTTPParameter
@@ -848,7 +843,7 @@ class HTTPParameterParser extends AttributeParser {
  * @author Robert R Murrell
  */
 class Session {
-    static CELASTRINAJS_TYPE = "celastrinajs.http.Session";
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.http.Session";}
     /**
      * @param {Object} [values = {}]
      * @param {boolean} [isNew = false]
@@ -859,7 +854,6 @@ class Session {
         this._values = values;
         /**@type{boolean}*/this._dirty = isNew;
         /**@type{boolean}*/this._new = isNew;
-        this.__type = Session.CELASTRINAJS_TYPE;
     }
     /**@return{string}*/get id() {return this._values.id;}
     /**@return{boolean}*/get isNew() {return this._new;}
@@ -902,7 +896,7 @@ class Session {
  * @author Robert R Murrell
  */
 class SessionManager {
-    static CELASTRINAJS_TYPE = "celastrinajs.http.SessionManager";
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.http.SessionManager";}
     /**
      * @param {HTTPParameter} parameter
      * @param {string} [name = "celastrinajs_session"]
@@ -916,18 +910,16 @@ class SessionManager {
         this._parameter = parameter;
         this._name = name.trim();
         this._createNew = createNew;
-        this.__type = SessionManager.CELASTRINAJS_TYPE;
     }
     /**@return{HTTPParameter}*/get parameter() {return this._parameter;}
     /**@return{string}*/get name() {return this._name;}
     /**@return{boolean}*/get createNew() {return this._createNew;}
     /**
      * @param azcontext
-     * @param pm
-     * @param rm
+     * @param {Object} config
      * @return {Promise<void>}
      */
-    async initialize(azcontext, pm, rm) {}
+    async initialize(azcontext, config) {}
     /**
      * @return {Promise<Session>}
      */
@@ -975,7 +967,7 @@ class SessionManager {
      * @return {Promise<void>}
      */
     async saveSession(session = null, context) {
-        if(instanceOfCelastringType(Session.CELASTRINAJS_TYPE, session)) {
+        if(instanceOfCelastringType(Session, session)) {
             if(session.doWriteSession && !this._parameter.readOnly)
                 await this._parameter.setParameter(context, this._name, await this._saveSession(JSON.stringify(session), context));
         }
@@ -999,12 +991,11 @@ class SecureSessionManager extends SessionManager {
     /**@return{Cryptography}*/get cryptography() {return this._crypto;}
     /**
      * @param azcontext
-     * @param pm
-     * @param rm
+     * @param {Object} config
      * @return {Promise<void>}
      */
-    async initialize(azcontext, pm, rm) {
-        await super.initialize(azcontext, pm, rm);
+    async initialize(azcontext, config) {
+        await super.initialize(azcontext, config);
         await this._crypto.initialize();
     }
     /**
@@ -1156,15 +1147,20 @@ class HTTPConfigurationParser extends ConfigParser {
      * @private
      */
     async _create(_Object) {
-        if(_Object.hasOwnProperty("session") && (typeof _Object.session === "object") && _Object.session != null) {
-            let _session = _Object.session;
-            if(_session.hasOwnProperty("manager") && (instanceOfCelastringType(SessionManager.CELASTRINAJS_TYPE, _session.manager)))
-                this._config[HTTPAddOn.CONFIG_HTTP_SESSION_MANAGER] = _session.manager;
+        /**@type{HTTPAddOn}*/let _addon = this._config[HTTPAddOn.addOnName];
+        if(instanceOfCelastringType(AddOn, _addon)) {
+            if (_Object.hasOwnProperty("session") && (typeof _Object.session === "object") && _Object.session != null) {
+                let _session = _Object.session;
+                if (_session.hasOwnProperty("manager") && (instanceOfCelastringType(SessionManager, _session.manager)))
+                    _addon.sesionManager = _session.manager;
+            }
         }
+        else
+            throw CelastrinaError.newError("Missing required Add-On '" + HTTPAddOn.name + "'.");
     }
 }
 class HMAC {
-    static CELASTRINAJS_TYPE = "cellastrinajs.HMAC";
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.http.HMAC";}
     /**
      * @param {string} secret
      * @param {HTTPParameter} parameter
@@ -1181,7 +1177,6 @@ class HMAC {
         this._algorithm = algorithm;
         this._assignments = assignments;
         /**@type{BinaryToTextEncoding}*/this._encoding = encoding;
-        this.__type = HMAC.CELASTRINAJS_TYPE;
     }
     /**@return{string}*/get name() {return this._name;}
     /**@return{string}*/get secret() {return this._secret;}
@@ -1196,32 +1191,28 @@ class HMAC {
  * @author Robert R Murrell
  */
 class HTTPAddOn extends AddOn {
-    static CONFIG_ADDON_HTTP = "celastrinajs.addon.http";
-    static CONFIG_HTTP_SESSION_MANAGER = "celastrinajs.http.session";
+    /**@type{string}*/static get addOnName() {return "celastrinajs.addon.http";}
     constructor() {
-        super(HTTPAddOn.CONFIG_ADDON_HTTP);
+        super();
+        /**@type{SessionManager}*/this._sessionManager = null;
     }
     /**@return {ConfigParser}*/getConfigParser() {return new HTTPConfigurationParser();}
     /**@return {AttributeParser}*/getAttributeParser() {
         return new AESSessionManagerParser(new SessionRoleFactoryParser());
     }
-    wrap(config) {
-        super.wrap(config);
-        this._config[HTTPAddOn.CONFIG_HTTP_SESSION_MANAGER] = null;
+    async initialize(azcontext, config) {
+        /**@type{SessionManager}*/let _sm = this._sessionManager;
+
+        if(instanceOfCelastringType(SessionManager, _sm)) return _sm.initialize(azcontext, config);
     }
-    async initialize(azcontext, pm, rm, prm) {
-        /**@type{SessionManager}*/let _sm = this._config[HTTPAddOn.CONFIG_HTTP_SESSION_MANAGER];
-        if(instanceOfCelastringType(SessionManager.CELASTRINAJS_TYPE, _sm))
-            return _sm.initialize(azcontext, pm, rm);
-    }
-    /**@return{SessionManager}*/get sessionManager() {return this._config[HTTPAddOn.CONFIG_HTTP_SESSION_MANAGER];}
-    /**@param{SessionManager}sm*/set sesionManager(sm) {this._config[HTTPAddOn.CONFIG_HTTP_SESSION_MANAGER] = sm;}
+    /**@return{SessionManager}*/get sessionManager() {return this._sessionManager;}
+    /**@param{SessionManager}sm*/set sesionManager(sm) {this._sessionManager = sm;}
     /**
      * @param {SessionManager} [sm=null]
      * @return {HTTPAddOn}
      */
     setSessionManager(sm = null) {
-        this._config[HTTPAddOn.CONFIG_HTTP_SESSION_MANAGER] = sm;
+        this._sessionManager = sm;
         return this;
     }
 }
@@ -1243,16 +1234,21 @@ class JwtConfigurationParser extends ConfigParser {
      * @private
      */
     async _create(_Object) {
-        if(_Object.hasOwnProperty("issuers") && Array.isArray(_Object.issuers))
-            this._config[JwtAddOn.CONFIG_JWT_ISSUERS] = _Object.issuers;
-        if(_Object.hasOwnProperty("parameter") && instanceOfCelastringType(HTTPParameter.CELASTRINAJS_TYPE, _Object.parameter))
-            this._config[JwtAddOn.CONFIG_JWT_TOKEN_PARAMETER] = _Object.parameter;
-        if(_Object.hasOwnProperty("name") && (typeof _Object.name === "string") && _Object.name.trim().length > 0)
-            this._config[JwtAddOn.CONFIG_JWT_TOKEN_NAME] = _Object.name;
-        if(_Object.hasOwnProperty("scheme") && (typeof _Object.scheme === "string") && _Object.scheme.trim().length > 0)
-            this._config[JwtAddOn.CONFIG_JWT_TOKEN_SCHEME] = _Object.scheme;
-        if(_Object.hasOwnProperty("removeScheme") && (typeof _Object.removeScheme === "boolean"))
-            this._config[JwtAddOn.CONFIG_JWT_TOKEN_SCHEME_REMOVE] = _Object.removeScheme;
+        /**@type{JwtAddOn}*/let _addon = this._config[JwtAddOn.addOnName];
+        if(instanceOfCelastringType(AddOn, _addon)) {
+            if (_Object.hasOwnProperty("issuers") && Array.isArray(_Object.issuers))
+                _addon.issuers = _Object.issuers;
+            if (_Object.hasOwnProperty("parameter") && instanceOfCelastringType(HTTPParameter, _Object.parameter))
+                _addon.parameter = _Object.parameter;
+            if (_Object.hasOwnProperty("name") && (typeof _Object.name === "string") && _Object.name.trim().length > 0)
+                _addon.token = _Object.name;
+            if (_Object.hasOwnProperty("scheme") && (typeof _Object.scheme === "string") && _Object.scheme.trim().length > 0)
+                _addon.scheme = _Object.scheme;
+            if (_Object.hasOwnProperty("removeScheme") && (typeof _Object.removeScheme === "boolean"))
+                _addon.removeScheme = _Object.removeScheme;
+        }
+        else
+            throw CelastrinaError.newError("Missing required Add-On '" + JwtAddOn.name + "'.");
     }
 }
 /**
@@ -1260,22 +1256,14 @@ class JwtConfigurationParser extends ConfigParser {
  * @author Robert R Murrell
  */
 class JwtAddOn extends AddOn {
-    static CONFIG_ADDON_JWT = "celastrinajs.addon.http.jwt";
-    static CONFIG_JWT_ISSUERS = "celastrinajs.http.jwt.issuers";
-    static CONFIG_JWT_TOKEN_PARAMETER = "celastrinajs.http.jwt.authorization.token.parameter";
-    static CONFIG_JWT_TOKEN_NAME = "celastrinajs.http.jwt.authorization.token.name";
-    static CONFIG_JWT_TOKEN_SCHEME = "celastrinajs.http.jwt.authorization.token.scheme";
-    static CONFIG_JWT_TOKEN_SCHEME_REMOVE = "celastrinajs.http.jwt.authorization.token.scheme.remove";
+    /**@type{string}*/static get addOnName() {return "celastrinajs.addon.http.jwt";}
     constructor() {
-        super(JwtAddOn.CONFIG_ADDON_JWT);
-    }
-    wrap(config) {
-        super.wrap(config);
-        this._config[JwtAddOn.CONFIG_JWT_ISSUERS] = [];
-        this._config[JwtAddOn.CONFIG_JWT_TOKEN_PARAMETER] = new HeaderParameter();
-        this._config[JwtAddOn.CONFIG_JWT_TOKEN_NAME] = "authorization";
-        this._config[JwtAddOn.CONFIG_JWT_TOKEN_SCHEME] = "Bearer";
-        this._config[JwtAddOn.CONFIG_JWT_TOKEN_SCHEME_REMOVE] = true;
+        super();
+        /**@type{Array.<Issuer>}*/this._issuers = [];
+        /**@type{HTTPParameter}*/this._tokenParameter = new HeaderParameter();
+        /**@type{string}*/this._tokenName = "authorization";
+        /**@type{string}*/this._tokenScheme = "Bearer";
+        /**@type{boolean}*/this._removeScheme = true;
     }
     /**@return{ConfigParser}*/getConfigParser() {
         let _parser = super.getConfigParser();
@@ -1293,51 +1281,55 @@ class JwtAddOn extends AddOn {
         else _parser = local;
         return _parser;
     }
-    /**@type{Set<string>}*/getDependancies() {return new Set([HTTPAddOn.CONFIG_ADDON_HTTP]);}
-    async initialize(azcontext, pm, rm, prm) {
-        /**@type{Sentry}*/let _sentry = this._config[Configuration.CONFIG_SENTRY];
+    /**@type{Set<string>}*/getDependancies() {return new Set([HTTPAddOn.addOnName]);}
+    async initialize(azcontext, config) {
+        /**@type{Sentry}*/let _sentry = config[Configuration.CONFIG_SENTRY];
         _sentry.addAuthenticator(new JwtAuthenticator());
     }
-    /**@return{Array.<Issuer>}*/get issuers(){return this._config[JwtAddOn.CONFIG_JWT_ISSUERS];}
+    /**@return{Array.<Issuer>}*/get issuers(){return this._issuers;}
     /**@param{Array.<Issuer>} issuers*/
     set issuers(issuers) {
         if(typeof issuers === "undefined" || issuers == null) issuers = [];
-        this._config[JwtAddOn.CONFIG_JWT_ISSUERS] = issuers;
+        this._issuers = issuers;
     }
-    /**@return{HTTPParameter}*/get parameter() {return this._config[JwtAddOn.CONFIG_JWT_TOKEN_PARAMETER]}
-    /**@return{string}*/get token() {return this._config[JwtAddOn.CONFIG_JWT_TOKEN_NAME];}
-    /**@return{string}*/get scheme() {return this._config[JwtAddOn.CONFIG_JWT_TOKEN_SCHEME];}
-    /**@return{boolean}*/get removeScheme() {return this._config[JwtAddOn.CONFIG_JWT_TOKEN_SCHEME_REMOVE];}
+    /**@return{HTTPParameter}*/get parameter() {return this._tokenParameter}
+    /**@param{HTTPParameter}param*/set parameter(param) {this._tokenParameter = param;}
+    /**@return{string}*/get token() {return this._tokenName;}
+    /**@param{string}token*/set token(token) {this._tokenName = token;}
+    /**@return{string}*/get scheme() {return this._tokenScheme;}
+    /**@param{string}scheme*/set scheme(scheme) {this._tokenScheme = scheme;}
+    /**@return{boolean}*/get removeScheme() {return this._removeScheme;}
+    /**@param{boolean}remove*/set removeScheme(remove) {this._removeScheme = remove;}
     /**
      * @param {Array.<Issuer>} [issuers=[]]
      * @return {JwtAddOn}
      */
-    setIssuers(issuers = []){this._config[JwtAddOn.CONFIG_JWT_ISSUERS] = issuers; return this;}
+    setIssuers(issuers = []){this._issuers = issuers; return this;}
     /**
      * @param {Issuer} issuer
      * @return {JwtAddOn}
      */
-    addIssuer(issuer){this._config[JwtAddOn.CONFIG_JWT_ISSUERS].unshift(issuer); return this;}
+    addIssuer(issuer){this._issuers.unshift(issuer); return this;}
     /**
      * @param {HTTPParameter} token
      * @return {JwtAddOn}
      */
-    setParameter(token) {this._config[JwtAddOn.CONFIG_JWT_TOKEN_PARAMETER] = token; return this;}
+    setParameter(token) {this._tokenParameter = token; return this;}
     /**
      * @param {string} token
      * @return {JwtAddOn}
      */
-    setToken(token) {this._config[JwtAddOn.CONFIG_JWT_TOKEN_NAME] = token; return this;}
+    setToken(token) {this._tokenName = token; return this;}
     /**
      * @param {string} scheme
      * @return {JwtAddOn}
      */
-    setScheme(scheme) {this._config[JwtAddOn.CONFIG_JWT_TOKEN_SCHEME] = scheme; return this;}
+    setScheme(scheme) {this._tokenScheme = scheme; return this;}
     /**
      * @param {boolean} remove
      * @return {JwtAddOn}
      */
-    setRemoveScheme(remove) {this._config[JwtAddOn.CONFIG_JWT_TOKEN_SCHEME_REMOVE] = remove; return this;}
+    setRemoveScheme(remove) {this._removeScheme = remove; return this;}
 }
 /**
  * HTTPContext
@@ -1406,10 +1398,10 @@ class HTTPContext extends Context {
      * @private
      */
     async _setSession() {
-        /**@type{HTTPAddOn}*/let _lconfig = /**@type{HTTPAddOn}*/await this._config.getAddOn(HTTPAddOn.CONFIG_ADDON_HTTP);
-        if(instanceOfCelastringType(AddOn.CELASTRINAJS_TYPE, _lconfig)) {
+        /**@type{HTTPAddOn}*/let _lconfig = /**@type{HTTPAddOn}*/await this._config.getAddOn(HTTPAddOn);
+        if(instanceOfCelastringType(AddOn, _lconfig)) {
             let _sm = _lconfig.sessionManager;
-            if (instanceOfCelastringType(SessionManager.CELASTRINAJS_TYPE, _sm))
+            if (instanceOfCelastringType(SessionManager, _sm))
                 this._session = await _sm.loadSession(this);
         }
     }
@@ -1432,10 +1424,10 @@ class HTTPContext extends Context {
      * @private
      */
     async _rewriteSession() {
-        /**@type{HTTPAddOn}*/let _lconfig = /**@type{HTTPAddOn}*/this._config.getAddOn(HTTPAddOn.CONFIG_ADDON_HTTP);
-        if(instanceOfCelastringType(AddOn.CELASTRINAJS_TYPE, _lconfig)) {
+        /**@type{HTTPAddOn}*/let _lconfig = /**@type{HTTPAddOn}*/this._config.getAddOn(HTTPAddOn);
+        if(instanceOfCelastringType(AddOn, _lconfig)) {
             let _sm = _lconfig.sessionManager;
-            if (instanceOfCelastringType(SessionManager.CELASTRINAJS_TYPE, _sm)) {
+            if (instanceOfCelastringType(SessionManager, _sm)) {
                 if (this.session != null && this.session.doWriteSession)
                     await _sm.saveSession(this.session, this);
             }
@@ -1451,7 +1443,7 @@ class HTTPContext extends Context {
         for(/**@type{Cookie}*/const _param in _cookies) {
             if(_cookies.hasOwnProperty(_param)) {
                 let _cookie = _cookies[_param];
-                if(instanceOfCelastringType(Cookie.CELASTRINAJS_TYPE, _cookie))
+                if(instanceOfCelastringType(Cookie, _cookie))
                     _setcookies.unshift(_cookie.toAzureCookie());
             }
         }
@@ -1637,7 +1629,7 @@ class HTTPContext extends Context {
     sendServerError(error = null, body = null) {
         if(error == null) error = CelastrinaError.newError("Internal Server Error.");
 
-        else if(!instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, error)) error = CelastrinaError.wrapError(error, 500);
+        else if(!instanceOfCelastringType(/**@type{Class}*/CelastrinaError, error)) error = CelastrinaError.wrapError(error, 500);
         switch(error.code) {
             case 403:
                 this.sendForbiddenError(error);
@@ -1659,7 +1651,7 @@ class HTTPContext extends Context {
      */
     sendNotAuthorizedError(error= null, body = null) {
         if(error == null) error = CelastrinaError.newError("Not Authorized.", 401);
-        else if(!instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, error)) error = CelastrinaError.wrapError(error, 401);
+        else if(!instanceOfCelastringType(/**@type{Class}*/CelastrinaError, error)) error = CelastrinaError.wrapError(error, 401);
         if(body == null) body = "<html lang=\"en\"><head><title>" + this._config.name + "</title></head><body><header>401 - Not Authorized</header><main><p><h2>" + error.message + "</h2></main><footer>celastrinajs</footer></body></html>";
         this.send(body, 401);
     }
@@ -1669,7 +1661,7 @@ class HTTPContext extends Context {
      */
     sendForbiddenError(error = null, body = null) {
         if(error == null) error = CelastrinaError.newError("Forbidden.", 403);
-        else if(!instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, error)) error = CelastrinaError.wrapError(error, 403);
+        else if(!instanceOfCelastringType(/**@type{Class}*/CelastrinaError, error)) error = CelastrinaError.wrapError(error, 403);
         if(body == null) body = "<html lang=\"en\"><head><title>" + this._config.name + "</title></head><body><header>403 - Forbidden</header><main><p><h2>" + error.message + "</h2></main><footer>celastrinajs</footer></body></html>";
         this.send(body, 403);
     }
@@ -1731,7 +1723,7 @@ class JSONHTTPContext extends HTTPContext {
      */
     sendServerError(error = null, body = null) {
         if(error == null) error = CelastrinaError.newError("Internal Server Error.");
-        else if(!instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, error)) error = CelastrinaError.wrapError(error, 500);
+        else if(!instanceOfCelastringType(/**@type{Class}*/CelastrinaError, error)) error = CelastrinaError.wrapError(error, 500);
         if(body == null)
             this.sendCelastrinaError(error);
         else
@@ -1743,7 +1735,7 @@ class JSONHTTPContext extends HTTPContext {
      */
     sendNotAuthorizedError(error= null, body = null) {
         if(error == null) error = CelastrinaError.newError("Not Authorized.", 401);
-        else if(!instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, error)) error = CelastrinaError.wrapError(error, 401);
+        else if(!instanceOfCelastringType(/**@type{Class}*/CelastrinaError, error)) error = CelastrinaError.wrapError(error, 401);
         if(body == null)
             this.sendCelastrinaError(error, 401);
         else
@@ -1755,7 +1747,7 @@ class JSONHTTPContext extends HTTPContext {
      */
     sendForbiddenError(error = null, body = null) {
         if(error == null) error = CelastrinaError.newError("Forbidden.", 403);
-        else if(!instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, error)) error = CelastrinaError.wrapError(error, 403);
+        else if(!instanceOfCelastringType(/**@type{Class}*/CelastrinaError, error)) error = CelastrinaError.wrapError(error, 403);
         if(body == null)
             this.sendCelastrinaError(error, 403);
         else
@@ -1800,7 +1792,7 @@ class JwtAuthenticator extends Authenticator {
      * @return {Promise<boolean>}
      */
     async _authenticate(assertion) {
-        /**@type{JwtAddOn}*/let _config  = /**@type{JwtAddOn}*/await assertion.context.config.getAddOn(JwtAddOn.CONFIG_ADDON_JWT);
+        /**@type{JwtAddOn}*/let _config  = /**@type{JwtAddOn}*/await assertion.context.config.getAddOn(JwtAddOn);
         let _token = await this._getToken(assertion.context, _config);
         if(_token != null) {
             let _jwt = null;
@@ -1868,9 +1860,9 @@ class HTTPFunction extends BaseFunction {
      */
     async exception(context, exception) {
         /**@type{null|Error|CelastrinaError|*}*/let ex = exception;
-        if(instanceOfCelastringType(CelastrinaValidationError.CELASTRINAJS_VALIDATION_ERROR_TYPE, ex))
+        if(instanceOfCelastringType(/**@type{Class}*/CelastrinaValidationError, ex))
             context.sendValidationError(ex);
-        else if(instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, ex))
+        else if(instanceOfCelastringType(/**@type{Class}*/CelastrinaError, ex))
             context.sendServerError(ex);
         else if(ex instanceof Error) {
             ex = CelastrinaError.wrapError(ex);
@@ -1961,9 +1953,8 @@ class HMACAuthenticator extends Authenticator {
      */
     async _authenticate(assertion) {
         /**@type{HTTPContext}*/let _context = /**@type{HTTPContext}*/assertion.context;
-        /**@type{HTTPAddOn}*/let _http  = /**@type{JwtAddOn}*/await assertion.context.config.getAddOn(
-                                                                                            HTTPAddOn.CONFIG_ADDON_HTTP);
-        /**@type{HMAC}*/let _hmac = _http.hmac;
+        /**@type{HMACAddOn}*/let _addon  = /**@type{HMACAddOn}*/await assertion.context.config.getAddOn(HMACAddOn);
+        /**@type{HMAC}*/let _hmac = _addon.hmac;
         /**@type{string}*/let _signature = crypto.createHmac(_hmac.algorithm, _hmac.secret).update(
                                                                         _context.raw).digest(_hmac.encoding).toString();
         let _challange = await _hmac.parameter.getParameter(_context, _hmac.name);
@@ -1995,9 +1986,14 @@ class HMACConfigurationParser extends ConfigParser {
      * @private
      */
     async _create(_Object) {
-        if(_Object.hasOwnProperty("hmac") && (typeof _Object.hmac === "object") && _Object.hmac != null) {
-            this._config[HMACAddOn.CONFIG_HMAC] = _Object.hmac;
+        /**@type{HMACAddOn}*/let _addon = this._config[HMACAddOn.addOnName];
+        if(instanceOfCelastringType(AddOn, _addon)) {
+            if (_Object.hasOwnProperty("hmac") && (typeof _Object.hmac === "object") && _Object.hmac != null) {
+                _addon.hmac = _Object.hmac;
+            }
         }
+        else
+            throw CelastrinaError.newError("Missing required Add-On '" + HMACAddOn.name + "'.");
     }
 }
 /**
@@ -2025,7 +2021,7 @@ class HMACParser extends AttributeParser {
         let _algo = "sha256";
         let _encoding = "hex";
         let _assignments;
-        if(_HMAC.hasOwnProperty("parameter") && (instanceOfCelastringType(HTTPParameter.CELASTRINAJS_TYPE, _HMAC.parameter)))
+        if(_HMAC.hasOwnProperty("parameter") && (instanceOfCelastringType(HTTPParameter, _HMAC.parameter)))
             _parameter = _HMAC.parameter;
         if(_HMAC.hasOwnProperty("name") && (typeof _HMAC.name === "string") && _HMAC.name.trim().length > 0)
             _name = _HMAC.name.trim();
@@ -2045,28 +2041,20 @@ class HMACParser extends AttributeParser {
  * @author Robert R Murrell
  */
 class HMACAddOn extends AddOn {
-    static CONFIG_ADDON_HMAC = "celastrinajs.addon.http.hmac";
-    static CONFIG_HMAC = "celastrinajs.http.hmac";
+    /**@return*/static get addOnName() {return "celastrinajs.addon.http.hmac";}
     constructor() {
-        super(HMACAddOn.CONFIG_ADDON_HMAC);
+        super();
+        /**@type{HMAC}*/this._hmac = null;
     }
     /**@return{ConfigParser}*/getConfigParser() {return new HMACConfigurationParser();}
     /**@return{AttributeParser}*/getAttributeParser() {return new HMACParser();}
-    /**@return{Set<string>}*/getDependancies() {return new Set([HTTPAddOn.CONFIG_ADDON_HTTP]);}
-    /**
-     * @param {Object} config
-     */
-    wrap(config) {
-        super.wrap(config);
-        this._config[HMACAddOn.CONFIG_HMAC] = null;
-    }
-    /**@return{HMAC}*/get hmac() {return this._config[HMACAddOn.CONFIG_HMAC];}
-    /**@param{HMAC}hmac*/set hmac(hmac) {this._config[HMACAddOn.CONFIG_HMAC] = hmac;}
-    async initialize(azcontext, pm, rm, prm) {
-        /**@type{Sentry}*/let _sentry = this._config[Configuration.CONFIG_SENTRY];
-        /**@type{HMAC}*/let _hmac = this._config[HMACAddOn.CONFIG_HMAC];
-        if((typeof _hmac == "undefined" || _hmac == null) || ((typeof _hmac.secret === "undefined") || _hmac.secret == null ||
-                _hmac.secret.length === 0))
+    /**@return{Set<string>}*/getDependancies() {return new Set([HTTPAddOn.addOnName]);}
+    /**@return{HMAC}*/get hmac() {return this._hmac;}
+    /**@param{HMAC}hmac*/set hmac(hmac) {this._hmac = hmac;}
+    async initialize(azcontext, config) {
+        /**@type{Sentry}*/let _sentry = config[Configuration.CONFIG_SENTRY];
+        if(((!instanceOfCelastringType(HMAC, this._hmac)) || (typeof this._hmac.secret === "undefined") || this._hmac.secret == null ||
+                this._hmac.secret.length === 0))
             throw CelastrinaError.newError("Cannot load HMAC Add-On, missing required HMAC configuration.");
         _sentry.addAuthenticator(new HMACAuthenticator());
     }

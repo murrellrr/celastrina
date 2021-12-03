@@ -27,8 +27,8 @@
   },
   "homepage": "https://github.com/murrellrr/celastrina#readme",
   "dependencies": {
-    "@celastrina/core": "^4.5.22",
-    "@celastrina/http": "^4.1.0",
+    "@celastrina/core": "^4.7.27",
+    "@celastrina/http": "^4.4.5",
     "axios": "^0.24.0"
   }
 }

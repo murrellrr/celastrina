@@ -27,10 +27,106 @@
  * @license MIT
  */
 "use strict";
-const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, AddOn, instanceOfCelastringType} = require("@celastrina/core");
+const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, AddOn, instanceOfCelastringType, Configuration, Context,
+       BaseFunction} = require("@celastrina/core");
 const {JSONHTTPContext, JSONHTTPFunction, HTTPAddOn} = require("@celastrina/http");
 const {CloudEvent, CloudEventV1, CloudEventV1Attributes} = require("cloudevents");
 const moment = require("moment");
+/**
+ * QueueContext
+ * @author Robert R Murrell
+ */
+class QueueContext extends Context {
+    /**
+     * @param {Configuration} config
+     */
+    constructor(config) {
+        super(config);
+    }
+}
+/**
+ * QueueFunction
+ * @author Robert R Murrell
+ * @abstract
+ */
+class QueueFunction extends BaseFunction {
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.message.QueueFunction";}
+    /***
+     * @param {Configuration} config
+     */
+    constructor(config) {
+        super(config);
+    }
+    /**
+     * @param {Configuration} config
+     * @return {Promise<QueueContext>}
+     */
+    async createContext(config) {
+        return new QueueContext(config);
+    }
+    /**
+     * @param {QueueContext} context
+     * @return {Promise<void>}
+     */
+    async onMessage(context) {throw CelastrinaError.newError("Not Implemented.", 501);}
+    /**
+     * @param {(Context|QueueContext)} context
+     * @return {Promise<void>}
+     */
+    async process(context) {
+        return this.onMessage(context);
+    }
+}
+/**
+ * QueueAddOn
+ * @author Robert R Murrell
+ */
+class QueueAddOn extends AddOn {
+    /**@type{string}*/static get addOnName() {return "celastrinajs.addon.queue";}
+    constructor() {super();}
+}
+/**
+ * CloudEventError
+ * @author Robert R Murrell
+ */
+class CloudEventAbortError extends CelastrinaError {
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.message.cloudevent.CloudEventAbortError";}
+    /**
+     * @param {string} message
+     * @param {(Object|CloudEvent)} event
+     * @param {(string|number)} id
+     * @param {Array<string>} [causes=[]]
+     * @param {number} [code=500]
+     * @param {boolean} [drop=false]
+     */
+    constructor(message, event, id, causes = [], code = 500,
+                drop = false) {
+        super(message, code, drop);
+        /**@type{string}*/this.name = this.constructor.name;
+        /**@type{CloudEvent}*/this._event = event;
+        /**@type{number}*/this._id = id;
+        /**@type{Array<string>}*/this._causes = causes;
+    }
+    /**@return {string}*/toString() {
+        return "[" + this.name + "][" + this.code + "][" + this.drop + "][" + this._id + "]: " + this.message;
+    }
+    /**@return{CloudEvent}*/get event() {return this._event;}
+    /**@return{number}*/get id() {return this._id;}
+    /**@return{Array<string>}*/get causes() {return this._causes;}
+    /**
+     * @param {string} message
+     * @param {(Object|CloudEvent)} event
+     * @param {(string|number)} id
+     * @param {Array<string>} [causes=[]]
+     * @param {number} [code=500]
+     * @param {boolean} [drop=false]
+     * @return CloudEventAbortError
+     */
+    static newAbortError(message, event, id, causes = [],
+                         code = 500, drop = false) {
+        return new CloudEventAbortError(message, event, id, causes, code, drop);
+    }
+}
 /**
  * CelastrinaEvent
  * @author Robert R Murrell
@@ -42,13 +138,13 @@ class CelastrinaEvent {
     constructor(context) {
         this._context = context;
     }
-    /**2return{Context}*/get context() {return this._context}
+    /**@return{Context}*/get context() {return this._context}
 }
 /**
- * CelastrinaCloudEvent
+ * CloudEventReceived
  * @author Robert R Murrell
  */
-class CelastrinaCloudEvent extends CelastrinaEvent {
+class CloudEventReceived extends CelastrinaEvent {
     /**
      * @param {Context} context
      * @param {CloudEvent} event
@@ -68,10 +164,10 @@ class CelastrinaCloudEvent extends CelastrinaEvent {
     }
 }
 /**
- * CelastrinaCloudRollbackEvent
+ * CloudEventAbort
  * @author Robert R Murrell
  */
-class CelastrinaCloudRollbackEvent extends CelastrinaEvent {
+class CloudEventAbort extends CelastrinaEvent {
     /**
      * @param {Context} context
      * @param {Array<CloudEvent>} events
@@ -88,32 +184,33 @@ class CelastrinaCloudRollbackEvent extends CelastrinaEvent {
  * @abstract
  */
 class CloudEventListener {
-    /**@return{string}*/static get celastrinaType() {return "celastrinajs.message.CloudEventListener";}
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.message.cloudevent.CloudEventListener";}
     constructor() {}
     /**
-     * @param {CelastrinaCloudEvent} event
+     * @param {CloudEventReceived} event
      * @return {Promise<void>}
      * @abstract
      */
     async onEvent(event) {throw CelastrinaError.newError("Not Implemented.", 501);}
     /**
-     * @param {CelastrinaCloudEvent} event
+     * @param {CloudEventReceived} event
      * @return {Promise<void>}
      * @abstract
      */
     async onReject(event) {throw CelastrinaError.newError("Not Implemented.", 501);}
     /**
-     * @param {CelastrinaCloudRollbackEvent} event
+     * @param {CloudEventAbort} event
      * @return {Promise<void>}
+     * @abstract
      */
-    async onRollBack(event) {throw CelastrinaError.newError("Not Implemented.", 501);}
+    async onAbort(event) {throw CelastrinaError.newError("Not Implemented.", 501);}
 }
 /**
- * CloudEventInvocation
+ * Invocation
  * @author Robert R Murrell
  */
-class CloudEventInvocation {
-    /**@return{string}*/static get celastrinaType() {return "celastrinajs.message.CloudEventInvocation";}
+class Invocation {
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.message.cloudevent.Invocation";}
     /**
      * @param {Context} context
      * @param {CloudEventAddOn} config
@@ -123,7 +220,8 @@ class CloudEventInvocation {
         /**@type{Context}*/this._context = context;
         /**@type{CloudEventAddOn}*/this._config = config;
         /**@type{string}*/this._contentType = contentType;
-        /**@type{(Array<(Object|CloudEvent)>)}*/this._rejectedEvents = [];
+        /**@type{Object}*/this._rejectedEvents = {};
+        /**@type{number}*/this._rejectEventCount = 0;
         /**@type{(Array<CloudEvent>)}*/this._acceptedEvents = [];
     };
     /**@return{Context}*/get context() {return this._context;};
@@ -137,15 +235,49 @@ class CloudEventInvocation {
     }
     /**
      * @param {Object|CloudEvent} event
-     * @param {*} cause
+     * @param {number} [id=0]
+     * @return {Promise<boolean>}
      */
-    reject(event, cause) {
-        this._rejectedEvents.unshift({event: event, cause: cause});
+    async isRejected(event, id = 0) {
+        let _id = id;
+        if((typeof event === "object") && event != null)
+            if(event.hasOwnProperty("id") && (typeof event.id === "string") && event.id.trim().length > 0)
+                _id = event.id;
+        return this._rejectedEvents.hasOwnProperty(_id);
     }
-    /**@return{Array<CloudEvent>}*/get accepted() {return this._acceptedEvents;}
-    /**@return{Array<(Object|CloudEvent)>}*/get rejected() {return this._rejectedEvents;}
-    /**@return{number}*/get rejectedCount() {return this._rejectedEvents.length;}
-    /**@return{number}*/get totalCount() {return this.rejectedCount + this._acceptedEvents.length;}
+    /**
+     * @param {Object|CloudEvent} event
+     * @param {(Error|Array<Error>)} cause
+     * @param {number} [id=0]
+     */
+    reject(event, cause, id = 0) {
+        if((typeof event === "object") && event != null) {
+            let _id = id;
+            if(event.hasOwnProperty("id") && (typeof event.id === "string") && event.id.trim().length > 0)
+                _id = event.id;
+            /**@type{(null|undefined|{event:(Object|CloudEvent),causes:Array<{message:string,tag?:string}>})}*/
+            let _rejected = this._rejectedEvents[_id];
+            if(typeof _rejected === "undefined" || _rejected == null) {
+                _rejected = {event: event, causes: []};
+                this._rejectedEvents[_id] = _rejected;
+            }
+            (Array.isArray(cause)) ? _rejected.causes = _rejected.causes.concat(cause) : _rejected.causes.unshift(cause);
+            ++this._rejectEventCount;
+        }
+    }
+    /**@return{Array<CloudEvent>}*/get acceptedEvents() {return this._acceptedEvents;}
+    /**@return{Array<(Object|CloudEvent)>}*/get rejectedEvents() {
+        let _rejected = [];
+        for(let _prop in this._rejectedEvents) {
+            if(this._rejectedEvents.hasOwnProperty(_prop)) {
+                _rejected.unshift(this._rejectedEvents[_prop]);
+            }
+        }
+        return _rejected;
+    }
+    /**@return{number}*/get rejectedCount() {return this._rejectEventCount;}
+    /**@return{number}*/get acceptedCount() {return this._acceptedEvents.length;}
+    /**@return{number}*/get totalCount() {return this.rejectedCount + this.acceptedCount;}
 }
 /**
  * CloudEventEmitter
@@ -153,7 +285,7 @@ class CloudEventInvocation {
  * @abstract
  */
 class CloudEventEmitter {
-    /**@return{string}*/static get celastrinaType() {return "celastrinajs.message.CloudEventEmitter";}
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.message.cloudevent.CloudEventEmitter";}
     /**
      * @param {CloudEventListener} listener
      */
@@ -161,18 +293,18 @@ class CloudEventEmitter {
         this._listener = listener;
     }
     /**
-     * @param {CloudEventInvocation} invocation
+     * @param {Invocation} invocation
      * @param {(Object|Array<Object>)} event
-     * @return {Promise<CloudEventInvocation>}
+     * @return {Promise<Invocation>}
      * @abstract
      */
     async fireCloudEvent(invocation, event) {}
     /**
-     * @param {CloudEventInvocation}invocation
+     * @param {Invocation}invocation
      * @param {(Object|Array<Object>)} event
-     * @return {Promise<CloudEventInvocation>}
+     * @return {Promise<Invocation>}
      */
-    async validateEvent(invocation, event) {
+    async validateInvocation(invocation, event) {
         if(typeof event === "undefined" || event == null) {
             invocation.context.log("Received empty request body.", LOG_LEVEL.WARN, "CloudEventEmitter.validateEvent(invocation, event)");
             throw CelastrinaValidationError.newValidationError("Body is required.", "body", true);
@@ -205,78 +337,111 @@ class CloudEventEmitter {
         }
     }
     /**
-     * @param {CloudEventInvocation} invocation
-     * @param {(Object|Array<Object>)} event
+     * @param {Invocation} invocation
+     * @param {CloudEvent} event
+     * @param {number} [id = 0]
      * @return {Promise<void>}
      */
-    async _fireCloudEvent(invocation, event) {
-        let _response = await this._createCloudEvent(invocation, /**@type{(CloudEventV1|CloudEventV1Attributes)}*/event);
-        if(_response.rejected) {
-            // fire the rejected event.
+    async validateCloudEvent(invocation, event, id = 0) {
+        if(!event.specversion.match(invocation.config.specversion)) {
+            invocation.context.log("Spec Version '" + event.specversion + "' not supported.", LOG_LEVEL.WARN,
+                "CloudEventEmitter._createEvent(context, config, body)");
+            invocation.reject(event, CelastrinaValidationError.newValidationError(
+                "Spec Version '" + event.specversion + "' not supported.", "CloudEvent.specversion"), id);
         }
-        else {
-            let _event = new CelastrinaCloudEvent(invocation.context, _response.event);
-            await this._listener.onEvent(_event);
-            if(_event.rejected) {
-                invocation.reject(_event.event, _event.cause);
-                await this._listener.onReject(_event);
+        if(!event.type.match(invocation.config.type)) {
+            invocation.context.log("Type '" + event.type + "' not supported.", LOG_LEVEL.WARN,
+                "CloudEventEmitter._createEvent(context, config, body)");
+            invocation.reject(event, CelastrinaValidationError.newValidationError(
+                "Type '" + event.type + "' not supported.", "CloudEvent.type"), id);
+        }
+        if((invocation.config.subjectRequired) || (typeof event.subject !== "undefined")){
+            if(!event.subject.match(invocation.config.subject)) {
+                invocation.context.log("Subject '" + event.subject + "' not supported.", LOG_LEVEL.WARN,
+                    "CloudEventEmitter._createEvent(context, config, body)");
+                invocation.reject(event, CelastrinaValidationError.newValidationError(
+                    "Subject '" + event.subject + "' not supported.", "CloudEvent.subject"), id);
             }
         }
-    };
+        if(!event.datacontenttype.match(invocation.config.dataContentType)) {
+            invocation.context.log("Data Content Type '" + event.datacontenttype + "' not supported.", LOG_LEVEL.WARN,
+                "CloudEventEmitter._createEvent(context, config, body)");
+            invocation.reject(event, CelastrinaValidationError.newValidationError(
+                "Data Content Type '" + event.datacontenttype + "' not supported.", "CloudEvent.datacontenttype"), id);
+        }
+        if((invocation.config.timeRequired) || (typeof event.time !== "undefined")) {
+            if(invocation.config.expires) {
+                // TODO: Check if expired.
+            }
+        }
+    }
     /**
-     * @param {CloudEventInvocation} invocation
+     * @param {Invocation} invocation
      * @param {(CloudEventV1|CloudEventV1Attributes)} event
-     * @return {Promise<{rejected:boolean, event?:(CloudEvent|Object), cause?:Object}>}
+     * @param {number} [id = 0]
+     * @return {Promise<CloudEvent>}
      */
-    async _createCloudEvent(invocation, event) {
-        let _response = {rejected: true};
+    async createCloudEvent(invocation, event, id = 0) {
         try {
-            let _event = new CloudEvent(event);
-            _response.event = _event;
-            if(!_event.specversion.match(invocation.config.specversion)) {
-                invocation.context.log("Spec Version '" + _event.specversion + "' not supported.", LOG_LEVEL.WARN,
-                    "CloudEventEmitter._createEvent(context, config, body)");
-                _response.cause = CelastrinaValidationError.newValidationError(
-                    "Spec Version '" + _event.specversion + "' not supported.", "CloudEvent.specversion");
-            }
-            else if(!_event.type.match(invocation.config.type)) {
-                invocation.context.log("Type '" + _event.type + "' not supported.", LOG_LEVEL.WARN,
-                    "CloudEventEmitter._createEvent(context, config, body)");
-                _response.cause = CelastrinaValidationError.newValidationError(
-                    "Type '" + _event.type + "' not supported.", "CloudEvent.type");
-            }
-            else if((invocation.config.subjectRequired) || (typeof _event.subject !== "undefined")){
-                if(!_event.subject.match(invocation.config.subject)) {
-                    invocation.context.log("Subject '" + _event.subject + "' not supported.", LOG_LEVEL.WARN,
-                        "CloudEventEmitter._createEvent(context, config, body)");
-                    _response.cause = CelastrinaValidationError.newValidationError(
-                        "Subject '" + _event.subject + "' not supported.", "CloudEvent.subject");
-                }
-            }
-            else if(!_event.datacontenttype.match(invocation.config.contentType)) {
-                invocation.context.log("Data Content Type '" + _event.datacontenttype + "' not supported.", LOG_LEVEL.WARN,
-                    "CloudEventEmitter._createEvent(context, config, body)");
-                _response.cause = CelastrinaValidationError.newValidationError(
-                    "Data Content Type '" + _event.datacontenttype + "' not supported.", "CloudEvent.datacontenttype");
-            }
-            else if((invocation.config.timeRequired) || (typeof _event.time !== "undefined")) {
-                if(invocation.config.expires) {
-                    // TODO: Check if expired.
-                }
-            }
-            else _response.rejected = false;
-            return _response;
+            return new CloudEvent(event);
         }
         catch(exception) {
-            invocation.context.log(exception, LOG_LEVEL.ERROR, "CloudEventEmitter._createEvent(context, config, body)");
-            if(instanceOfCelastringType(CelastrinaError.CELASTRINAJS_ERROR_TYPE, exception)) throw exception;
-            else {
-                if(exception instanceof TypeError) {
-                    _response.event = event;
-                    _response.cause = exception.params;
-                    return _response;
+            invocation.context.log(exception, LOG_LEVEL.ERROR, "CloudEventEmitter.createCloudEvent(invocation, event)");
+            if(instanceOfCelastringType(CelastrinaError, exception) || instanceOfCelastringType(CelastrinaValidationError, exception))
+                throw exception;
+            else if(exception instanceof TypeError) {
+                let _errors = exception.errors;
+                if(Array.isArray(_errors)) {
+                    let _cause = [];
+                    for(let _err of _errors) {
+                        _cause.unshift(CelastrinaValidationError.newValidationError(_err.message, JSON.stringify(_err.params)));
+                    }
+                    invocation.reject(event, _cause);
                 }
-                else throw CelastrinaError.wrapError(exception);
+                else invocation.reject(event, new CelastrinaError.wrapError(exception));
+                return null;
+            }
+            else
+                throw CelastrinaError.wrapError(exception);
+        }
+    }
+    /**
+     * @param {Invocation} invocation
+     * @param {(Object|CloudEvent)} event
+     * @param {number} [id = 0]
+     * @return {Promise<boolean>}
+     * @private
+     */
+    async _accepted(invocation, event, id) {
+        if(await invocation.isRejected(event, id)) {
+            let _ccevent = new  CloudEventReceived(invocation.context, event);
+            await this._listener.onReject(_ccevent);
+            if(invocation.config.abortOnReject) {
+                let _crevent = new CloudEventAbort(invocation.context, invocation.acceptedEvents);
+                await this._listener.onAbort(_crevent);
+                throw CelastrinaError.newError("ABORT!"); // todo: need to fill in message and cause.
+            }
+            else return false;
+        }
+        return true;
+    }
+    /**
+     * @param {Invocation} invocation
+     * @param {Object} event
+     * @param {number} [id = 0]
+     * @return {Promise<void>}
+     */
+    async _fireCloudEvent(invocation, event, id = 0) {
+        let _cevent  = await this.createCloudEvent(invocation, /**@type{(CloudEventV1|CloudEventV1Attributes)}*/event);
+        if(await this._accepted(invocation, event, id)) {
+            await this.validateCloudEvent(invocation, _cevent);
+            if(await this._accepted(invocation, event, id)) {
+                let _ccevent = new CloudEventReceived(invocation.context, _cevent);
+                await this._listener.onEvent(_ccevent);
+                if(_ccevent.rejected) invocation.reject(_cevent, _ccevent.cause);
+                if(await this._accepted(invocation, event, id)) {
+                    invocation.accept(_cevent);
+                }
             }
         }
     }
@@ -287,21 +452,24 @@ class CloudEventEmitter {
  * @abstract
  */
 class BatchCloudEventEmitter extends CloudEventEmitter {
+    /**
+     * @param {CloudEventListener} listener
+     */
     constructor(listener) {super(listener);}
     /**
-     * @param {CloudEventInvocation} invocation
+     * @param {Invocation} invocation
      * @param {(Object|Array<Object>)} event
-     * @return {Promise<void>}
+     * @return {Promise<Invocation>}
      */
     async fireCloudEvent(invocation, event) {
         if(Array.isArray(event))
             await this.fireBatchCloudEvent(invocation, event);
         else
             await this._fireCloudEvent(invocation, event);
-        // TODO: Checking to see if we;ve rejected.
+        return invocation;
     }
     /**
-     * @param {CloudEventInvocation} invocation
+     * @param {Invocation} invocation
      * @param {Array<Object>} event
      * @return {Promise<void>}
      * @abstract
@@ -313,19 +481,23 @@ class BatchCloudEventEmitter extends CloudEventEmitter {
  * @author Robert R Murrell
  */
 class AsyncBatchCloudEventEmitter extends BatchCloudEventEmitter {
+    /**
+     * @param {CloudEventListener} listener
+     */
     constructor(listener) {super(listener);}
     /**
-     * @param {CloudEventInvocation} invocation
+     * @param {Invocation} invocation
      * @param {Array<Object>} event
-     * @return {Promise<void>}
-     * @abstract
+     * @return {Promise<Invocation>}
      */
     async fireBatchCloudEvent(invocation, event) {
         let _promises = [];
-        for(let _event of event) {
-            _promises.unshift(this._fireCloudEvent(invocation, _event));
+        for(let index in event) {
+            let _event = event[index];
+            _promises.unshift(this._fireCloudEvent(invocation, _event, index));
         }
         await Promise.all(_promises);
+        return invocation;
     }
 }
 /**
@@ -333,18 +505,21 @@ class AsyncBatchCloudEventEmitter extends BatchCloudEventEmitter {
  * @author Robert R Murrell
  */
 class SyncBatchCloudEventEmitter extends BatchCloudEventEmitter {
+    /**
+     * @param {CloudEventListener} listener
+     */
     constructor(listener) {super(listener);}
     /**
-     * @param {CloudEventInvocation} invocation
+     * @param {Invocation} invocation
      * @param {Array<Object>} event
-     * @return {Promise<void>}
-     * @abstract
+     * @return {Promise<Invocation>}
      */
     async fireBatchCloudEvent(invocation, event) {
-        for(let _event of event) {
-            await this._fireCloudEvent(invocation, _event);
-            if(invocation.rejectedCount > 0) break;
+        for(let index in event) {
+            let _event = event[index];
+            await this._fireCloudEvent(invocation, _event, index);
         }
+        return invocation;
     }
 }
 /**
@@ -354,10 +529,9 @@ class SyncBatchCloudEventEmitter extends BatchCloudEventEmitter {
 class SyncBatchOrderedCloudEventEmitter extends SyncBatchCloudEventEmitter {
     constructor(listener) {super(listener);}
     /**
-     * @param {CloudEventInvocation} invocation
+     * @param {Invocation} invocation
      * @param {Array<Object>} event
-     * @return {Promise<void>}
-     * @abstract
+     * @return {Promise<Invocation>}
      */
     async fireBatchCloudEvent(invocation, event) {
         event = event.sort(
@@ -369,6 +543,7 @@ class SyncBatchOrderedCloudEventEmitter extends SyncBatchCloudEventEmitter {
             return a.time.localeCompare(b.time);
         });
         await super.fireBatchCloudEvent(invocation, event);
+        return invocation;
     }
 }
 /**
@@ -376,24 +551,48 @@ class SyncBatchOrderedCloudEventEmitter extends SyncBatchCloudEventEmitter {
  * @author Robert R Murrell
  */
 class BatchConfig {
-    /**@return{string}*/static get celastrinaType() {return "celastrinajs.addon.cloudevent.config.BatchConfig";}
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.message.cloudevent.BatchConfig";}
     /**
      * @param {number} [limit=10]
-     * @param {boolean} [abortOnReject=false]
      * @param {boolean} [processAsync=true]
      * @param {boolean} [orderTemporally=false] Order message by time, only followed if processAsync is false, set to false if
      *                                          processAsync is true.
      */
-    constructor(limit = 10, abortOnReject = false, processAsync = true, orderTemporally = false) {
+    constructor(limit = 10, processAsync = true, orderTemporally = false) {
         this._limit = limit;
-        this._abortOnReject = abortOnReject;
         this._processAsync = processAsync;
         (this._processAsync) ? this._orderTemporally = orderTemporally : this._orderTemporally = false;
     }
-    /**@type{number}*/get limit() {return this._limit;}
-    /**@type{boolean}*/get processAsync() {return this._processAsync;}
-    /**@type{boolean}*/get abortOnReject() {return this._abortOnReject;}
-    /**@type{boolean}*/get orderTemporally() {return this._orderTemporally;}
+    /**@return{number}*/get limit() {return this._limit;}
+    /**@param{number}limit*/set limit(limit) {this._limit = limit;}
+    /**@return{boolean}*/get processAsync() {return this._processAsync;}
+    /**@param{boolean}pasync*/set processAsync(pasync) {this._processAsync = pasync;}
+    /**@return{boolean}*/get orderTemporally() {return this._orderTemporally;}
+    /**@param{boolean}order*/set orderTemporally(order) {this._orderTemporally = order;}
+    /**
+     * @param {number} limit
+     * @return {BatchConfig}
+     */
+    setLimit(limit) {
+        this._limit = limit;
+        return this;
+    }
+    /**
+     * @param {boolean} pasync
+     * @return {BatchConfig}
+     */
+    setProcessAsync(pasync) {
+        this._processAsync = pasync;
+        return this;
+    }
+    /**
+     * @param {boolean} order
+     * @return {BatchConfig}
+     */
+    setOrderTemporally(order) {
+        this._orderTemporally = order;
+        return this;
+    }
 }
 /**
  * JSONHTTPEventAddOn
@@ -402,10 +601,13 @@ class BatchConfig {
  */
 class CloudEventAddOn extends AddOn {
     /**@type{string}*/static get addOnName() {return "celastrinajs.message.addon.cloudevent";}
-    constructor() {
+    /**
+     * @param {CloudEventListener} [listener=null]
+     */
+    constructor(listener = null) {
         super();
         this._batchConfig = null;
-        this._listener = null;
+        this._listener = listener;
         this._abortOnReject = false;
         this._requireTime = false;
         this._expires = false;
@@ -419,6 +621,11 @@ class CloudEventAddOn extends AddOn {
         this._dataContentType = new RegExp("^.*$");
         this._emitter = null;
     }
+    /**
+     * @param azcontext
+     * @param {Object} config
+     * @return {Promise<void>}
+     */
     async initialize(azcontext, config) {
         if(!instanceOfCelastringType(CloudEventListener, this._listener))
             throw CelastrinaValidationError.newValidationError("Listener is required.", "_listener");
@@ -438,7 +645,6 @@ class CloudEventAddOn extends AddOn {
         if(!this.timeRequired && this.expires) this.timeRequired = true;
     }
     /**@return{CloudEventEmitter}*/get emitter() {return this._emitter;}
-    /**@param{CloudEventEmitter}emitter*/set emitter(emitter) {this._emitter = emitter;}
     /**@return{CloudEventListener}*/get listener() {return this._listener;}
     /**@param{CloudEventListener}listener*/set listener(listener) {this._listener = listener;}
     /**@return{BatchConfig}*/get batch() {return this._batchConfig;}
@@ -453,19 +659,147 @@ class CloudEventAddOn extends AddOn {
     /**@return{RegExp}*/get type() {return this._type;}
     /**@param{RegExp}type*/set type(type) {this._type = type;}
     /**@return{boolean}*/get subjectRequired() {return this._requireSubject;}
-    /**@param{boolean}req*/set subjectRequired(req) {this._requireSubject = req;}
+    /**@param{boolean}required*/set subjectRequired(required) {this._requireSubject = required;}
     /**@return{RegExp}*/get subject() {return this._subject;}
     /**@param{RegExp}subject*/set subject(subject) {this._subject = subject;}
     /**@return{RegExp}*/get specversion() {return this._version;}
-    /**@param{RegExp}version*/set specversion(version) {this.this._version = version;}
-    /**@return{RegExp}*/get contentType() {return this._dataContentType;}
-    /**@param{RegExp}type*/set contentType(type) {this._dataContentType = type;}
+    /**@param{RegExp}version*/set specversion(version) {this._version = version;}
+    /**@return{RegExp}*/get dataContentType() {return this._dataContentType;}
+    /**@param{RegExp}type*/set dataContentType(type) {this._dataContentType = type;}
     /**@return{boolean}*/get allowEmpty() {return this._allowEmptyData;}
     /**@param{boolean}allow*/set allowEmpty(allow) {this._allowEmptyData = allow;}
     /**@return{boolean}*/get abortOnReject() {return this._abortOnReject;}
     /**@param{boolean}abort*/set abortOnReject(abort) {this._abortOnReject = abort;}
     /**@return{number}*/get responseCode() {return this._responseCode;}
     /**@param{number}code*/set responseCode(code) {this._responseCode = code;}
+    /**
+     * @param {BatchConfig} batch
+     * @return {CloudEventAddOn}
+     */
+    setBatch(batch) {
+        this._batchConfig = batch;
+        return this;
+    }
+    /**
+     * @param {boolean} required
+     * @return {CloudEventAddOn}
+     */
+    setTimeRequired(required) {
+        this._requireTime = required;
+        return this;
+    }
+    /**
+     * @param {boolean} expires
+     * @return {CloudEventAddOn}
+     */
+    setExpires(expires) {
+        this._expires = expires;
+        return this;
+    }
+    /**
+     * @param {number} time
+     * @return {CloudEventAddOn}
+     */
+    setExpireTime(time) {
+        this._expireTime = time;
+        return this;
+    }
+    /**
+     * @param {RegExp} type
+     * @return {CloudEventAddOn}
+     */
+    setType(type) {
+        this._type = type;
+        return this;
+    }
+    /**
+     * @param {string} pattern
+     * @return {CloudEventAddOn}
+     */
+    setTypePattern(pattern) {
+        this._type = new RegExp(pattern);
+        return this;
+    }
+    /**
+     * @param {boolean} req
+     * @return {CloudEventAddOn}
+     */
+    setSubjectRequired(req) {
+        this._requireSubject = req;
+        return this;
+    }
+    /**
+     * @param {RegExp} subject
+     * @return {CloudEventAddOn}
+     */
+    setSubject(subject) {
+        this._subject = subject;
+        return this;
+    }
+    /**
+     * @param {string} pattern
+     * @return {CloudEventAddOn}
+     */
+    setSubjectPattern(pattern) {
+        this._subject = new RegExp(pattern);
+        return this;
+    }
+    /**
+     * @param {RegExp} version
+     * @return {CloudEventAddOn}
+     */
+    setSpecVersion(version) {
+        this._version = version;
+        return this;
+    }
+    /**
+     * @param {string} pattern
+     * @return {CloudEventAddOn}
+     */
+    setSpecVersionPattern(pattern) {
+        this._version = new RegExp(pattern);
+        return this;
+    }
+    /**
+     * @param {RegExp} type
+     * @return {CloudEventAddOn}
+     */
+    setDataContentType(type) {
+        this._dataContentType = type;
+        return this;
+    }
+    /**
+     * @param {string} pattern
+     * @return {CloudEventAddOn}
+     */
+    setDataContentTypePattern(pattern) {
+        this._dataContentType = new RegExp(pattern);
+        return this;
+    }
+    /**
+     * @param {boolean} allow
+     * @return {CloudEventAddOn}
+     */
+    setAllowEmpty(allow) {
+        this._allowEmptyData = allow;
+        return this;
+    }
+    /**
+     * @param {boolean} abort
+     * @return {CloudEventAddOn}
+     */
+    setAbortOnReject(abort) {
+        this._abortOnReject = abort;
+        return this;
+    }
+    /**
+     * @param {number} code
+     * @return {CloudEventAddOn}
+     */
+    setResponseCode(code) {
+        this._responseCode = code;
+        return this;
+    }
 }
 /**
  * HTTPCloudEventFunction
@@ -476,36 +810,38 @@ class HTTPCloudEventFunction extends JSONHTTPFunction {
         super(config);
     }
     /**
-     * @param {(Context|JSONHTTPContext|{invocation?:CloudEventInvocation})} context
+     * @param {(Context|JSONHTTPContext|{invocation?:Invocation})} context
      * @return {Promise<void>}
      */
     async initialize(context) {
         /**@type{CloudEventAddOn}*/let _config = /**@type{CloudEventAddOn}*/await context.config.getAddOn(
                 HTTPCloudEventAddOn);
-        context.invocation = new CloudEventInvocation(context, _config, await context.getRequestHeader("content-type"));
+        context.invocation = new Invocation(context, _config, await context.getRequestHeader("content-type"));
     }
     /**
-     * @param {(Context|JSONHTTPContext|{invocation?:CloudEventInvocation})} context
+     * @param {(Context|JSONHTTPContext|{invocation?:Invocation})} context
      * @return {Promise<void>}
      */
     async validate(context) {
-        //await context.invocation.config.emitter.validateEvent(context.invocation);
+        await context.invocation.config.emitter.validateInvocation(context.invocation, context.requestBody);
     }
     /**
-     * @param {JSONHTTPContext|{invocation?:CloudEventInvocation}} context
+     * @param {JSONHTTPContext|{invocation?:Invocation}} context
      * @return {Promise<void>}
      * @private
      */
     async _post(context) {
-        // let _invocation = await context.invocation.config.emitter.fireCloudEvent(context.invocation);
-        // let _response = {
-        //     accepted: _invocation.totalCount,
-        //     rejected: _invocation.rejectedCount
-        // };
-        // let _code = _invocation.config.responceCode;
-        // if(_invocation.rejectedCount > 0) _response.events = _invocation.rejected;
-        // context.send(_response, _code);
-        // context.done();
+        let _invocation = await context.invocation.config.emitter.fireCloudEvent(context.invocation, context.requestBody);
+        let _response = {
+            id: context.invocationId,
+            received: _invocation.totalCount,
+            accepted: _invocation.acceptedCount
+        };
+        let _code = _invocation.config.responseCode;
+        if(_invocation.rejectedCount > 0)
+            _response.rejected = {count: _invocation.rejectedCount, events: _invocation.rejectedEvents};
+        context.send(_response, _code);
+        context.done();
     }
 }
 /**
@@ -516,11 +852,72 @@ class HTTPCloudEventAddOn extends CloudEventAddOn {
     constructor() {super();}
     getDependancies() {return new Set([HTTPAddOn.addOnName]);}
 }
+/**
+ * QueueCloudEventFunction
+ * @author Robert R Murrell
+ */
+class QueueCloudEventFunction extends QueueFunction {
+    constructor(config) {
+        super(config);
+    }
+    /**
+     * @param {(Context|QueueContext|{invocation?:Invocation})} context
+     * @return {Promise<void>}
+     */
+    async initialize(context) {
+        // /**@type{CloudEventAddOn}*/let _config = /**@type{CloudEventAddOn}*/await context.config.getAddOn(
+        //     HTTPCloudEventAddOn);
+        // context.invocation = new Invocation(context, _config, await context.getRequestHeader("content-type"));
+    }
+    /**
+     * @param {(Context|QueueContext|{invocation?:Invocation})} context
+     * @return {Promise<void>}
+     */
+    async validate(context) {
+        // await context.invocation.config.emitter.validateInvocation(context.invocation, context.requestBody);
+    }
+    /**
+     * @param {QueueContext|{invocation?:Invocation}} context
+     * @return {Promise<void>}
+     * @private
+     */
+    async onMessage(context) {
+        // let _invocation = await context.invocation.config.emitter.fireCloudEvent(context.invocation, context.requestBody);
+        // let _response = {
+        //     id: context.invocationId,
+        //     received: _invocation.totalCount,
+        //     accepted: _invocation.acceptedCount
+        // };
+        // let _code = _invocation.config.responseCode;
+        // if(_invocation.rejectedCount > 0)
+        //     _response.rejected = {count: _invocation.rejectedCount, events: _invocation.rejectedEvents};
+        //context.send(_response, _code);
+        context.done();
+    }
+}
+/**
+ * QueueCloudEventAddOn
+ * @author Robert R Murrell
+ */
+class QueueCloudEventAddOn extends CloudEventAddOn {
+    constructor() {super();}
+    getDependancies() {return new Set([QueueAddOn.addOnName]);}
+}
 module.exports = {
+    QueueContext: QueueContext,
+    QueueFunction: QueueFunction,
+    QueueAddOn: QueueAddOn,
+    CloudEventAbortError: CloudEventAbortError,
+    CelastrinaEvent: CelastrinaEvent,
+    CloudEventReceived: CloudEventReceived,
+    CloudEventAbort: CloudEventAbort,
+    Invocation: Invocation,
     CloudEventListener: CloudEventListener,
+    CloudEventEmitter: CloudEventEmitter,
     BatchConfig: BatchConfig,
     CloudEventAddOn: CloudEventAddOn,
-    CloudEventEmitter: CloudEventEmitter,
     HTTPCloudEventFunction: HTTPCloudEventFunction,
-    HTTPCloudEventAddOn: HTTPCloudEventAddOn
+    HTTPCloudEventAddOn: HTTPCloudEventAddOn,
+    QueueCloudEventFunction: QueueCloudEventFunction,
+    QueueCloudEventAddOn: QueueCloudEventAddOn
 }

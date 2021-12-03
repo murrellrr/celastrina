@@ -5,7 +5,7 @@ const {MockPropertyManager} = require("./PropertyManagerTest");
 const assert = require("assert");
 
 class MockContext extends Context {
-    constructor(azcontext, config) {
+    constructor(config) {
         super(config);
     }
     setMonitorMode() {this._monitor = true;}

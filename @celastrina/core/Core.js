@@ -173,6 +173,39 @@ class CelastrinaValidationError extends CelastrinaError {
     }
 }
 /**
+ * CelastrinaEvent
+ * @author Robert R Murrell
+ */
+class CelastrinaEvent {
+    /**
+     * @param {Context} context
+     * @param {*} [source=null]
+     * @param {*} [data=null]
+     * @param {moment.Moment} [time=moment()]
+     * @param {boolean} [rejected=false]
+     * @param {*} [cause=null]
+     */
+    constructor(context, source = null, data = null, time = moment(), rejected = false,
+                cause = null) {
+        this._context = context;
+        this._source = source;
+        this._data = data;
+        this._time = time;
+        /**@type{boolean}*/this._rejected = rejected;
+        /**@type{*}*/this._cause = cause;
+    }
+    /**@return{Context}*/get context() {return this._context;}
+    /**@return{*}*/get source() {return this._source;}
+    /**@return{*}*/get data() {return this._data;}
+    /**@return{moment.Moment}*/get time() {return new moment(this._time);}
+    /**@return{boolean}*/get isRejected() {return this._rejected;}
+    /**@return{*}*/get cause() {return this._cause;}
+    reject(cause = null) {
+        this._rejected = true;
+        this._cause = cause;
+    }
+}
+/**
  * ResourceAuthorization
  * @author Robert R Murrell
  * @abstract
@@ -2911,6 +2944,7 @@ module.exports = {
     instanceOfCelastringType: instanceOfCelastringType,
     CelastrinaError: CelastrinaError,
     CelastrinaValidationError: CelastrinaValidationError,
+    CelastrinaEvent: CelastrinaEvent,
     LOG_LEVEL: LOG_LEVEL,
     ResourceAuthorization: ResourceAuthorization,
     ManagedIdentityResource: ManagedIdentityResource,

@@ -54,15 +54,31 @@ class MockCloudEventListener extends CloudEventListener {
     constructor() {
         super();
         this.onEventInvoked = false;
+        this.onRejectInvoked = false;
+        this.onAbortInvoked = false;
         this.onEventCount = 0;
+        this.onRejectCount = 0;
+        this.onAbortCount = 0;
     }
     reset() {
         this.onEventInvoked = false;
+        this.onRejectInvoked = false;
+        this.onAbortInvoked = false;
         this.onEventCount = 0;
+        this.onRejectCount = 0;
+        this.onAbortCount = 0;
     }
     async onEvent(event) {
         this.onEventInvoked = true;
         ++this.onEventCount;
+    }
+    async onReject(event) {
+        this.onRejectInvoked = true;
+        ++this.onRejectCount;
+    }
+    async onAbort(event) {
+        this.onAbortInvoked = true;
+        ++this.onAbortCount;
     }
 }
 
@@ -89,7 +105,6 @@ describe("HTTPCloudEventFunction", () => {
             // type: "com.example.someevent",
             _azcontext.body = {
 
-
                 source : "/mycontext",
                 id: "A234-1234-1234",
                 time: "2018-04-05T17:31:00Z",
@@ -97,6 +112,8 @@ describe("HTTPCloudEventFunction", () => {
                 data: "This is a test"
             };
             await _function.execute(_azcontext);
+            _azcontext.log.info(JSON.stringify(_azcontext.res.body));
+            assert.strictEqual(_azcontext.res.status, 200, "Expected 200.");
             assert.strictEqual(_eventConfig.listener.onEventInvoked, true, "Expected true.");
         });
     });

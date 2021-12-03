@@ -34,7 +34,19 @@ class MockAzureFunctionContext {
     constructor() {
         this.doneInvoked = false;
         this.donecontents = null;
-        this.bindings     = {tick: {},
+        this.bindings     = {
+                             tick: {
+                                 schedule: {
+                                     adjustForDST: true,
+                                     scheduleStatus: {
+                                         last: "",
+                                         lastUpdated: "",
+                                         next: ""
+                                     }
+                                 },
+                                 isPastDue: false
+                             },
+                             message: {},
                              req: {
                                 originalUrl: "http://original-azure-function-url",
                                 method: "GET",

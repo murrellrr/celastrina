@@ -21,152 +21,214 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-// /**
-//  * @author Robert R Murrell
-//  * @copyright Robert R Murrell
-//  * @license MIT
-//  */
-// "use strict";
-// const axios = require("axios").default;
-// const {CelastrinaValidationError, CelastrinaError} = require("../core");
+/**
+ * @author Robert R Murrell
+ * @copyright Robert R Murrell
+ * @license MIT
+ */
 "use strict";
-const axios = require("axios").default;
-const {CelastrinaError, CelastrinaValidationError, AddOn, ConfigParser} = require("@celastrina/core");
-const {} = require("@celastrina/http");
+const {axios, AxiosError, AxiosResponse} = require("axios");
+const {CelastrinaError, CelastrinaValidationError, Configuration, AddOn, ConfigParser, Authenticator,
+       LOG_LEVEL} = require("@celastrina/core");
+const {HTTPContext, HTTPAddOn, HTTPParameter, HeaderParameter} = require("@celastrina/http");
 
+/***
+ * @typedef GoogleRecaptchResponse
+ * @property {boolean} success
+ * @property {number} score
+ * @property {string} action
+ * @property {string} challenge_ts
+ * @property {string} hostname
+ * @property {Array<string>} [error-codes]
+ */
+/**
+ * RecaptchaAuthenticator
+ * @author Robert R Murrell
+ */
+class RecaptchaAuthenticator extends Authenticator {
+    constructor(required = false, link = null) {
+        super("RecaptchaAuthenticator", required, link);
+    }
+    /**
+     * @param assertion
+     * @return {Promise<void>}
+     * @private
+     */
+    async _authenticate(assertion) {
+        /**@type{RecaptchaAddOn}*/let _addon = /**@type{RecaptchaAddOn}*/assertion.context.config.getAddOn(RecaptchaAddOn);
+        /**@type{(null|string)}*/let token = _addon.parameter.getParameter(/**@type{HTTPContext}*/assertion.context, _addon.name);
+        if(typeof token !== "string" || !token.trim()) {
+            assertion.context.log("Missing RECAPTCHA token.", LOG_LEVEL.THREAT, "RecaptchaAuthenticator._authenticate(assertion)");
+            assertion.assert(this._name, false);
+        }
+        else {
+            let config = {
+                timeout: _addon.timeout,
+                headers: {"accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
+                maxContentLength: 1000
+            };
+            let params = new URLSearchParams({secret: _addon.secret, response: token});
+            try {
+                /**@type{AxiosResponse<GoogleRecaptchResponse>}*/let _response = await axios.post(_addon.url, params.toString(), config);
+                if(_response.status >= 200 && _response.data.success && _response.data.score >= _addon.threshold) {
+                    assertion.assert(this._name, true, _addon.assignments);
+                }
+                else {
+                    assertion.context.log(
+                        "RECAPTCHA failed with response code " + _response.status + ", success value " + _response.data.success +
+                                ", and score of " + _response.data.score + ", errors returned " + _response.data["error-codes"] + ".",
+                                LOG_LEVEL.THREAT, "RecaptchaAuthenticator._authenticate(assertion)");
+                    assertion.assert(this._name, false);
+                }
+            }
+            catch(/**@type{AxiosError<GoogleRecaptchResponse>}*/ex) {
+                assertion.context.log("RECAPTCHA failed with code " + ex.code + ", " + ex.response.status + ", " +
+                                      ex.response.statusText + ". \r\n(MESSAGE:" + ex.message + ")\r\n(STACK:" + ex.stack +
+                                      ")\r\n(RESPONSE:" + JSON.stringify(ex.response.data) + ")",
+                                      LOG_LEVEL.ERROR, "RecaptchaAuthenticator._authenticate(assertion)");
+                assertion.assert(this._name, false);
+            }
+        }
+    }
+}
+/**
+ * RecaptchaConfigurationParser
+ * @author Robert R Murrell
+ */
 class RecaptchaConfigurationParser extends ConfigParser {
     /**
      * @param {ConfigParser} [link=null]
      * @param {string} [version="1.0.0"]
      */
     constructor(link = null, version = "1.0.0") {
-        super("HTTP", link, version);
+        super("recaptcha", link, version);
     }
-
     async _create(_Object) {
         return Promise.resolve(undefined);
     }
 }
-
+/**
+ * RecaptchaAddOn
+ * @author Robert R Murrell
+ */
 class RecaptchaAddOn extends AddOn {
-    static CELASTRINA_RECAPTCHA_ADDON = "celastrinajs.addon.http.recaptcha";
-    static CONFIG_RECAPTCHA_URL = "celastrinajs.http.recaptcha.url";
-    static CONFIG_RECAPTCHA_THRESHOLD = "celastrinajs.http.recaptcha.score.threshold";
-    static CONFIG_RECAPTCHA_TIMEOUT = "celastrinajs.http.recaptcha.request.timeout";
-
-    constructor() {
-        super(RecaptchaAddOn.CELASTRINA_RECAPTCHA_ADDON);
+    /**@type{string}*/static get addOnName() {return "celastrinajs.addon.recaptcha"};
+    /**
+     * @param {HTTPParameter} [parameter=new HeaderParameter()]
+     * @param {string} [name="x-celastrinajs-recaptcha-token"]
+     * @param {number} [threshold=.8]
+     * @param {string} [url="https://www.google.com/recaptcha/api/siteverify"]
+     * @param {number} [timeout=1500]
+     * @param {Array<string>} [assignments=["human"]]
+     */
+    constructor(parameter = new HeaderParameter(), name = "x-celastrinajs-recaptcha-token",
+                threshold = .8, url = "https://www.google.com/recaptcha/api/siteverify" ,
+                timeout = 1500, assignments = ["human"]) {
+        super();
+        this._url = url;
+        this._threshold = threshold;
+        this._timeout = timeout;
+        /**@type{(null|string)}*/this._secret = null;
+        /**@type{Array<string>}*/this._assignments= assignments;
+        this._parameter = parameter;
+        this._name = name;
     }
-    wrap(config) {
-        super.wrap(config);
-        this._config[RecaptchaAddOn.CONFIG_RECAPTCHA_URL] = "https://www.google.com/recaptcha/api/siteverify";
-        this._config[RecaptchaAddOn.CONFIG_RECAPTCHA_THRESHOLD] = .8;
-        this._config[RecaptchaAddOn.CONFIG_RECAPTCHA_TIMEOUT] = 1500;
-    }
+    /**
+     * @return {AttributeParser}
+     */
     getAttributeParser() {
         return super.getAttributeParser();
     }
+    /**
+     * @return {ConfigParser}
+     */
+    getConfigParser() {
+        return super.getConfigParser();
+    }
+    /**@return{Set<string>}*/getDependancies() {return new Set([HTTPAddOn.addOnName]);}
+    /**
+     * @param azcontext
+     * @param config
+     * @return {Promise<void>}
+     */
+    async initialize(azcontext, config) {
+        if(typeof this._secret !== "string" || this._secret.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Secret is required.", "RecaptchaAddOn.secret");
+        if(typeof this._threshold !== "number" || this._threshold <= 0 || this._threshold > 1)
+            throw CelastrinaValidationError.newValidationError("Threshold must be a number > 0 and <= 1.", "RecaptchaAddOn.threshold");
+        if(typeof this._url !== "string" || this._url.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("URL is required.", "RecaptchaAddOn.url");
+        /**@type{Sentry}*/let _sentry = config[Configuration.CONFIG_SENTRY];
+        _sentry.addAuthenticator(new RecaptchaAuthenticator());
+    }
+    /**@return{(null|string)}*/get secret() {return this._secret;}
+    /**@param{(null|string)}secret*/set secret(secret) {this._secret = secret;}
+    /**@return{string}*/get url() {return this._url;};
+    /**@param{string}url*/set url(url) {this._url = url;}
+    /**@return{number}*/get threshold() {return this._threshold;}
+    /**@param{number}threshold*/set threshold(threshold) {this._threshold = threshold;}
+    /**@return{number}*/get timeout() {return this._timeout;}
+    /**@param{number}timeout*/set timeout(timeout) {this._timeout = timeout;}
+    /**@return{Array<string>}*/get assignments() {return this._assignments;}
+    /**@param{Array<string>}assignments*/set assignments(assignments) {this._assignments = assignments;}
+    /**@return{HTTPParameter}*/get parameter() {return this._parameter;}
+    /**@param{HTTPParameter}parameter*/set parameter(parameter) {this._parameter = parameter;}
+    /**@return{string}*/get name() {return this._name;}
+    /**@param{string}name*/set name(name) {this._name = name;}
+    /**
+     * @param url
+     * @return {RecaptchaAddOn}
+     */
+    setUrl(url) {
+        this._url = url;
+        return this;
+    }
+    /**
+     * @param threshold
+     * @return {RecaptchaAddOn}
+     */
+    setThreshold(threshold) {
+        this._threshold = threshold;
+        return this;
+    }
+    /**
+     * @param timeout
+     * @return {RecaptchaAddOn}
+     */
+    setTimeout(timeout) {
+        this._timeout = timeout;
+        return this;
+    }
+    /**
+     * @param {(null|string)} secret
+     * @return {RecaptchaAddOn}
+     */
+    setSecret(secret) {
+        this._secret = secret;
+        return this;
+    }
+    /**
+     * @param {Array<string>} assignments
+     * @return {RecaptchaAddOn}
+     */
+    setAssignments(assignments) {
+        this._assignments = assignments;
+        return this;
+    }
+    /**
+     * @param {HTTPParameter} parameter
+     * @return {RecaptchaAddOn}
+     */
+    setParameter(parameter) {
+        this._parameter = parameter;
+        return this;
+    }
+    /**
+     * @param {string} name
+     * @return {RecaptchaAddOn}
+     */
+    setName(name) {
+        this._name = name;
+        return this;
+    }
 }
-
-// const axios       = require("axios").default;
-// const querystring = require("querystring");
-// const {CelastrinaValidationError, CelastrinaError, BaseContext, FunctionRole, MatchAny} = require("../core");
-// const {HTTPParameterFetch, HeaderParameterFetch, HTTPContext} = require("../http/HTTP");
-// /**
-//  * @typedef {_Body} _RecaptchaBody
-//  * @property {string} celastrinaRecaptchaToken
-//  * @typedef {JSONHTTPContext} _RecaptchaContext
-//  * @property {_RecaptchaBody} query
-//  * @property {number} recaptchaScore
-//  */
-// /** */
-// class Recaptcha {
-//     /**
-//      * @param {string} secret
-//      * @param {number} [score=.8]
-//      * @param {string} [url="https://www.google.com/recaptcha/api/siteverify"]
-//      * @param {number} [timeout=1500]
-//      */
-//     constructor(secret, score = .8, url = "https://www.google.com/recaptcha/api/siteverify",
-//                 timeout = 1500) {
-//         this._url = url;
-//         this._secret = secret;
-//         this._timeout = timeout;
-//     }
-//     /**
-//      * @param {string} token
-//      * @returns {Promise<number>}
-//      */
-//     async validateToken(token) {
-//         return new Promise((resolve, reject) => {
-//             if(typeof token !== "string" || !token.trim())
-//                 reject(CelastrinaValidationError.newValidationError("Token is required.",
-//                     "Recaptcha.validateToken.token"));
-//             else {
-//                 let config = {
-//                     timeout: this._timeout,
-//                     headers: {"accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
-//                     maxContentLength: 1000
-//                 };
-//                 axios.post(this._url, querystring.stringify({secret: this._secret, response: token}), config)
-//                     .then((response) => {
-//                         resolve(/**@type{{response:{data:{score:number}}}}*/response.data.score);
-//                     })
-//                     .catch((exception) => {
-//                         reject(CelastrinaError.newError("Exception validating RECAPTCHA token."));
-//                     });
-//             }
-//         });
-//     }
-// }
-// /**@type {FunctionRole}*/
-// class RecaptchaFunctionRole extends FunctionRole {
-//     /**
-//      * @param {string} [action]
-//      * @param {Array.<string>} roles
-//      * @param {ValueMatch} [match]
-//      */
-//     constructor(action = "process", roles = [], match = new MatchAny()) {
-//         super(action, roles, match);
-//         /**@type{null|Recaptcha}*/this._recaptcha = null;
-//         /**@type{null|HTTPParameterFetch}*/this._parameter = null;
-//         this._key = "";
-//         this._score = .8;
-//     }
-//     /**
-//      * @param {string} action
-//      * @param {BaseContext | HTTPContext} context
-//      * @returns {Promise<boolean>}
-//      */
-//     async authorize(action, context) {
-//         return new Promise((resolve, reject) => {
-//             try {
-//                 super.authorize(action, context)
-//                     .then((authorized) => {
-//                         if(authorized)
-//                             return this._parameter.fetch(context, this._key)
-//                                 .then((value) => {
-//                                     return this._recaptcha.validateToken(value);
-//                                 })
-//                                 .then((score) => {
-//                                     resolve(score >= this._score);
-//                                 })
-//                                 .catch((exception) => {
-//                                     reject(exception);
-//                                 });
-//                         else
-//                             resolve(false);
-//                     })
-//                     .catch((exception) => {
-//                         reject(exception);
-//                     });
-//             }
-//             catch(exception) {
-//                 reject(exception);
-//             }
-//         });
-//     }
-// }
-// module.exports = {
-//     Recaptcha: Recaptcha, RecaptchaFunctionRole: RecaptchaFunctionRole
-// };

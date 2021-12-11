@@ -1,0 +1,9 @@
+{
+  "configurations": [
+    {
+      "_content": {"type": "application/vnd.celastrinajs.config+json;Timer"},
+      "rejectOnPastDue": false,
+      "abortOnReject": false
+    }
+  ]
+}

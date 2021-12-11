@@ -32,7 +32,6 @@ describe("TickEvent", () => {
 			let _context = new MockTickContext(_config);
 			let _date = _context.mockTick();
 			let _event = new TickEvent(_context);
-
 			assert.strictEqual(_event.isPastDue, false, "Expected false.");
 			assert.strictEqual(_event.lastUpdated.isSame(moment(_date).subtract(4, "minutes")), true, "Expected true.");
 			assert.strictEqual(_event.lastRun.isSame(moment(_date).subtract(5, "minutes")), true, "Expected true.");

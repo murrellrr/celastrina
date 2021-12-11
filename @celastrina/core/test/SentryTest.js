@@ -21,9 +21,8 @@ describe("Sentry", () => {
     describe("#constructor()", () => {
         it("Should construct with defaults without error", () => {
             let _sentry = new Sentry();
-            assert.strictEqual(_sentry._optimistic, false, "Optimistic false.");
-            assert.strictEqual(_sentry._permissions, null, "Permissions null.");
-            assert.strictEqual(_sentry._roleFactory, null, "RoleResolver null.");
+            assert.strictEqual(_sentry._authenticator, null, "Expected null Authenticaror");
+            assert.strictEqual(_sentry._authorizor != null, true, "Expected authorizer.");
         });
     });
     describe("#initialize(config)", () => {
@@ -35,7 +34,6 @@ describe("Sentry", () => {
             _config.setAuthorizationOptimistic(true);
             await _config.initialize(_azcontext);
             await _config.ready();
-            assert.strictEqual(_config.sentry._optimistic, true, "Optimistic true.");
             assert.strictEqual(_resolver.initialized, true, "Initialized RoleResolver.");
         });
     });

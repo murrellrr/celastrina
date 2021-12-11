@@ -1,26 +1,23 @@
 {
-  "name": "@celastrina/message",
-  "version": "4.0.0",
-  "description": "Celastrina QStorage Function packages for Azure",
-  "main": "Message.js",
+  "name": "@celastrina/cloudevent",
+  "version": "1.0.0",
+  "description": "CloudEvent implementation for Celastrina",
+  "main": "CloudEvent.js",
   "scripts": {
     "test": "mocha"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/murrellrr/celastrina.git",
-    "directory": "@celastrina/message"
+    "directory": "@celastrina/cloudevent"
   },
   "keywords": [
-    "Microsoft",
+    "CloudEvent",
+    "Event",
+    "Celastrina",
     "Azure",
     "Function",
-    "Javascript",
-    "Node.js",
-    "Messaging",
-    "Async",
-    "Queue",
-    "Bus"
+    "Javascript"
   ],
   "author": "Robert R Murrell",
   "license": "MIT",

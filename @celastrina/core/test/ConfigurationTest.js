@@ -10,25 +10,24 @@ const fs = require("fs");
 
 class MockAddOn extends AddOn {
     /**@type{string}*/static get addOnName() {return "MockAddOn";}
-    constructor() {
-        super();
-        /**@type{Set<string>}*/this._depends = new Set();
+    /***
+     * @param {Array<string>} dependencies
+     */
+    constructor(dependencies = []) {
+        super(dependencies);
         this.invokedGetConfigParser = false;
         this.invokedGetAttributeParser = false;
-        this.invokedCopy = false;
         this.invokedInitialize = false;
     }
     reset() {
         this.invokedGetConfigParser = false;
         this.invokedGetAttributeParser = false;
-        this.invokedCopy = false;
         this.invokedInitialize = false;
     }
     /**@param{string}name*/mockDependancy(name) {
-        this._depends.add(name);
+        this._dependencies.add(name);
         return this;
     }
-    /**@return{Set<string>}*/getDependancies() {return this._depends;}
     getConfigParser() {
         this.invokedGetConfigParser = true;
         return null;
@@ -41,37 +40,13 @@ class MockAddOn extends AddOn {
         this.invokedInitialize = true;
     }
 }
-class MockAddOnTwo extends AddOn {
+class MockAddOnTwo extends MockAddOn {
     /**@type{string}*/static get addOnName() {return "MockAddOnTwo";}
-    constructor() {
-        super();
-        /**@type{Set<string>}*/this._depends = new Set();
-        this.invokedGetConfigParser = false;
-        this.invokedGetAttributeParser = false;
-        this.invokedWrap = false;
-        this.invokedInitialize = false;
-    }
-    reset() {
-        this.invokedGetConfigParser = false;
-        this.invokedGetAttributeParser = false;
-        this.invokedWrap = false;
-        this.invokedInitialize = false;
-    }
-    /**@param{string}name*/mockDependancy(name) {
-        this._depends.add(name);
-        return this;
-    }
-    /**@return{Set<string>}*/getDependancies() {return this._depends;}
-    getConfigParser() {
-        this.invokedGetConfigParser = true;
-        return null;
-    }
-    getAttributeParser() {
-        this.invokedGetAttributeParser = true;
-        return null;
-    }
-    async initialize(azcontext, config) {
-        this.invokedInitialize = true;
+    /***
+     * @param {Array<string>} dependencies
+     */
+    constructor(dependencies = []) {
+        super(dependencies);
     }
 }
 
@@ -337,7 +312,6 @@ describe("Configuration", () => {
             _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
             let _addon = new MockAddOn();
             assert.deepStrictEqual(_config.addOn(_addon), _config, "Returns _config.");
-            assert.strictEqual(_addon.invokedCopy, false, "Expected not to invoke copy.");
             assert.strictEqual(_config._config.hasOwnProperty("MockAddOn"), true, "Expected add-on to be in the config addOns.");
         });
         it("gets add-on", async () => {
@@ -457,3 +431,7 @@ describe("Configuration", () => {
         });
     });
 });
+
+module.exports = {
+    MockAddOn: MockAddOn
+};

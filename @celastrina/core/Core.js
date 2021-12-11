@@ -1451,8 +1451,13 @@ class CoreConfigParser extends ConfigParser {
 class AddOn {
     /**@return{string}*/static get celastrinaType() {return "celastrinajs.core.AddOn";}
     /**@return{string}*/static get addOnName() {return "celastrinajs.core.AddOn";}
-    constructor() {}
-    /**@return{Set<string>}*/getDependancies() {return null;}
+    /**
+     * @param {Array<string>} [dependencies=[]]
+     */
+    constructor(dependencies = []) {
+        /**@type{Set<string>}*/this._dependencies = new Set(dependencies);
+    }
+    /**@return{Set<string>}*/get dependancies() {return this._dependencies;}
     /**@return {ConfigParser}*/getConfigParser() {return null;}
     /**@return {AttributeParser}*/getAttributeParser() {return null;}
     /**
@@ -1461,6 +1466,105 @@ class AddOn {
      * @return {Promise<void>}
      */
     async initialize(azcontext, config) {};
+}
+/**
+ * _AddOnManager
+ * @author Robert R Murrell
+ * @private
+ */
+class _AddOnManager {
+    static NOT_FOUND = -1;
+    constructor() {
+        /**@type{Map<string, AddOn>}*/this._unresolved = new Map();
+        /**@type{Array<AddOn>}*/this._target = [];
+        this._depth = 0;
+    }
+    get target() {return this._target;}
+    _indexOf(name, start = 0) {
+        for(let i = start; i < this._target.length; ++i) {
+            let _addon = this._target[i];
+            if(name === _addon.constructor.addOnName) return i;
+        }
+        return _AddOnManager.NOT_FOUND;
+    }
+    _allResolved(addon) {
+        let _remaining = new Set();
+        for(let _dep of addon.dependancies) {
+            if(this._indexOf(_dep) === _AddOnManager.NOT_FOUND) _remaining.add(_dep);
+        }
+        addon._dependencies = _remaining;
+        return _remaining.size === 0;
+    }
+    /**
+     * @param {AddOn} addon
+     */
+    add(addon) {
+        if(addon.dependancies.size === 0) this._target.unshift(addon);
+        else if(this._target.length > 0 && this._allResolved(addon)) {
+            this._target.push(addon);
+            this._unresolved.delete(addon.constructor.addOnName);
+        }
+        else {
+            if(addon.dependancies.size > this._depth) this._depth = addon.dependancies.size;
+            this._unresolved.set(addon.constructor.addOnName, addon);
+        }
+    }
+    /**
+     * @param {Object} azcontext
+     * @param {boolean} [parse=false]
+     * @param {ConfigParser} [cfp=null]
+     * @param {AttributeParser} [atp=null]
+     */
+    async install(azcontext, parse = false, cfp = null, atp = null) {
+        if(this._target.length > 0 || this._unresolved.size > 0) {
+            azcontext.log.info("[_AddOnManager.install(azcontext, parse, cfp, atp)]: Installing Add-Ons, parser mode " + parse + ".");
+            let _pass = 0;
+            while(_pass < this._depth) {
+                let _td = this._target.length;
+                for(let _addon of this._unresolved.values()) {
+                    this.add(_addon);
+                }
+                ++_pass;
+            }
+            if(this._unresolved.size > 0) {
+                let _sunrslvd = this._unresolved.size + " unresolved Add-On(s):\r\n";
+                for(let _addon of this._unresolved.values()) {
+                    _sunrslvd += "\tAdd-On '" + _addon.constructor.addOnName + "' could not resolve depentent(s):\r\n"
+                    for(let _dep of _addon.dependancies) {
+                        _sunrslvd += "\t\t Add-On '" + _dep + "'\r\n";
+                    }
+                }
+                _sunrslvd += "Please resolve all dependencies or circular references, reconfigure, and restart.";
+                azcontext.log.error("[_AddOnManager.install(zacontext)]: " + _sunrslvd);
+                throw CelastrinaError.newError(_sunrslvd);
+            } else {
+                for(let _addon of this._target) {
+                    azcontext.log.info("[_AddOnManager.install(azcontext, parse, cfp, atp)]: Installing Add-On '" + _addon.constructor.addOnName + "'.");
+                    if(parse) {
+                        let _acfp = _addon.getConfigParser();
+                        if(_acfp != null) cfp.addLink(_acfp);
+                        let _aatp = _addon.getAttributeParser();
+                        if(_aatp != null) atp.addLink(_aatp);
+                    }
+                }
+            }
+        }
+    }
+    /**
+     * @param {Object} azcontext
+     * @param {Object} config
+     */
+    async initialize(azcontext, config) {
+        if(this._target.length > 0) {
+            azcontext.log.info("[_AddOnManager.install(azcontext, parse, cfp, atp)]: Initializing Add-Ons.");
+            let _promises = [];
+            for(let _addon of this._target) {
+                azcontext.log.info("[_AddOnManager.initialize(azcontext, config)]: Initializing Add-On '" + _addon.constructor.addOnName + "'.");
+                _promises.push(_addon.initialize(azcontext, config));
+            }
+            await Promise.all(_promises);
+        }
+    }
 }
 /**
  * Configuration
@@ -1811,100 +1915,51 @@ class Configuration {
         await rm.ready(azcontext, this._config);
     }
     /**
-     * @param {_AzureFunctionContext} azcontext
-     * @param {PropertyManager} pm
-     * @param {ResourceManager} rm
-     * @param {PermissionManager} prm
      * @return {Promise<void>}
      * @private
      */
-    async _initSentry(azcontext, pm, rm, prm) {
+    async _initSentry() {
         /**@type{Sentry}*/let _sentry = this._config[Configuration.CONFIG_SENTRY];
         return _sentry.initialize(this);
     }
     /**
-     * @return {Set<string>}
-     * @private
-     */
-    _createAddOnSet() {
-        /**@type{Set<string>}*/let _set = new Set();
-        for(let prop in this._config) {
-            if(this._config.hasOwnProperty(prop)) {
-                let _addon = this._config[prop];
-                if(instanceOfCelastringType(AddOn, _addon)) _set.add(_addon);
-            }
-        }
-        return _set;
-    }
-    /**
-     * @param {Set<string>} source
-     * @param {Set<string>} target
-     * @return {Set<string>}
-     * @private
-     */
-    _compareDependentSets(source, target) {
-        /**@type{Set<string>}*/let _delta = new Set(source);
-        for(/**@type{AddOn}*/let _addOn of target) {
-            if(source.has(_addOn.constructor.addOnName)) _delta.delete(_addOn.constructor.addOnName);
-        }
-        return _delta;
-    }
-    /**
-     * @param {Set<string>} _deltas
-     * @return {string}
-     * @private
-     */
-    _getUnsatisfiedDependanciesString(_deltas) {
-        let _unsatisfied = "";
-        for(let _dep of _deltas) {
-            _unsatisfied += "\r\n\tMissing Add-On '" + _dep + "'.";
-        }
-        return _unsatisfied;
-    }
-    /**
-     * @param {_AzureFunctionContext} azcontext
-     * @return {Promise<Set<AddOn>>}
-     * @private
-     */
-    async _installAddOns(azcontext) {
-        /**@type{Set<AddOn>}*/let _target = this._createAddOnSet();
-        for(/**@type{AddOn}*/let _addon of _target) {
-            azcontext.log.info("[Configuration._installAddOns(azcontext)]: Installing Add-On '" + _addon.constructor.addOnName + "'.");
-            /**@type{Set<string>}*/let _dependents = _addon.getDependancies();
-            if((_dependents instanceof Set) && _dependents.size > 0) {
-                /**@type{Set<string>}*/let _deltas = this._compareDependentSets(_dependents, _target);
-                if(_deltas.size > 0) {
-                    let _unsatisfied = this._getUnsatisfiedDependanciesString(_deltas);
-                    azcontext.log.error("[Configuration._installAddOns(azcontext)]['" + _addon.constructor.addOnName + "']: Unsatisfied Add-On dependancies: " +
-                                        _unsatisfied + "\r\n\tPlease resolve dependancies, update configuration, and restart.");
-                    throw CelastrinaError.newError("Unresolved dependancies for Add-On '" + _addon.constructor.addOnName + "'.", 500, true);
-                }
-            }
-            if(this._property != null) {
-                let _acfp = _addon.getConfigParser();
-                if (_acfp != null) this._cfp.addLink(_acfp);
-                let _aatp = _addon.getAttributeParser();
-                if (_aatp != null) this._atp.addLink(_aatp);
-            }
-        }
-        return _target;
-    }
-    /**
-     * @param {Set<AddOn>} addOns
-     * @param {_AzureFunctionContext} azcontext
-     * @param {PropertyManager} pm
-     * @param {ResourceManager} rm
-     * @param {PermissionManager} prm
      * @return {Promise<void>}
      * @private
      */
-    async _initAddOns(addOns, azcontext, pm, rm, prm) {
-        let _promises = [];
-        for(/**@type{AddOn}*/let _addon of addOns) {
-            azcontext.log.info("[Configuration._installAddOns(azcontext)]: Initializing Add-On '" + _addon.constructor.addOnName + "'.");
-            _promises.unshift(_addon.initialize(azcontext, this._config));
+    async _initRoleFactory() {
+        /**@type{RoleFactory}*/let _rolefactory = this._config[Configuration.CONFIG_ROLE_FACTORY];
+        return _rolefactory.initialize(this);
+    }
+    /**
+     * @return {_AddOnManager}
+     * @private
+     */
+    _createAddOnManager(azcontext) {
+        let _admanager = new _AddOnManager();
+        for(/**@type{string}*/let prop in this._config) {
+            /**@type{AddOn}*/let _addon = this._config[prop];
+            if(instanceOfCelastringType(AddOn, _addon)) _admanager.add(_addon);
         }
-        await Promise.all(_promises);
+        return _admanager;
+    }
+    /**
+     * @param {_AzureFunctionContext} azcontext
+     * @return {Promise<_AddOnManager>}
+     * @private
+     */
+    async _installAddOns(azcontext) {
+        let admanager = this._createAddOnManager(azcontext);
+        await admanager.install(azcontext, this._property != null, this._cfp, this._atp);
+        return admanager;
+    }
+    /**
+     * @param {_AddOnManager} admanager
+     * @param {_AzureFunctionContext} azcontext
+     * @return {Promise<void>}
+     * @private
+     */
+    async _initAddOns(admanager, azcontext) {
+        await admanager.initialize(azcontext, this._config);
     }
     /**
      * @param {_AzureFunctionContext} azcontext
@@ -1931,12 +1986,13 @@ class Configuration {
             /**@type{PermissionManager}*/let _prm = this._getPermissionManager(azcontext);
             /**@type{ResourceManager}*/let _rm = this._getResourceManager(azcontext);
             await this._initPropertyManager(azcontext, _pm);
-            let _addOns = await this._installAddOns(azcontext);
+            let _admanager = await this._installAddOns(azcontext);
             await this._initLoadConfiguration(azcontext, _pm);
             await this._initPermissionManager(azcontext, _prm);
             await this._initResourceManager(azcontext, _rm);
-            await this._initSentry(azcontext, _pm, _rm, _prm);
-            await this._initAddOns(_addOns, azcontext, _pm, _rm, _prm);
+            await this._initSentry();
+            await this._initRoleFactory();
+            await this._initAddOns(_admanager, azcontext);
             await this.afterInitialize(azcontext, _pm, _rm);
             azcontext.log.info("[" + azcontext.bindingData.invocationId + "][Configuration.initialize(azcontext)]: Initialization successful.");
         }
@@ -2556,17 +2612,11 @@ class Authorizor {
 class Sentry {
     /**@return{string}*/static get celastrinaType() {return "celastrinajs.core.Sentry";}
     constructor() {
-        /**@type{boolean}*/this._optimistic = false;
         /**@type{Authenticator}*/this._authenticator = null; // no authentication by default.
         /**@type{Authorizor}*/this._authorizor = new Authorizor();
-        /**@type{PermissionManager}*/this._permissions = null;
-        /**@type{RoleFactory}*/this._roleFactory = null;
     }
-    /**@return{boolean}*/get optimistic() {return this._optimistic;}
-    /**@return{Authenticator}*/get AuthenticatorChain() {return this._authenticator};
-    /**@return{Authorizor}*/get AuthorizorChain() {return this._authorizor};
-    /**@return{PermissionManager}*/get permissions() {return this._permissions;}
-    /**@return{RoleFactory}*/get roleFactory() {return this._roleFactory;}
+    /**@return{Authenticator}*/get authenticatorChain() {return this._authenticator};
+    /**@return{Authorizor}*/get authorizorChain() {return this._authorizor};
     /**
      * @param {Authenticator} authenticator
      * @return {Sentry}
@@ -2595,7 +2645,7 @@ class Sentry {
      */
     async authenticate(context) {
         let _subject = new Subject(context.requestId);
-        let _asserter = new Asserter(context, _subject, this._permissions, this._optimistic);
+        let _asserter = new Asserter(context, _subject, context.config.permissions, context.config.authorizationOptimistic);
         /* Default behavior is to run un-authenticated and rely on authorization to enforce optimism
            when no authenticator is specified. This is to avoid scenarios where the default Authorizor by-default
            returns true but optimistic is true and next link fails, making it pass authentication when optimistic.
@@ -2603,18 +2653,18 @@ class Sentry {
            instead of a 403. */
         if(this._authenticator == null) {
             context.subject = _subject;
-            return this._roleFactory.assignSubjectRoles(context, _subject); // assign roles from role factory.
+            return context.config.roleFactory.assignSubjectRoles(context, _subject); // assign roles from role factory.
         }
         else {
             await this._authenticator.authenticate(_asserter);
             let _authenticated = await _asserter.hasAffirmativeAssertion();
-            if(_authenticated || this._optimistic) {
+            if(_authenticated || context.config.authorizationOptimistic) {
                 if(!_authenticated)
                     context.log("Subject '" + _subject.id + "' failed to authenticate any authenticators but security is optimistic.",
                         LOG_LEVEL.THREAT, "Sentry.authenticate(context)");
                 await _asserter.assign(_subject); // assign roles from authenticators.
                 context.subject = _subject;
-                return this._roleFactory.assignSubjectRoles(context, _subject); // assign roles from role factory.
+                return context.config.roleFactory.assignSubjectRoles(context, _subject); // assign roles from role factory.
             }
             else {
                 context.log("Subject '" + _subject.id + "' failed to authenticate any authenticators and security is not optimistic.",
@@ -2628,10 +2678,10 @@ class Sentry {
      * @return {Promise<void>}
      */
     async authorize(context) {
-        let _asserter = new Asserter(context, context.subject, this._permissions, this._optimistic);
+        let _asserter = new Asserter(context, context.subject, context.config.permissions, context.config.authorizationOptimistic);
         await this._authorizor.authorize(_asserter);
         let _authorized = await _asserter.hasAffirmativeAssertion();
-        if(_authorized || this._optimistic) {
+        if(_authorized || context.config.authorizationOptimistic) {
             if(!_authorized)
                 context.log("Subject '" + context.subject.id + "' failed to authorize any authorizors but security is optimistic.",
                                    LOG_LEVEL.THREAT, "Sentry.authorize(context)");
@@ -2646,12 +2696,7 @@ class Sentry {
      * @param {Configuration} config
      * @return {Promise<void>}
      */
-    async initialize(config) {
-        this._optimistic = config.authorizationOptimistic;
-        this._permissions = config.permissions;
-        this._roleFactory = config.roleFactory;
-        return this._roleFactory.initialize(config);
-    }
+    async initialize(config) {}
 }
 /**
  * @author Robert R Murrell
@@ -2797,11 +2842,6 @@ class BaseFunction {
       */
     async bootstrap(azcontext) {
         await this._configuration.initialize(azcontext);
-        /**@type{Sentry}*/let _sentry = await this._configuration.sentry;
-        if(typeof _sentry === "undefined" || _sentry == null) {
-            azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.bootstrap(azcontext)]: Catostrophic Error! Sentry is null or undefined.");
-            throw CelastrinaError.newError("Catostrophic Error! Sentry invalid.");
-        }
         /**@type{Context}*/let _context = await this.createContext(this._configuration);
         if(typeof _context === "undefined" || _context == null) {
             azcontext.log.error("[" + azcontext.bindingData.invocationId + "][BaseFunction.bootstrap(azcontext)]: Catostrophic Error! Context is null or undefined.");
@@ -2961,6 +3001,7 @@ module.exports = {
     AttributeParser: AttributeParser,
     RoleFactoryParser: RoleFactoryParser,
     ConfigParser: ConfigParser,
+    _AddOnManager: _AddOnManager,
     AddOn: AddOn,
     Configuration: Configuration,
     Algorithm: Algorithm,

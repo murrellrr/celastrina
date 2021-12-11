@@ -1192,8 +1192,8 @@ class HMAC {
  */
 class HTTPAddOn extends AddOn {
     /**@type{string}*/static get addOnName() {return "celastrinajs.addon.http";}
-    constructor() {
-        super();
+    /**@param {Array<string>} [dependencies=[]]*/constructor(dependencies = []) {
+        super(dependencies);
         /**@type{SessionManager}*/this._sessionManager = null;
     }
     /**@return {ConfigParser}*/getConfigParser() {return new HTTPConfigurationParser();}
@@ -1202,7 +1202,6 @@ class HTTPAddOn extends AddOn {
     }
     async initialize(azcontext, config) {
         /**@type{SessionManager}*/let _sm = this._sessionManager;
-
         if(instanceOfCelastringType(SessionManager, _sm)) return _sm.initialize(azcontext, config);
     }
     /**@return{SessionManager}*/get sessionManager() {return this._sessionManager;}
@@ -1257,8 +1256,8 @@ class JwtConfigurationParser extends ConfigParser {
  */
 class JwtAddOn extends AddOn {
     /**@type{string}*/static get addOnName() {return "celastrinajs.addon.http.jwt";}
-    constructor() {
-        super();
+    /**@param {Array<string>} [dependencies=[HTTPAddOn.addOnName]]*/constructor(dependencies = [HTTPAddOn.addOnName]) {
+        super(dependencies);
         /**@type{Array.<Issuer>}*/this._issuers = [];
         /**@type{HTTPParameter}*/this._tokenParameter = new HeaderParameter();
         /**@type{string}*/this._tokenName = "authorization";
@@ -1268,7 +1267,7 @@ class JwtAddOn extends AddOn {
     /**@return{ConfigParser}*/getConfigParser() {
         let _parser = super.getConfigParser();
         let local = new JwtConfigurationParser();
-        if(instanceOfCelastringType(ConfigParser.CELASTRINAJS_TYPE, _parser))
+        if(instanceOfCelastringType(ConfigParser, _parser))
             _parser.addLink(local);
         else _parser = local;
         return _parser;
@@ -1276,12 +1275,11 @@ class JwtAddOn extends AddOn {
     /**@return{AttributeParser}*/getAttributeParser() {
         let _parser = super.getAttributeParser();
         let local = new OpenIDJwtIssuerParser(new LocalJwtIssuerParser(new HTTPParameterParser()))
-        if(instanceOfCelastringType(AttributeParser.CELASTRINAJS_TYPE, _parser))
+        if(instanceOfCelastringType(AttributeParser, _parser))
             _parser.addLink(local);
         else _parser = local;
         return _parser;
     }
-    /**@type{Set<string>}*/getDependancies() {return new Set([HTTPAddOn.addOnName]);}
     async initialize(azcontext, config) {
         /**@type{Sentry}*/let _sentry = config[Configuration.CONFIG_SENTRY];
         _sentry.addAuthenticator(new JwtAuthenticator());
@@ -2042,13 +2040,12 @@ class HMACParser extends AttributeParser {
  */
 class HMACAddOn extends AddOn {
     /**@return*/static get addOnName() {return "celastrinajs.addon.http.hmac";}
-    constructor() {
-        super();
+    /**@param {Array<string>} [dependencies=[HTTPAddOn.addOnName]]*/constructor(dependencies = [HTTPAddOn.addOnName]) {
+        super(dependencies);
         /**@type{HMAC}*/this._hmac = null;
     }
     /**@return{ConfigParser}*/getConfigParser() {return new HMACConfigurationParser();}
     /**@return{AttributeParser}*/getAttributeParser() {return new HMACParser();}
-    /**@return{Set<string>}*/getDependancies() {return new Set([HTTPAddOn.addOnName]);}
     /**@return{HMAC}*/get hmac() {return this._hmac;}
     /**@param{HMAC}hmac*/set hmac(hmac) {this._hmac = hmac;}
     async initialize(azcontext, config) {

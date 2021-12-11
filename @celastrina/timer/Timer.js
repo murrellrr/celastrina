@@ -49,9 +49,9 @@ class TickEvent extends CelastrinaEvent {
 		super(context, source, data, time, rejected, cause);
 	}
 	/**@returns{boolean}*/get isPastDue() {return this._context.azureFunctionContext.bindings.tick.isPastDue;}
-	/**@returns{moment.Moment}*/get lastRun() {return moment(this._context.azureFunctionContext.bindings.tick.schedule.scheduleStatus.last)}
-	/**@returns{moment.Moment}*/get lastUpdated() {return moment(this._context.azureFunctionContext.bindings.tick.schedule.scheduleStatus.lastUpdated);}
-	/**@returns{moment.Moment}*/get nextRun() {return moment(this._context.azureFunctionContext.bindings.tick.schedule.scheduleStatus.next);}
+	/**@returns{moment.Moment}*/get lastRun() {return moment(this._context.azureFunctionContext.bindings.tick.scheduleStatus.last)}
+	/**@returns{moment.Moment}*/get lastUpdated() {return moment(this._context.azureFunctionContext.bindings.tick.scheduleStatus.lastUpdated);}
+	/**@returns{moment.Moment}*/get nextRun() {return moment(this._context.azureFunctionContext.bindings.tick.scheduleStatus.next);}
 }
 /**
  * TimerFunction

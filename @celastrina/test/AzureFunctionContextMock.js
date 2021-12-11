@@ -36,13 +36,11 @@ class MockAzureFunctionContext {
         this.donecontents = null;
         this.bindings     = {
                              tick: {
-                                 schedule: {
-                                     adjustForDST: true,
-                                     scheduleStatus: {
-                                         last: "",
-                                         lastUpdated: "",
-                                         next: ""
-                                     }
+                                 schedule: {adjustForDST: true},
+                                 scheduleStatus: {
+                                     last: "",
+                                     lastUpdated: "",
+                                     next: ""
                                  },
                                  isPastDue: false
                              },

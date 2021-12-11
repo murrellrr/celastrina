@@ -32,3 +32,8 @@ jobs:
         npm run build --if-present
         npm test
       working-directory: "@celastrina/http"
+    - run: |
+        npm ci
+        npm run build --if-present
+        npm test
+      working-directory: "@celastrina/timer"

@@ -16,9 +16,9 @@ class MockTickContext extends MockContext {
 	 */
 	mockTick(date = moment(), intervalMinutes = 5) {
 		date.set("milliseconds", 0);
-		this._config.context.bindings.tick.schedule.scheduleStatus.last = moment(date).subtract(intervalMinutes, "minutes").format();
-		this._config.context.bindings.tick.schedule.scheduleStatus.next = moment(date).add(intervalMinutes, "minutes").format();
-		this._config.context.bindings.tick.schedule.scheduleStatus.lastUpdated = moment(date).subtract((intervalMinutes - 1), "minutes").format();
+		this._config.context.bindings.tick.scheduleStatus.last = moment(date).subtract(intervalMinutes, "minutes").format();
+		this._config.context.bindings.tick.scheduleStatus.next = moment(date).add(intervalMinutes, "minutes").format();
+		this._config.context.bindings.tick.scheduleStatus.lastUpdated = moment(date).subtract((intervalMinutes - 1), "minutes").format();
 		return date;
 	}
 }

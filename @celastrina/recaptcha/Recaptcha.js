@@ -31,7 +31,6 @@ const {axios, AxiosError, AxiosResponse} = require("axios");
 const {CelastrinaError, CelastrinaValidationError, Configuration, AddOn, ConfigParser, Authenticator,
        LOG_LEVEL} = require("@celastrina/core");
 const {HTTPContext, HTTPAddOn, HTTPParameter, HeaderParameter} = require("@celastrina/http");
-
 /***
  * @typedef GoogleRecaptchResponse
  * @property {boolean} success
@@ -55,7 +54,7 @@ class RecaptchaAuthenticator extends Authenticator {
      * @private
      */
     async _authenticate(assertion) {
-        /**@type{RecaptchaAddOn}*/let _addon = /**@type{RecaptchaAddOn}*/assertion.context.config.getAddOn(RecaptchaAddOn);
+        /**@type{RecaptchaAddOn}*/let _addon = /**@type{RecaptchaAddOn}*/await assertion.context.config.getAddOn(RecaptchaAddOn);
         /**@type{(null|string)}*/let token = _addon.parameter.getParameter(/**@type{HTTPContext}*/assertion.context, _addon.name);
         if(typeof token !== "string" || !token.trim()) {
             assertion.context.log("Missing RECAPTCHA token.", LOG_LEVEL.THREAT, "RecaptchaAuthenticator._authenticate(assertion)");
@@ -101,7 +100,7 @@ class RecaptchaConfigurationParser extends ConfigParser {
      * @param {string} [version="1.0.0"]
      */
     constructor(link = null, version = "1.0.0") {
-        super("recaptcha", link, version);
+        super("Recaptcha", link, version);
     }
     async _create(_Object) {
         return Promise.resolve(undefined);
@@ -120,11 +119,12 @@ class RecaptchaAddOn extends AddOn {
      * @param {string} [url="https://www.google.com/recaptcha/api/siteverify"]
      * @param {number} [timeout=1500]
      * @param {Array<string>} [assignments=["human"]]
+     * @param {Array<string>} [dependencies=[HTTPAddOn.addOnName]]
      */
     constructor(parameter = new HeaderParameter(), name = "x-celastrinajs-recaptcha-token",
                 threshold = .8, url = "https://www.google.com/recaptcha/api/siteverify" ,
-                timeout = 1500, assignments = ["human"]) {
-        super();
+                timeout = 1500, assignments = ["human"], dependencies = [HTTPAddOn.addOnName]) {
+        super(dependencies);
         this._url = url;
         this._threshold = threshold;
         this._timeout = timeout;
@@ -145,7 +145,6 @@ class RecaptchaAddOn extends AddOn {
     getConfigParser() {
         return super.getConfigParser();
     }
-    /**@return{Set<string>}*/getDependancies() {return new Set([HTTPAddOn.addOnName]);}
     /**
      * @param azcontext
      * @param config
@@ -179,56 +178,35 @@ class RecaptchaAddOn extends AddOn {
      * @param url
      * @return {RecaptchaAddOn}
      */
-    setUrl(url) {
-        this._url = url;
-        return this;
-    }
+    setUrl(url) {this._url = url; return this;}
     /**
      * @param threshold
      * @return {RecaptchaAddOn}
      */
-    setThreshold(threshold) {
-        this._threshold = threshold;
-        return this;
-    }
+    setThreshold(threshold) {this._threshold = threshold; return this;}
     /**
      * @param timeout
      * @return {RecaptchaAddOn}
      */
-    setTimeout(timeout) {
-        this._timeout = timeout;
-        return this;
-    }
+    setTimeout(timeout) {this._timeout = timeout; return this;}
     /**
      * @param {(null|string)} secret
      * @return {RecaptchaAddOn}
      */
-    setSecret(secret) {
-        this._secret = secret;
-        return this;
-    }
+    setSecret(secret) {this._secret = secret; return this;}
     /**
      * @param {Array<string>} assignments
      * @return {RecaptchaAddOn}
      */
-    setAssignments(assignments) {
-        this._assignments = assignments;
-        return this;
-    }
+    setAssignments(assignments) {this._assignments = assignments; return this;}
     /**
      * @param {HTTPParameter} parameter
      * @return {RecaptchaAddOn}
      */
-    setParameter(parameter) {
-        this._parameter = parameter;
-        return this;
-    }
+    setParameter(parameter) {this._parameter = parameter; return this;}
     /**
      * @param {string} name
      * @return {RecaptchaAddOn}
      */
-    setName(name) {
-        this._name = name;
-        return this;
-    }
+    setName(name) {this._name = name; return this;}
 }

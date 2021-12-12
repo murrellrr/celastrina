@@ -10,7 +10,7 @@
       }
     },
     {
-      "_content": {"type": "application/vnd.celastrinajs.config+json;recaptcha"}
+      "_content": {"type": "application/vnd.celastrinajs.config+json;Recaptcha"}
     }
   ]
 }

@@ -27,11 +27,13 @@
  * @license MIT
  */
 "use strict";
-const axios  = require("axios").default;
+const {axios, AxiosResponse, AxiosError}  = require("axios");
 const moment = require("moment");
 const { v4: uuidv4 } = require("uuid");
 const crypto = require("crypto");
 const {TokenResponse, AuthenticationContext} = require("adal-node");
+const {TokenCredentials, AccessToken, GetTokenOptions} = require("@azure/identity");
+
 /**
  * @typedef _ManagedResourceToken
  * @property {string} access_token
@@ -224,32 +226,51 @@ class ResourceAuthorization {
     /**@return{string}*/get id(){return this._id;}
     /**
      * @param {string} resource
+     * @param {object} [options={}]
      * @return {Promise<_CelastrinaToken>}
-     * @private
      * @abstract
      */
-    async _resolve(resource) { throw CelastrinaError.newError("Not Implemented.", 501);}
+    async _resolve(resource, options = {}) { throw CelastrinaError.newError("Not Implemented.", 501);}
     /**
      * @param {string} resource
-     * @return {Promise<string>}
+     * @param {object} [options={}}]
+     * @return {Promise<_CelastrinaToken>}
      * @private
      */
-    async _refresh(resource) {
-        let token = await this._resolve(resource);
+    async _refresh(resource, options = {}) {
+        let token = await this._resolve(resource, options);
         if(this._skew !== 0) token.expires.add(this._skew, "seconds");
         this._tokens[resource] = token;
-        return token.token;
+        return token;
     };
+    /**
+     * @param {string} resource
+     * @param {object} [options=null]
+     * @return {Promise<_CelastrinaToken>}
+     * @private
+     */
+    async _getToken(resource, options = null) {
+        /** @type{_CelastrinaToken}*/let token = this._tokens[resource];
+        if(typeof token !== "object" || moment().isSameOrAfter(token.expires))
+            return await this._refresh(resource, options);
+        else
+            return token;
+    }
     /**
      * @param {string} resource
      * @return {Promise<string>}
      */
     async getToken(resource) {
-        /** @type{_CelastrinaToken}*/let token = this._tokens[resource];
-        if(typeof token !== "object" || moment().isSameOrAfter(token.expires))
-            return await this._refresh(resource);
-        else
-            return token.token;
+        /** @type{_CelastrinaToken}*/let token = await this._getToken(resource);
+        return token.token;
+    }
+    /**
+     * @param {string} resource
+     * @param {object} [options={}}]
+     * @return {Promise<_CelastrinaToken>}
+     */
+    async getAccessToken(resource, options = {}) {
+        return this._getToken(resource, options);
     }
 }
 /**
@@ -257,27 +278,39 @@ class ResourceAuthorization {
  * @author Robert R Murrell
  */
 class ManagedIdentityResource extends ResourceAuthorization {
-    /**@type{string}*/static SYSTEM_MANAGED_IDENTITY = "celastrinajs.core.system.managed.identity";
-    /**@param {number}[skew=0]*/
-    constructor(skew = 0) {
-        super(ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY, skew);
+    /**@type{string}*/static SYSTEM_MANAGED_IDENTITY = "celastrinajs.core.identity.managed";
+    /**
+     * @param {string}[id=ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY]
+     * @param {number}[skew=0]
+     * @param {boolean}[stripDefaultRoleIdentifier=true]
+     */
+    constructor(id = ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY, skew = 0, stripDefaultRoleIdentifier = true) {
+        super(id, skew);
+        this._strip = stripDefaultRoleIdentifier;
+        this._params = new new URLSearchParams();
+        this._params.set("api-version", "2019-08-01");
     }
+    /**@return{boolean}*/get stripDefaultRoleIdentifier() {return this._strip;}
     /**
      * @param {string} resource
+     * @param {object} [options=null]
      * @return {Promise<_CelastrinaToken>}
-     * @private
      */
-    async _resolve(resource) {
+    async _resolve(resource, options = {}) {
         try {
-            let response = await axios.get(process.env["IDENTITY_ENDPOINT"] + "?api-version=2019-08-01&resource=" + resource,
-                                        {headers: {"x-identity-header": process.env["IDENTITY_HEADER"]}});
+            if(this._strip) resource = resource.replace("/.default", "");
+            this._params.set("resource", resource);
+            if(typeof options.principalId === "string") this._params.set("principal_id", options.principalId);
+            /**@type{AxiosResponse}*/let response = await axios.get(process.env["IDENTITY_ENDPOINT"],
+                                        {params: this._params,
+                                            headers: {"x-identity-header": process.env["IDENTITY_HEADER"]}});
             return {
                 resource: resource,
                 token: response.data.access_token,
                 expires: moment(response.data.expires_on)
             };
         }
-        catch(exception) {
+        catch(/**@type{(Error|AxiosError)}*/exception) {
             if(typeof exception === "object" && exception.hasOwnProperty("response")) {
                 if(exception.response.status === 404)
                     throw CelastrinaError.newError("Resource '" + resource + "' not found.", 404);
@@ -291,6 +324,61 @@ class ManagedIdentityResource extends ResourceAuthorization {
             else
                 throw CelastrinaError.newError("Exception getting resource '" + resource + "'.");
         }
+    }
+}
+/**
+ * UserManagedIdentityResource
+ * @author Robert R Murrell
+ */
+class UserManagedIdentityResource extends ManagedIdentityResource {
+    /**
+     * @param {string}[id=ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY]
+     * @param {number}[skew=0]
+     * @param {boolean}[stripDefaultRoleIdentifier=true]
+     */
+    constructor(id = ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY, skew = 0,
+                stripDefaultRoleIdentifier = true) {
+        super(id, skew, stripDefaultRoleIdentifier);
+        /**@type{(null|string)}*/this._default = null;
+        this._mappings = {};
+    }
+    /**@return{(null|string)}*/get defaultPrincipal() {return this._default;}
+    /**@param{(null|string)}principalId*/set defaultPrincipal(principalId) {
+        (typeof principalId === "string" && principalId.trim().length > 0) ? this._default = principalId.trim() : this._default = null;
+    }
+    /**
+     * @param {string} principalId
+     * @param {string} resource
+     * @return {UserManagedIdentityResource}
+     */
+    addResourceMapping(principalId, resource) {
+        if(typeof principalId !== "string" || principalId.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Argument 'principalId' is required.", "principalId");
+        if(typeof resource !== "string" || resource.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Argument 'resource' is required.", "resource");
+        this._mappings[resource.trim()] = principalId.trim();
+        return this;
+    }
+    /**
+     * @param {string} resource
+     * @return {Promise<(null|string)>}
+     */
+    async getPrincipalForResource(resource) {
+        let _principalId = this._mappings[resource];
+        if(typeof _principalId !== "string") _principalId = this._default;
+        return _principalId;
+    }
+    /**
+     * @param {string} resource
+     * @param {Object} options
+     * @return {Promise<_CelastrinaToken>}
+     */
+    async _resolve(resource, options = {}) {
+        if(typeof options.principalId !== "string") {
+            let _principalId = await this.getPrincipalForResource(resource);
+            if(_principalId != null) options.principalId = _principalId;
+        }
+        return await super._resolve(resource, options);
     }
 }
 /**
@@ -317,10 +405,11 @@ class AppRegistrationResource extends ResourceAuthorization {
     /**@return{string}*/get secret(){return this._secret;}
     /**
      * @param {string} resource
+     * @param {object} [options={}}]
      * @return {Promise<_CelastrinaToken>}
      * @private
      */
-    async _resolve(resource) {
+    async _resolve(resource, options = {}) {
         return new Promise((resolve, reject) => {
             try {
                 let adContext = new AuthenticationContext(this._authority + "/" + this._tenant);
@@ -344,12 +433,44 @@ class AppRegistrationResource extends ResourceAuthorization {
     }
 }
 /**
+ * ResourceManagerTokenCredential
+ * @author Robert R Murrell
+ */
+class ResourceManagerTokenCredential {
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.core.ResourceManagerTokenCredential";}
+    /**
+     * @param {ResourceAuthorization} ra
+     */
+    constructor(ra) {
+        /**@type{ResourceAuthorization}*/this._ra = ra;
+    };
+    /**@return{ResourceAuthorization}*/get resourceAuthorization() {return this._ra;}
+    /**
+     * @param {(string|Array<string>)} scopes
+     * @param {object} [options={}}]
+     * @return {Promise<AccessToken>}
+     */
+    async getToken(scopes, options = {}) {
+        let scope = scopes;
+        if(Array.isArray(scopes)) {
+            if(scopes.length >= 1) scope = scopes[0];
+            else throw CelastrinaValidationError.newValidationError("Argument 'scopes' is required and must contain at least 1 scope.", "TokenCredential.[scopes]");
+        }
+        if(typeof scope !== "string" || scope.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Argument 'scope' is required.", "TokenCredential.scopes");
+        let _at = await this._ra.getAccessToken(scope, options);
+        return /**@type{AccessToken}*/{token: _at.token, expiresOnTimestamp: _at.expires.unix()};
+    }
+}
+/**
  * ResourceManager
+ * @author Robert R Murrell
  */
 class ResourceManager {
     /**@return{string}*/static get celastrinaType() {return "celastrinajs.core.ResourceManager";}
     constructor() {
         this._resources = {};
+        this._resources[ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY] = new UserManagedIdentityResource();
     }
     /**@return{Object}*/get authorizations() {return this._resources;}
     /**
@@ -380,6 +501,15 @@ class ResourceManager {
         else return await _auth.getToken(resource);
     }
     /**
+     * @param {string} id
+     * @return {Promise<ResourceManagerTokenCredential>}
+     */
+    async getTokenCredential(id = ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY) {
+        /**@type{ResourceAuthorization}*/let _ra = await this.getResource(id);
+        if(_ra == null) return null;
+        else return new ResourceManagerTokenCredential(_ra);
+    }
+    /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
      * @return {Promise<void>}
@@ -393,9 +523,9 @@ class ResourceManager {
     async ready(azcontext, config) {
         let _identityEndpoint = process.env["IDENTITY_ENDPOINT"];
         if(typeof _identityEndpoint === "string") {
-            let _auth = this._resources[ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY]; // Checking to see if it was already created during init
-            if(!instanceOfCelastringType(ResourceAuthorization, _auth)) {
-                this._resources[ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY] = new ManagedIdentityResource();
+            if(!instanceOfCelastringType(ResourceAuthorization, this._resources[ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY])) {
+                throw CelastrinaValidationError.newValidationError("Missing managed identity resource authorization.",
+                    ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY);
             }
         }
     }
@@ -406,7 +536,10 @@ class ResourceManager {
  */
 class Vault {
     /**@return{string}*/static get celastrinaType() {return "celastrinajs.core.Vault";}
-    constructor() {}
+    constructor() {
+        this._params = new URLSearchParameters();
+        this._params.set("api-version", "7.1");
+    }
     /**
      * @param {string} token
      * @param {string} identifier
@@ -414,11 +547,12 @@ class Vault {
      */
     async getSecret(token, identifier) {
         try {
-            let response = await axios.get(identifier + "?api-version=7.1",
-                                              {headers: {"Authorization": "Bearer " + token}});
+            /**@type{AxiosResponse}*/let response = await axios.get(identifier,
+                                    {params: this._params,
+                                           headers: {"Authorization": "Bearer " + token}});
             return response.data.value;
         }
-        catch(exception) {
+        catch(/**@type{Error|AxiosError}*/exception) {
             if(typeof exception === "object" && exception.hasOwnProperty("response")) {
                 if(exception.response.status === 404)
                     throw CelastrinaError.newError("Vault secret '" + identifier + "' not found.", 404);
@@ -622,10 +756,12 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
      */
     constructor(configStoreName, label = "development", useVaultSecrets = true) {
         super();
-        this._label = label;
-        this._configStore = configStoreName;
-        this._endpoint = "https://" + configStoreName + ".azconfig.io/kv/{key}?label=" + label + "&api-version=1.0";
-        /** @type {ManagedIdentityResource} */this._auth = null;
+        this._configStore = "https://" + this._configStore + ".azconfig.io";
+        this._endpoint = this._configStore + "/kv/{key}";
+        this._params = new URLSearchParams();
+        this._params.set("label", label);
+        this._params.set("api-version", "1.0");
+        /** @type {ResourceAuthorization} */this._auth = null;
         /** @type{boolean} */this._useVaultSecrets = useVaultSecrets;
         if(this._useVaultSecrets)
             /** @type{Vault} */this._vault = new Vault();
@@ -638,42 +774,55 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
      */
     async initialize(azcontext, config) {
         let _identityEndpoint = process.env["IDENTITY_ENDPOINT"];
-        if(typeof _identityEndpoint === "undefined" || _identityEndpoint == null)
-            throw CelastrinaError.newError("AppConfigPropertyManager requires User or System Assigned Managed Identy to be enabled.");
-        else
-            this._auth = new ManagedIdentityResource();
+        if(typeof _identityEndpoint !== "string")
+            throw CelastrinaError.newError("AppConfigPropertyManager requires User or System Assigned Managed Identies to be enabled.");
+        /**@type{ResourceManager}*/let _rm = config[ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY];
+        if(typeof _rm === "undefined" || !instanceOfCelastringType(ResourceManager, _rm))
+            throw CelastrinaError.newError("Resource manager is missing or null. Please ensure the resource manager is set, reconfigure, and restart.");
+        this._auth = await _rm.getResource();
+        if(this._auth == null)
+            throw CelastrinaError.newError("Resource '" + ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY +
+                "' not found. Please ensure the resource is set, reconfigure, and restart.");
     }
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
      * @return {Promise<void>}
      */
-    async ready(azcontext, config) {
-        config[Configuration.CONFIG_RESOURCE].addResource(this._auth);
-    }
+    async ready(azcontext, config) {}
     /**
      * @param _config
      * @return {Promise<*>}
      * @private
      */
     async _resolveVaultReference(_config) {
-        let _vlt = JSON.parse(_config.value);
+        /**@type{{uri?:string}}*/let _vlt = JSON.parse(_config.value);
         return await this._vault.getSecret(await this._auth.getToken("https://vault.azure.net"), _vlt.uri);
     }
+    /**
+     * @param {{content_type?:string}} kvp
+     * @return {boolean}
+     * @private
+     */
     _isVaultReference(kvp) {
         return (kvp.content_type === "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8" &&
                 this._useVaultSecrets);
     }
     /**
-     * @param kvp
+     * @param {{value?:string}} kvp
      * @return {Promise<*>}
      * @private
      */
     async _resolveFeatureFlag(kvp) {
         return kvp.value;
     }
+    /**
+     * @param {{content_type?:string}} kvp
+     * @return {boolean}
+     * @private
+     */
     _isFeatureFlag(kvp) {
-        return kvp.content_type === "application/vnd.microsoft.appconfig.ff+json;charset=utf-8"
+        return kvp.content_type === "application/vnd.microsoft.appconfig.ff+json;charset=utf-8";
     }
     /**
      * @param {string} key
@@ -682,9 +831,11 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
      */
     async _getAppConfigProperty(key) {
         try {
-            let token = await this._auth.getToken("https://" + this._configStore + ".azconfig.io");
+            let token = await this._auth.getToken(this._configStore);
             let _endpoint = this._endpoint.replace("{key}", key);
-            let response = await axios.get(_endpoint, {headers: {"Authorization": "Bearer " + token}});
+            /**@type{AxiosResponse}*/let response = await axios.get(_endpoint,
+                                           {params: this._params,
+                                                  headers: {"Authorization": "Bearer " + token}});
             let _value = response.data;
             if(this._isVaultReference(_value))
                 return await this._resolveVaultReference(_value);
@@ -693,7 +844,7 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
             else
                 return _value.value;
         }
-        catch(exception) {
+        catch(/**@type{(Error|AxiosError)}*/exception) {
             if(instanceOfCelastringType(CelastrinaError, exception))
                 throw exception;
             else if(typeof exception === "object" && exception.hasOwnProperty("response")) {
@@ -2989,6 +3140,7 @@ module.exports = {
     ResourceAuthorization: ResourceAuthorization,
     ManagedIdentityResource: ManagedIdentityResource,
     AppRegistrationResource: AppRegistrationResource,
+    ResourceManagerTokenCredential: ResourceManagerTokenCredential,
     ResourceManager: ResourceManager,
     Vault: Vault,
     PropertyManager: PropertyManager,

@@ -68,9 +68,22 @@ describe("ResourceManager", () => {
                 let _auth = new ManagedIdentityResource();
                 let exp = moment();
                 exp.add(30, "minutes");
-                _auth._tokens["mock_resource"] = {expires: exp, token: "test_token"}
+                _auth._tokens["mock_resource"] = {expires: exp, token: "test_token"};
                 await _rm.addResource(_auth);
                 assert.deepStrictEqual(await _rm.getToken("mock_resource"), "test_token", "Expected 'test_token'.");
+            });
+        });
+        describe("#getTokenCredential(resource)", () => {
+            it("it gets token", async () => {
+                let _rm = new ResourceManager();
+                let _auth = new ManagedIdentityResource();
+                let exp = moment();
+                exp.add(30, "minutes");
+                _auth._tokens["mock_resource"] = {expires: exp, token: "test_token"};
+                await _rm.addResource(_auth);
+                let _tc = await _rm.getTokenCredential();
+                let _token = await _tc.getToken("mock_resource");
+                assert.deepStrictEqual(_token.token, "test_token", "Expected 'test_token'.");
             });
         });
         describe("#ready(azcontext, config)", () => {

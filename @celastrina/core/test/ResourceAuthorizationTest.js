@@ -21,9 +21,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-const {CelastrinaError, ResourceAuthorization, ResourceManager} = require("../Core");
+const {CelastrinaError, ResourceAuthorization, ManagedIdentityResource, ResourceManager} = require("../Core");
 const assert = require("assert");
 const moment = require("moment");
+const {AzureManagedIdentityServerMock} = require("./AzureManagedIdentityServer");
 
 class MockResourceManager extends ResourceManager {
     constructor() {
@@ -60,7 +61,7 @@ class MockResourceAuthorization extends ResourceAuthorization {
         (!expired)? now.add(1, "hour") : now.subtract(1, "hour");
         this._tokens[resource] = {resource: resource, token: "mock-token-" + resource, expires: now};
     }
-    async _resolve(resource) {
+    async _resolve(resource, options = {}) {
         let now = moment();
         now.add(1, "hour");
         this._resolved = true;
@@ -99,8 +100,8 @@ describe("ResourceAuthorization", () => {
         });
     });
 });
-describe("AuthorizationManager", () => {
-    describe("#addAuthorization(auth)", () => {
+describe("ResourceManager", () => {
+    describe("#addResource(auth)", () => {
         let _rm = new ResourceManager();
         it("Should set and return itself for chaining", async () => {
             let _auth = new MockResourceAuthorization("mock_authorization");
@@ -109,7 +110,7 @@ describe("AuthorizationManager", () => {
             assert.strictEqual(_rm._resources[_auth.id], _auth, "Added auth.");
         });
     });
-    describe("#getAuthorization(id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY)", () => {
+    describe("#getResource(id = ManagedIdentityAuthorization.SYSTEM_MANAGED_IDENTITY)", () => {
         let _rm = new ResourceManager();
         it("Should get an added authorization", async () => {
             let _auth = new MockResourceAuthorization("mock_authorization");
@@ -123,7 +124,18 @@ describe("AuthorizationManager", () => {
         });
     });
 });
-
+describe("ManagedIdentityResource", () => {
+    describe("#_resolve(resource, options = {})", () => {
+        it("should strip default", async () => {
+            let _mid = new ManagedIdentityResource();
+            let _mock = new AzureManagedIdentityServerMock();
+            await _mock.start();
+            let _response = await _mid._resolve("https://demoresource.documents.azure.com/.default");
+            await _mock.stop();
+            assert.strictEqual(_response.token, "access_token_https://demoresource.documents.azure.com", "Expected ''.")
+        });
+    });
+});
 module.exports = {
     MockResourceAuthorization: MockResourceAuthorization,
     MockResourceManager: MockResourceManager

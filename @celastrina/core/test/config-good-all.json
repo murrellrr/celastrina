@@ -5,6 +5,17 @@
         "type": "application/vnd.celastrinajs.config+json;Core"
       },
       "resources": {
+        "identity": {
+          "mappings": [
+            {
+              "_content": {
+                "type": "application/vnd.celastrinajs.attribute+json;PrincipalMapping"
+              },
+              "principal": "mock_principal",
+              "resource": "mock_resource"
+            }
+          ]
+        },
         "authorizations": {
           "_content": {
             "type": "application/vnd.celastrinajs.attribute+json;Property+[AppRegistrationResource]"

@@ -132,10 +132,36 @@ describe("ManagedIdentityResource", () => {
             await _mock.start();
             let _response = await _mid._resolve("https://demoresource.documents.azure.com/.default");
             await _mock.stop();
-            assert.strictEqual(_response.token, "access_token_https://demoresource.documents.azure.com", "Expected ''.")
+            assert.strictEqual(_response.token, "access_token_https://demoresource.documents.azure.com",
+                "Expected 'access_token_https://demoresource.documents.azure.com'.");
+        });
+        it("should add a principal", async () => {
+            let _mid = new ManagedIdentityResource();
+            _mid.addResourceMapping("mock_principal", "https://demoresource.documents.azure.com");
+            assert.strictEqual(_mid._mappings["https://demoresource.documents.azure.com"], "mock_principal", "Expected 'mock_principal'.");
+            assert.strictEqual(await _mid.getPrincipalForResource("https://demoresource.documents.azure.com"), "mock_principal", "Expected 'mock_principal'.")
+        });
+        it("should add a principal object", async () => {
+            let _mid = new ManagedIdentityResource();
+            _mid.addResourceMappingObject({principal: "mock_principal", resource: "https://demoresource.documents.azure.com"});
+            assert.strictEqual(_mid._mappings["https://demoresource.documents.azure.com"], "mock_principal", "Expected 'mock_principal'.");
+            assert.strictEqual(await _mid.getPrincipalForResource("https://demoresource.documents.azure.com"), "mock_principal", "Expected 'mock_principal'.")
+        });
+        it("should resolve a resource principalId", async () => {
+            let _mid = new ManagedIdentityResource();
+            _mid.addResourceMapping("mock_principal", "https://demoresource.documents.azure.com");
+            let _mock = new AzureManagedIdentityServerMock();
+            await _mock.start();
+            let _response = await _mid._resolve("https://demoresource.documents.azure.com/.default");
+            await _mock.stop();
+            assert.strictEqual(_response.token, "access_token_https://demoresource.documents.azure.com",
+                "Expected 'access_token_https://demoresource.documents.azure.com'.");
+            assert.strictEqual(_mock.lastResourceName, "https://demoresource.documents.azure.com", "Expected 'https://demoresource.documents.azure.com")
+            assert.strictEqual(_mock.lastPrincipalId, "mock_principal", "Expected 'mock_principal");
         });
     });
 });
+
 module.exports = {
     MockResourceAuthorization: MockResourceAuthorization,
     MockResourceManager: MockResourceManager

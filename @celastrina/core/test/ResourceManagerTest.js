@@ -39,7 +39,7 @@ describe("ResourceManager", () => {
                 let _rm = new ResourceManager();
                 let _auth = new ManagedIdentityResource();
                 assert.deepStrictEqual(await _rm.addResource(_auth), _rm, "Expected to chain ResourceManager");
-                assert.deepStrictEqual(_rm._resources[ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY], _auth, "Expected to chain ResourceManager");
+                assert.deepStrictEqual(_rm._resources[ManagedIdentityResource.MANAGED_IDENTITY], _auth, "Expected to chain ResourceManager");
             });
         });
         describe("#getResource(id)", () => {
@@ -93,9 +93,8 @@ describe("ResourceManager", () => {
                 let _config = new Configuration("ResourceManagerTest");
                 await _config.initialize(_azcontext);
                 await _config.ready();
-                let _rm = new ResourceManager();
-                await _rm.ready(_azcontext, _config);
-                let _auth = await _rm.getResource(ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY);
+                let _rm = _config.resources;
+                let _auth = await _rm.getResource(ManagedIdentityResource.MANAGED_IDENTITY);
                 assert.strictEqual(_auth != null, true, "Expected not null.");
             });
             it("does not default with no 'IDENTITY_ENDPOINT'", async () => {
@@ -104,9 +103,8 @@ describe("ResourceManager", () => {
                 let _config = new Configuration("ResourceManagerTest");
                 await _config.initialize(_azcontext);
                 await _config.ready();
-                let _rm = new ResourceManager();
-                await _rm.ready(_azcontext, _config);
-                let _auth = await _rm.getResource(ManagedIdentityResource.SYSTEM_MANAGED_IDENTITY);
+                let _rm = _config.resources;
+                let _auth = await _rm.getResource(ManagedIdentityResource.MANAGED_IDENTITY);
                 assert.strictEqual(_auth == null, true, "Expected null.");
             });
         });

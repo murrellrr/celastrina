@@ -23,8 +23,8 @@
  */
 const {CelastrinaError, AddOn, Configuration, AppSettingsPropertyManager, AppConfigPropertyManagerFactory,
        ResourceManager, PermissionManager, AttributeParser, ConfigParser, CelastrinaValidationError,
-       AppRegistrationResource, Permission, MatchAny, MatchAll, MatchNone, AppConfigPropertyManager
-} = require("../Core");
+       AppRegistrationResource, Permission, MatchAny, MatchAll, MatchNone, AppConfigPropertyManager,
+       ManagedIdentityResource, ResourceAuthorization} = require("../Core");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockPropertyManager} = require("./PropertyManagerTest");
 const {MockResourceManager} = require("./ResourceAuthorizationTest");
@@ -72,7 +72,6 @@ class MockAddOnTwo extends MockAddOn {
         super(dependencies);
     }
 }
-
 describe("Configuration", () => {
     describe("#constructor(name)", () => {
         it("must set name", () => {
@@ -95,15 +94,13 @@ describe("Configuration", () => {
             let err = new CelastrinaError("Invalid configuration. Name must be string.");
             assert.throws(() => {let _config = new Configuration();}, err);
         });
-        it("Loaded must default false", () => {
+        it("Loaded must default false", async () => {
             let _config = new Configuration("test");
             assert.strictEqual(_config.loaded, false);
         });
-        it("Should succeed with valid property", () => {
+        it("Should succeed with valid property", async () => {
             let _loader = new Configuration("ConfigurationTest", "mock_property");
             assert.strictEqual(_loader._property, "mock_property", "Set property");
-            assert.strictEqual(_loader._atp instanceof AttributeParser, true, "Content Parser is AttributeParser.");
-            assert.strictEqual(_loader._cfp instanceof ConfigParser, true, "Config Parser is ContentParser.");
         });
         it("Should load with null.", () => {
             let _loader = new Configuration("ConfigurationTest");
@@ -259,6 +256,8 @@ describe("Configuration", () => {
         _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good-resources.json", "utf8"));
         let _azcontext = new MockAzureFunctionContext();
         it("Sets resource authorizations", async () => {
+            process.env["IDENTITY_ENDPOINT"] = "https://localhost:8443";
+            process.env["IDENTITY_HEADER"] = "ThatsMyLuggage12345";
             _loader.setValue("celastrinajs.core.permission", new PermissionManager());
             _loader.setValue("celastrinajs.core.resource", new ResourceManager());
             _loader.setValue("celastrinajs.core.property.manager", _pm);
@@ -271,6 +270,9 @@ describe("Configuration", () => {
             assert.deepStrictEqual(_resources._resources["mock-resource-2"], _rm2, "mock-resource-2 set.");
             assert.deepStrictEqual(await _resources.getResource("mock-resource-1"), _rm1, "mock-resource-1 via getResource.");
             assert.deepStrictEqual(await _resources.getResource("mock-resource-2"), _rm2, "mock-resource-2 via getResource.");
+            /**@type{ManagedIdentityResource}*/let _ra = /**@type{ManagedIdentityResource}*/await _resources.getResource(ManagedIdentityResource.MANAGED_IDENTITY);
+            assert.strictEqual(await _ra.getPrincipalForResource("mock_resource"), "mock_principal", "Expected 'mock_principal'.");
+            delete process.env["IDENTITY_ENDPOINT"];
         });
     });
     describe("#load(pm, config), full config", () => {

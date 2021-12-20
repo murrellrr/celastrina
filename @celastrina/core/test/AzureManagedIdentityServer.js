@@ -30,18 +30,27 @@ const assert = require("assert");
 
 class AzureManagedIdentityServerMock {
 	constructor() {
-		//
+		/**@type{MockAdapter}*/this._mock = null;
+		/**@type{(null|string)}*/this.lastPrincipalId = null;
+		/**@type{(null|string)}*/this.lastResourceName = null;
 	}
-	async start(IDENTITY_ENDPOINT = "https://localhost:8443", IDENTITY_HEADER = "ThatsMyLuggage12345") {
-		process.env["IDENTITY_ENDPOINT"] = IDENTITY_ENDPOINT;
-		process.env["IDENTITY_HEADER"] = IDENTITY_HEADER;
+	reset() {
+		this.lastPrincipalId = null;
+		this.lastResourceName = null;
+	}
+	async start() {
 		let _this = this;
+		process.env["IDENTITY_ENDPOINT"] = "https://localhost:8443";
+		process.env["IDENTITY_HEADER"] = "ThatsMyLuggage12345";
 		this._mock = new MockAdapter(axios);
-		this._mock.onGet("https://localhost:8443?api-version=2019-08-01&resource=https://demoresource.documents.azure.com").reply((config) => {
-			if(config.headers["x-identity-header"] === IDENTITY_HEADER) {
+		this._mock.onGet(/https:\/\/localhost:8443.*/).reply((config) => {
+			if(config.headers["x-identity-header"] === "ThatsMyLuggage12345") {
+				let _principal = config.params.get("principal_id");
+				if(typeof _principal === "string") _this.lastPrincipalId = _principal;
 				let _now = moment();
 				_now.add(30, "minutes");
-				let resource = config.url.substr(config.url.indexOf("resource=") + 9);
+				let resource = config.params.get("resource");
+				_this.lastResourceName = resource;
 				return [200, {access_token: "access_token_" + resource, expires_on: _now.unix(), resource: resource, token_type: "Bearer", client_id: uuidv4()}];
 			}
 			else return [401, "Not Authorized."];

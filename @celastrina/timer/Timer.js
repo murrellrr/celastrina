@@ -36,6 +36,7 @@ const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, Configuration, Con
  * @author Robert R Murrell
  */
 class TickEvent extends CelastrinaEvent {
+	/**@return{string}*/static get celastrinaType() {return "celastrinajs.timer.TickEvent";}
 	/**
 	 * @param {Context} context
 	 * @param {*} [source=null]
@@ -59,6 +60,7 @@ class TickEvent extends CelastrinaEvent {
  * @abstract
  */
 class TimerFunction extends BaseFunction {
+	/**@return{string}*/static get celastrinaType() {return "celastrinajs.timer.TimerFunction";}
 	/**@param{Configuration}configuration*/
 	constructor(configuration) {
 		super(configuration);
@@ -141,15 +143,18 @@ class TimerFunction extends BaseFunction {
  * @author Robert R Murrell
  */
 class TimerConfigParser extends ConfigParser {
+	/**@return{string}*/static get celastrinaType() {return "celastrinajs.timer.TimerConfigParser";}
 	constructor(link = null, version = "1.0.0") {
 		super("Timer", link, version);
 	}
 	async _create(_Object) {
 		/**@type{TimerAddOn}*/let _addon = /**@type{TimerAddOn}*/this._config[TimerAddOn.addOnName];
-		if(_Object.hasOwnProperty("rejectOnPastDue") && (typeof _Object.rejectOnPastDue === "boolean"))
-			_addon.rejectOnPastDue = _Object.rejectOnPastDue;
-		if(_Object.hasOwnProperty("abortOnReject") && (typeof _Object.abortOnReject === "boolean"))
-			_addon.abortOnReject = _Object.abortOnReject;
+		if(instanceOfCelastringType(TimerAddOn, _addon)) {
+			if(_Object.hasOwnProperty("rejectOnPastDue") && (typeof _Object.rejectOnPastDue === "boolean"))
+				_addon.rejectOnPastDue = _Object.rejectOnPastDue;
+			if(_Object.hasOwnProperty("abortOnReject") && (typeof _Object.abortOnReject === "boolean"))
+				_addon.abortOnReject = _Object.abortOnReject;
+		}
 	}
 }
 /**
@@ -157,6 +162,7 @@ class TimerConfigParser extends ConfigParser {
  * @author Robert R Murrell
  */
 class TimerAddOn extends AddOn {
+	/**@return{string}*/static get celastrinaType() {return "celastrinajs.timer.TimerAddOn";}
 	/**@return{string}*/static get addOnName() {return "celastrinajs.timer.addon.timer";}
 	/**
 	 * @param {boolean} rejectOnPastDue

@@ -769,36 +769,84 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
     /**@return{string}*/static get celastrinaType() {return "celastrinajs.core.AppConfigPropertyManager";}
     /**
      * @param {string} configStoreName
+     * @param {string} [propResource = ManagedIdentityResource.MANAGED_IDENTITY]
+     * @param {string} [vaultResource = ManagedIdentityResource.MANAGED_IDENTITY]
      * @param {string} [label="development"]
      * @param {boolean} [useVaultSecrets=true]
      * @param {number} [timeout=2000]
      */
-    constructor(configStoreName, label = "development", useVaultSecrets = true,
-                timeout = 2000) {
+    constructor(configStoreName, propResource = ManagedIdentityResource.MANAGED_IDENTITY,
+                vaultResource = ManagedIdentityResource.MANAGED_IDENTITY, label = "development",
+                useVaultSecrets = true, timeout = 2000) {
         super();
         this._configStore = "https://" + configStoreName + ".azconfig.io";
         this._endpoint = this._configStore + "/kv/{key}";
         this._timeout = timeout;
+        if(typeof propResource !== "string" || propResource.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Arguemtn 'propResource' is required.", "propResource");
+        if(typeof vaultResource !== "string" || vaultResource.trim().length === 0)
+            throw CelastrinaValidationError.newValidationError("Arguemtn 'vaultResource' is required.", "vaultResource");
+        this._propResource = propResource.trim();
+        this._vaultResource = vaultResource.trim();
         this._params = new URLSearchParams();
         this._params.set("label", label);
         this._params.set("api-version", "1.0");
-        /** @type {ResourceAuthorization} */this._auth = null;
+        /** @type {ResourceAuthorization} */this._authProp = null;
+        /** @type {ResourceAuthorization} */this._authVault = null;
         /** @type{boolean} */this._useVaultSecrets = useVaultSecrets;
         if(this._useVaultSecrets)
             /** @type{Vault} */this._vault = new Vault(this._timeout);
     }
     /**@return{string}*/get name() {return "AppConfigPropertyManager";}
+    /**@return{string}*/get configStore() {return this._configStore;}
     /**@return{number}*/get timeout() {return this._timeout;}
+    /**@param{number}timeout*/set timeout(timeout) {this._timeout = timeout;}
+    /**@return{boolean}*/get useVault() {return this._useVaultSecrets;}
+    /**@param{boolean}useVault*/set useVault(useVault) {this._useVaultSecrets = useVault;}
+    /**@return{string}*/get propertyResource() {return this._propResource;}
+    /**@return{string}*/get label() {return this._params.get("label");}
+    /**@return{string}*/get apiVersion() {return this._params.get("api-version");}
+    /**@return{Vault}*/get vault() {return this._vault;}
+    /**@param{string}label*/set label(label) {
+        if(typeof label !== "string" || label.trim().length === 0) this._params.set("label", "development");
+        else this._params.set("label", label.trim());
+    }
+    /**@param{string}resource*/set propertyResource(resource) {
+        if(typeof resource !== "string" || resource.trim().length === 0)
+            throw new CelastrinaValidationError.newValidationError("Argument 'resource' is required.", "resource");
+        this._propResource = resource.trim();
+    }
+    /**@return{string}*/get vaultResource() {return this._vaultResource;}
+    /**@param{string}resource*/set vaultResource(resource) {
+        if(typeof resource !== "string" || resource.trim().length === 0)
+            throw new CelastrinaValidationError.newValidationError("Argument 'resource' is required.", "resource");
+        this._vaultResource = resource.trim();
+    }
     /**
      * @param {_AzureFunctionContext} azcontext
      * @param {Object} config
      * @return {Promise<void>}
      */
     async initialize(azcontext, config) {
-        if(typeof process.env["IDENTITY_ENDPOINT"] !== "string")
-            throw CelastrinaError.newError("AppConfigPropertyManager requires User or System Assigned Managed Identies to be enabled.");
+        if(this._propResource === ManagedIdentityResource.MANAGED_IDENTITY) {
+            if(typeof process.env["IDENTITY_ENDPOINT"] !== "string")
+                throw CelastrinaError.newError(
+                    "AppConfigPropertyManager requires User or System Assigned Managed Identies to be enabled.");
+        }
         /**@type{ResourceManager}*/let _rm = config[Configuration.CONFIG_RESOURCE];
-        this._auth = await _rm.getResource(ManagedIdentityResource.MANAGED_IDENTITY);
+        this._authProp = await _rm.getResource(this._propResource);
+        if(!instanceOfCelastringType(ResourceAuthorization, this._authProp))
+            throw CelastrinaError.newError(
+                "Property resource authorization '" + this._propResource + "' not found. AppConfigPropertyManager initialization failed.");
+        if(this._useVaultSecrets) {
+            if(this._vaultResource === this._propResource) this._authVault = this._authProp;
+            else {
+                this._authVault = await _rm.getResource(this._vaultResource);
+                if(!instanceOfCelastringType(ResourceAuthorization, this._authProp))
+                    throw CelastrinaError.newError(
+                        "Vault resource authorization '" + this._vaultResource + "' not found. AppConfigPropertyManager initialization failed.");
+            }
+        }
     }
     /**
      * @param {_AzureFunctionContext} azcontext
@@ -813,7 +861,7 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
      */
     async _resolveVaultReference(_config) {
         /**@type{{uri?:string}}*/let _vlt = JSON.parse(_config.value);
-        return await this._vault.getSecret(await this._auth.getToken("https://vault.azure.net"), _vlt.uri);
+        return await this._vault.getSecret(await this._authVault.getToken("https://vault.azure.net"), _vlt.uri);
     }
     /**
      * @param {{content_type?:string}} kvp
@@ -847,7 +895,7 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
      */
     async _getAppConfigProperty(key) {
         try {
-            let token = await this._auth.getToken(this._configStore);
+            let token = await this._authProp.getToken(this._configStore);
             let _endpoint = this._endpoint.replace("{key}", key);
             let response = await axios.get(_endpoint,
                                            {params: this._params,
@@ -892,23 +940,50 @@ class AppConfigPropertyManager extends AppSettingsPropertyManager {
     }
 }
 /**
- * CachedProperty
+ * CacheProperty
  * @author Robert R Murrell
  */
-class CachedProperty {
-    /**@return{string}*/static get celastrinaType() {return "celastrinajs.core.CachedProperty";}
+class CacheProperty {
+    /**@return{string}*/static get celastrinaType() {return "celastrinajs.core.CacheProperty";}
     /**
-     * @param {*} value
-     * @param {number} [time=300]
-     * @param {moment.DurationInputArg2} [unit="s"]
+     * @param {*} [value = null]
+     * @param {boolean} [cache = true]
+     * @param {number} [time=5]
+     * @param {moment.DurationInputArg2} [unit="minutes"]
      */
-    constructor(value, time = 300, unit = "s") {
+    constructor(value = null, cache = true, time = 5, unit = "minutes") {
+        if(time < 0) time = 0;
         /**@type{*}*/this._value = value;
-        this._time = time;
+        /**@type{boolean}*/this._cache = cache;
+        /**@type{(null|moment.Moment)}*/this._expires = null;
+        /**@type{(null|moment.Moment)}*/this._lastUpdate = null;
+        /**@type{number}*/this._time = time;
         /**@type{moment.DurationInputArg2} */this._unit = unit;
-        /**@type{(null|moment.Moment)}*/this._expires = moment().add(this._time, this._unit);
-        /**@type{(null|moment.Moment)}*/this._lastUpdate = moment();
+        if(this._cache) {
+            if(this._time > 0) this._expires = moment().add(this._time, this._unit);
+        }
+        else this._time = 0;
+        if(this._value != null) this._lastUpdate = moment();
     }
+    setNoCache() {
+        this._cache = false;
+        this._lastUpdate = null;
+    }
+    setNoExpire() {
+        this._cache = true;
+        this._lastUpdate = null;
+        this._time = 0;
+    }
+    /**@return{boolean}*/get cache() {return this._cache;}
+    /**@return{number}*/get time() {return this._time;}
+    /**@param{number}unit*/set time(unit) {
+        if(this._cache) {
+            if(this._time > 0) this._expires = moment().add(this._time, this._unit);
+        }
+        else this._time = 0;
+    }
+    /**@return{moment.DurationInputArg2}*/get unit() {return this._unit;}
+    /**@param{moment.DurationInputArg2}unit*/set unit(unit) {this._unit = unit;}
     /**@return{(null|moment.Moment)}*/get expires(){return this._expires;}
     /**@return{(null|moment.Moment)}*/get lastUpdated(){return this._lastUpdate;}
     /**@return{*}*/get value(){return this._value;}
@@ -916,13 +991,12 @@ class CachedProperty {
     set value(value) {
         this._value = value;
         this._lastUpdate = moment();
-        if(this._time === 0 || value == null) this._expires = null;
-        else this._expires = moment().add(this._time, this._unit);
+        if(this._time > 0) this._expires = this._lastUpdate.add(this._time, this._unit);
     }
-    /**@return{boolean}*/
-    get isExpired() {
-        if(this._expires == null) return true;
-        else return (moment().isSameOrAfter(this._expires));
+    /**@return{boolean}*/get isExpired() {
+        if(!this._cache || this._lastUpdate == null) return true;
+        else if(this._expires == null) return false;
+        else return moment().isSameOrAfter(this._expires);
     }
     /**@return{Promise<void>}*/
     async clear() {this._value = null; this._expires = null;}
@@ -935,27 +1009,37 @@ class CachedPropertyManager extends PropertyManager {
     /**@return{string}*/static get celastrinaType() {return "celastrinajs.core.CachedPropertyManager";}
     /**
      * @param {PropertyManager} [manager=new AppSettingsPropertyManager()]
-     * @param {number} [defaultTime=300]
-     * @param {moment.DurationInputArg2} [defaultUnit="s"]
+     * @param {number} [defaultTime=5]
+     * @param {moment.DurationInputArg2} [defaultUnit="minutes"]
+     * @param {Array<{key:string,cache:CacheProperty}>} [controls=[]]
      */
-    constructor(manager = new AppSettingsPropertyManager(), defaultTime = 300,
-                defaultUnit = "s") {
+    constructor(manager = new AppSettingsPropertyManager(), defaultTime = 5,
+                defaultUnit = "minutes", controls = []) {
         super();
         /**@type{PropertyManager}*/this._manager = manager;
-        this._cache = {};
-        this._defaultTime = defaultTime;
+        /**@type{Object}*/this._cache = {};
+        /**@type{number}*/this._defaultTime = defaultTime;
         /**@type{moment.DurationInputArg2}*/this._defaultUnit = defaultUnit;
+        for(/**@type{{key:string,cache:CacheProperty}}*/let _control of controls) {
+            this._cache[_control.key] = _control.cache;
+        }
     }
     /**@return{string}*/get name() {return "CachedPropertyManager(" + this._manager.name + ")";}
     /**@return{PropertyManager}*/get manager(){return this._manager;}
-    /**@return{{Object}}*/get cache(){return this._cache;}
-    /**@return{Promise<void>}*/
+    /**@return{Object}*/get cache(){return this._cache;}
+    /**@return{number}*/get defaultTimeout() {return this._defaultTime;}
+    /**@param{number}timeout*/set defaultTimeout(timeout) {this._defaultTime = timeout;}
+    /**@return{moment.DurationInputArg2}*/get defaultUnit() {return this._defaultUnit;}
+    /**@param{moment.DurationInputArg2}unit*/set defaultUnit(unit) {this._defaultUnit = unit;}
+    /**
+     * @return{Promise<void>}
+     */
     async clear() {
         /**@type{Array<Promise<void>>}*/let promises = [];
         for(let prop in this._cache) {
             if(this._cache.hasOwnProperty(prop)) {
-                let cached = this._cache[prop];
-                if(instanceOfCelastringType(CachedProperty, cached)) promises.unshift(cached.clear());
+                /**@type{CacheProperty}*/let cached = this._cache[prop];
+                if(instanceOfCelastringType(CacheProperty, cached) && cached.cache) promises.unshift(cached.clear());
             }
         }
         await Promise.all(promises);
@@ -966,8 +1050,8 @@ class CachedPropertyManager extends PropertyManager {
      * @return {Promise<void>}
      */
     async ready(azcontext, config) {
-        azcontext.log.verbose("[CachedPropertyManager.ready(context, config, force)]: Caching ready.");
-        return this._manager.ready(azcontext, config);
+        await this._manager.ready(azcontext, config);
+        azcontext.log.info("[CachedPropertyManager.ready(context, config, force)]: Cache ready.");
     }
     /**
      * @param {_AzureFunctionContext} azcontext
@@ -975,16 +1059,16 @@ class CachedPropertyManager extends PropertyManager {
      * @return {Promise<void>}
      */
     async initialize(azcontext, config) {
-        azcontext.log.verbose("[CachedPropertyManager.initialize(context, config)]: Caching initialized.");
-        return this._manager.initialize(azcontext, config);
+        await this._manager.initialize(azcontext, config);
+        azcontext.log.info("[CachedPropertyManager.initialize(context, config)]: Cache initialized.");
     }
     /**
      * @param {string} key
-     * @return {Promise<CachedProperty>}
+     * @return {Promise<CacheProperty>}
      */
     async getCacheInfo(key) {
-        let cached = this._cache[key];
-        if(typeof cached === "undefined" || cached == null) return null;
+        /**@type{CacheProperty}*/let cached = this._cache[key];
+        if(!instanceOfCelastringType(CacheProperty, cached)) return null;
         else return cached;
     }
     /**
@@ -995,33 +1079,43 @@ class CachedPropertyManager extends PropertyManager {
      * @return {Promise<*>}
      * @private
      */
+    async _getPropertyFromSource(key, defaultValue, func, construct) {
+        return this._manager[func](key, defaultValue, construct);
+    }
+    /**
+     * @param {string} key
+     * @param {*} defaultValue
+     * @param {string} func
+     * @param {function(*)} [construct]
+     * @return {Promise<*>}
+     * @private
+     */
+    async _createCache(key, defaultValue, func, construct) {
+        let _value = await this._getPropertyFromSource(key, defaultValue, func, construct);
+        if(_value != null) this._cache[key] =  new CacheProperty(_value, true, this._defaultTime, this._defaultUnit);
+        return _value;
+    }
+    /**
+     * @param {string} key
+     * @param {*} defaultValue
+     * @param {string} func
+     * @param {function(*)} [construct]
+     * @return {Promise<*>}
+     * @private
+     */
     async _getCache(key, defaultValue, func, construct) {
-        let cached  = this._cache[key];
-        if(!instanceOfCelastringType(CachedProperty, cached)) {
-            let _value =await this._manager[func](key, defaultValue, construct);
-            if(_value != null) this._cache[key] =  new CachedProperty(_value, this._defaultTime, this._defaultUnit);
-            return _value;
-        }
+        /**@type{CacheProperty}*/let cached  = this._cache[key];
+        if(!instanceOfCelastringType(CacheProperty, cached))
+            return this._createCache(key, defaultValue, func, construct);
+        else if(!cached.cache)
+            return this._getPropertyFromSource(key, defaultValue, func, construct);
         else if(cached.isExpired) {
-            let _value =await this._manager[func](key, defaultValue, construct);
-            if(_value != null) cached.value = _value;
+            let _value = await this._getPropertyFromSource(key, defaultValue, func, construct);
+            cached.value = _value;
             return _value;
         }
         else
             return cached.value;
-    }
-    /**
-     * @param {string} key
-     * @param {*} [defaultValue = null]
-     * @param {(null|StringConstructor|BooleanConstructor|NumberConstructor|ObjectConstructor|DateConstructor|
-     *          RegExpConstructor|ErrorConstructor|ArrayConstructor|ArrayBufferConstructor|DataViewConstructor|
-     *          Int8ArrayConstructor|Uint8ArrayConstructor|Uint8ClampedArrayConstructor|Int16ArrayConstructor|
-     *          Uint16ArrayConstructor|Int32ArrayConstructor|Uint32ArrayConstructor|Float32ArrayConstructor|
-     *          Float64ArrayConstructor|FunctionConstructor|function(...*))} [type = String]
-     * @return {Promise<*>}
-     */
-    async _getConvertProperty(key, defaultValue = null, type) {
-        return super._getConvertProperty(key, defaultValue, type);
     }
     /**
      * @param {string} key
@@ -1082,23 +1176,12 @@ class CachedPropertyManager extends PropertyManager {
     }
     /**
      * @param {string} key
-     * @param {("property"|"string"|"date"|"regexp"|"number"|"boolean"|"object")} typename
-     * @param {(null|*)} defaultValue
-     * @param {function((null|*))} factory
-     * @return {Promise<void>}
-     */
-    async getTypedProperty(key, typename = "property", defaultValue = null, factory = null) {
-        return super.getTypedProperty(key, typename, defaultValue, factory);
-    }
-    /**
-     * @param {string} key
      * @param {*} [value=null]
      * @return {Promise<void>}
      */
     async setProperty(key, value = null) {
-        let _lcache = null;
-        if(value != null) _lcache = new CachedProperty(value, this._defaultTime, this._defaultUnit);
-        this._cache[key] = _lcache;
+        let _cache = await this.getCacheInfo(key);
+        if(_cache != null && _cache.cache) _cache.value = value;
     }
 }
 /**
@@ -1132,12 +1215,39 @@ class PropertyManagerFactory {
      */
     _createCache(manager, source) {
         if(source.hasOwnProperty("cache") && typeof source.cache === "object" && source.cache != null) {
-            /**@type{CachedProperty}*/let cache = source.cache;
-            if(!cache.hasOwnProperty("ttl") || typeof cache.ttl !== "number")
-                throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.ttl");
-            if(!cache.hasOwnProperty("unit") || typeof cache.unit !== "string" || cache.unit.length === 0)
-                throw CelastrinaValidationError.newValidationError("Invalid Cache Configuration.", "cache.unit");
-            return new CachedPropertyManager(manager, cache.ttl, cache.unit);
+            let _cache = source.cache;
+            let _ttl = 5;
+            let _unit = "minutes";
+            let _config = [];
+            if(_cache.hasOwnProperty("active") && typeof _cache.active === "boolean" && _cache.active) {
+                /**@type{CachedProperty}*/let cache = source.cache;
+                if(_cache.hasOwnProperty("ttl") && typeof _cache.ttl === "number")
+                    _ttl = _cache.ttl;
+                if(_cache.hasOwnProperty("unit") && typeof _cache.unit === "string" && _cache.unit.trim().length > 0)
+                    _unit = _cache.unit.trim();
+                if(_cache.hasOwnProperty("controls") && Array.isArray(_cache.controls)) {
+                    let _controls = _cache.controls;
+                    for(let _control of _controls) {
+                        if(!_control.hasOwnProperty("key") || typeof _control.key !== "string" || _control.key.trim().length === 0)
+                            throw CelastrinaValidationError.newValidationError(
+                                "Error creating cache control for '" + this.name + "'. Argment 'key' is required.", "key");
+                        if(_control.hasOwnProperty("noCache") && typeof _control.noCache === "boolean" && _control.noCache)
+                            _config.push({key: _control.key, cache: new CacheProperty(null, false)});
+                        else if(_control.hasOwnProperty("noExpire") && typeof _control.noExpire === "boolean" && _control.noExpire)
+                            _config.push({key: _control.key, cache: new CacheProperty(null, true, 0)});
+                        else {
+                            let _cttl = _ttl;
+                            let _cunit = _unit;
+                            if(_control.hasOwnProperty("ttl") && typeof _control.ttl === "number")
+                                _cttl = _control.ttl;
+                            if(_control.hasOwnProperty("unit") && typeof _control.unit === "string" && _control.unit.trim().length > 0)
+                                _cunit = _control.unit.trim();
+                            _config.push({key: _control.key, cache: new CacheProperty(null, true, _cttl, _cunit)});
+                        }
+                    }
+                }
+            }
+            return new CachedPropertyManager(manager, _ttl, _unit, _config);
         }
         else
             return manager;
@@ -1179,11 +1289,15 @@ class AppConfigPropertyManagerFactory extends PropertyManagerFactory {
             throw CelastrinaValidationError.newValidationError("Attribute 'store' is required.", "store");
         let _label = "development";
         let _useVault = false;
+        let _timeout = 2000;
         if(source.hasOwnProperty("label") && typeof source.label === "string" && source.label.trim().length > 0)
             _label = source.label;
         if(source.hasOwnProperty("useVault") && typeof source.useVault === "boolean")
             _useVault = source.useVault;
-        return new AppConfigPropertyManager(source.store, _label, _useVault);
+        if(source.hasOwnProperty("timeout") && typeof source.timeout === "number")
+            _timeout = source.timeout;
+        return new AppConfigPropertyManager(source.store, ManagedIdentityResource.MANAGED_IDENTITY,
+                                            ManagedIdentityResource.MANAGED_IDENTITY, _label, _useVault, _timeout);
     }
 }
 /**
@@ -3257,7 +3371,7 @@ module.exports = {
     PropertyManager: PropertyManager,
     AppSettingsPropertyManager: AppSettingsPropertyManager,
     AppConfigPropertyManager: AppConfigPropertyManager,
-    CachedProperty: CachedProperty,
+    CacheProperty: CacheProperty,
     CachedPropertyManager: CachedPropertyManager,
     PropertyManagerFactory: PropertyManagerFactory,
     AppConfigPropertyManagerFactory: AppConfigPropertyManagerFactory,

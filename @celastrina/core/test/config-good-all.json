@@ -4,22 +4,49 @@
       "_content": {
         "type": "application/vnd.celastrinajs.config+json;Core"
       },
+      "properties": {
+        "cache": {
+          "_content": {"type": "application/vnd.celastrinajs.attribute+json;CachedPropertyManager"},
+          "ttl": 5,
+          "utni": "minutes",
+          "controls": [
+            {
+              "_content": {"type": "application/vnd.celastrinajs.attribute+json;CacheProperty"},
+              "key": "property-key-one",
+              "noCache": false,
+              "noExpire": false,
+              "ttl": 2,
+              "unit": "minutes"
+            },
+            {
+              "_content": {"type": "application/vnd.celastrinajs.attribute+json;CacheProperty"},
+              "key": "property-key-two",
+              "noCache": true,
+              "ttl": 2,
+              "unit": "minutes"
+            },
+            {
+              "_content": {"type": "application/vnd.celastrinajs.attribute+json;CacheProperty"},
+              "key": "property-key-three",
+              "noExpire": true,
+              "ttl": 30,
+              "unit": "seconds"
+            }
+          ]
+        }
+      },
       "resources": {
         "identity": {
           "mappings": [
             {
-              "_content": {
-                "type": "application/vnd.celastrinajs.attribute+json;PrincipalMapping"
-              },
+              "_content": {"type": "application/vnd.celastrinajs.attribute+json;PrincipalMapping"},
               "principal": "mock_principal",
               "resource": "mock_resource"
             }
           ]
         },
         "authorizations": {
-          "_content": {
-            "type": "application/vnd.celastrinajs.attribute+json;Property+[AppRegistrationResource]"
-          },
+          "_content": {"type": "application/vnd.celastrinajs.attribute+json;Property+[AppRegistrationResource]"},
           "key": "mock_resources",
           "type": "object"
         }
@@ -28,16 +55,10 @@
         "optimistic": true,
         "permissions": [
           {
-            "_content": {
-              "type": "application/vnd.celastrinajs.attribute+json;Permission",
-              "version": "1.0.0"
-            },
+            "_content": {"type": "application/vnd.celastrinajs.attribute+json;Permission", "version": "1.0.0"},
             "action": "mock-process-1",
             "roles": {
-              "_content": {
-                "type": "application/vnd.celastrinajs.attribute+json;Property",
-                "version": "1.0.0"
-              },
+              "_content": {"type": "application/vnd.celastrinajs.attribute+json;Property", "version": "1.0.0"},
               "key": "mock_process-1-roles",
               "type": "object"
             },
@@ -46,9 +67,7 @@
             }
           },
           {
-            "_content": {
-              "type": "application/vnd.celastrinajs.attribute+json;Permission"
-            },
+            "_content": {"type": "application/vnd.celastrinajs.attribute+json;Permission"},
             "action": "mock-process-2",
             "roles": [
               "role-4",
@@ -60,25 +79,18 @@
             }
           },
           {
-            "_content": {
-              "type": "application/vnd.celastrinajs.attribute+json;Property+Permission"
-            },
+            "_content": {"type": "application/vnd.celastrinajs.attribute+json;Property+Permission"},
             "key": "mock_permission",
             "type": "object"
           },
           {
-            "_content": {
-              "type": "application/vnd.celastrinajs.attribute+json;Property+[Permission]",
-              "expand": true
-            },
+            "_content": {"type": "application/vnd.celastrinajs.attribute+json;Property+[Permission]", "expand": true},
             "key": "mock_permission_expand",
             "type": "object"
           }
         ],
         "roleFactory": {
-          "_content": {
-            "type": "application/vnd.celastrinajs.attribute+json;RoleFactory"
-          }
+          "_content": {"type": "application/vnd.celastrinajs.attribute+json;RoleFactory"}
         }
       }
     }

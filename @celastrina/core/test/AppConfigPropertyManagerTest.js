@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-const {CelastrinaError, LOG_LEVEL, AppConfigPropertyManager, Configuration} = require("../Core");
+const {CelastrinaError, LOG_LEVEL, AppConfigPropertyManager, Configuration, ManagedIdentityResource, ResourceManager} = require("../Core");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockPropertyManager} = require("./PropertyManagerTest");
 const MockAdapter = require("axios-mock-adapter");
@@ -182,6 +182,65 @@ class MockAppConfigEndpoint {
 }
 
 describe("AppConfigPropertyManager", () => {
+    describe("#constructor(configStoreName, propResource, vaultResource, label, useVaultSecrets, timeout)", () => {
+        it("creates AppConfigPropertyManager with defaults", () => {
+            let _config = new AppConfigPropertyManager("mock-config-store");
+            assert.strictEqual(_config.name, "AppConfigPropertyManager", "Expected 'AppConfigPropertyManager'.");
+            assert.strictEqual(_config.configStore, "https://mock-config-store.azconfig.io", "Expected 'https://mock-config-store.azconfig.io'.");
+            assert.strictEqual(_config.timeout, 2000, "Expected 2000.");
+            assert.strictEqual(_config._endpoint, "https://mock-config-store.azconfig.io/kv/{key}", "Expected 'https://mock-config-store.azconfig.io/kv/{key}'.");
+            assert.strictEqual(_config.propertyResource, ManagedIdentityResource.MANAGED_IDENTITY, "Expected '" + ManagedIdentityResource.MANAGED_IDENTITY + "'.");
+            assert.strictEqual(_config.vaultResource, ManagedIdentityResource.MANAGED_IDENTITY, "Expected '" + ManagedIdentityResource.MANAGED_IDENTITY + "'.");
+            assert.strictEqual(_config.useVault, true, "Expected true.");
+            assert.strictEqual(_config.label, "development", "Expected 'development'.");
+            assert.strictEqual(_config.apiVersion, "1.0", "Expected '1.0'.");
+            assert.strictEqual(_config.vault == null, false, "Expected false.");
+        });
+        it("should set AppConfigPropertyManager values", () => {
+            let _config = new AppConfigPropertyManager("mock-config-store", "test123", "test456", "dummy-label", false, 5000);
+            assert.strictEqual(_config.name, "AppConfigPropertyManager", "Expected 'AppConfigPropertyManager'.");
+            assert.strictEqual(_config.configStore, "https://mock-config-store.azconfig.io", "Expected 'https://mock-config-store.azconfig.io'.");
+            assert.strictEqual(_config.timeout, 5000, "Expected 5000.");
+            assert.strictEqual(_config._endpoint, "https://mock-config-store.azconfig.io/kv/{key}", "Expected 'https://mock-config-store.azconfig.io/kv/{key}'.");
+            assert.strictEqual(_config.propertyResource, "test123", "Expected 'test123'.");
+            assert.strictEqual(_config.vaultResource, "test456", "Expected 'test456'.");
+            assert.strictEqual(_config.useVault, false, "Expected false.");
+            assert.strictEqual(_config.label, "dummy-label", "Expected 'dummy-label'.");
+            assert.strictEqual(_config.apiVersion, "1.0", "Expected '1.0'.");
+            assert.strictEqual(_config.vault == null, true, "Expected true.");
+        });
+    });
+    describe("#initialize(azcontext, config)", () => {
+        it("should initialize, with vault", async () => {
+            process.env["IDENTITY_ENDPOINT"] = "https://fake-azure-security-endpoint/";
+            process.env["IDENTITY_HEADER"] = "celastrinajs";
+            let _azcontext = new MockAzureFunctionContext();
+            let _config = {};
+            let _pm = new AppConfigPropertyManager("mock-config-store");
+            let _rm = new ResourceManager();
+            let _mi = await _rm.getResource(ManagedIdentityResource.MANAGED_IDENTITY);
+            _config[Configuration.CONFIG_RESOURCE] = _rm;
+            await assert.doesNotReject(_pm.initialize(_azcontext, _config));
+            assert.deepStrictEqual(_pm._authProp, _mi, "Expected _mi.");
+            assert.deepStrictEqual(_pm._authVault, _mi, "Expected _mi.");
+            delete process.env["IDENTITY_ENDPOINT"];
+        });
+        it("should initialize, without vault", async () => {
+            process.env["IDENTITY_ENDPOINT"] = "https://fake-azure-security-endpoint/";
+            process.env["IDENTITY_HEADER"] = "celastrinajs";
+            let _azcontext = new MockAzureFunctionContext();
+            let _config = {};
+            let _pm = new AppConfigPropertyManager("mock-config-store");
+            _pm.useVault = false;
+            let _rm = new ResourceManager();
+            let _mi = await _rm.getResource(ManagedIdentityResource.MANAGED_IDENTITY);
+            _config[Configuration.CONFIG_RESOURCE] = _rm;
+            await assert.doesNotReject(_pm.initialize(_azcontext, _config));
+            assert.deepStrictEqual(_pm._authProp, _mi, "Expected _mi.");
+            assert.strictEqual(_pm._authVault, null, "Expected null.");
+            delete process.env["IDENTITY_ENDPOINT"];
+        });
+    });
     describe("#_getProperty(key)", () => {
         it("gets a valid KVP", async () => {
             process.env["IDENTITY_ENDPOINT"] = "https://fake-azure-security-endpoint/";

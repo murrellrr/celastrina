@@ -204,12 +204,12 @@ describe("Configuration", () => {
         });
 
         it("should initialize app config property manager", async () => {
-            let _config = new Configuration("mock_configuration");
-            let _rm = new MockResourceManager();
-            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
             process.env[AppConfigPropertyManagerFactory.PROP_USE_APP_CONFIG] = "{\"store\": \"celastrinajs.storename\"}";
             process.env["IDENTITY_ENDPOINT"] = "https://fake-azure-security-endpoint/";
             process.env["IDENTITY_HEADER"] = "celastrinajs";
+            let _config = new Configuration("mock_configuration");
+            let _rm = new MockResourceManager();
+            _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
             await _config.initialize(_azcontext);
             delete process.env[AppConfigPropertyManagerFactory.PROP_USE_APP_CONFIG];
             delete process.env["IDENTITY_ENDPOINT"];

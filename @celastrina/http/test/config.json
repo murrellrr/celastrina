@@ -1,0 +1,19 @@
+{
+  "configurations": [
+    {
+      "_content": {"type": "application/vnd.celastrinajs.config+json;Core"},
+      "value": "991e7894-0b20-44dc-854a-89e04d9e64d2",
+      "resources": {
+        "identity": {
+          "mappings": [
+            {"_content": {"type": "application/vnd.celastrinajs.attribute+json;PrincipalMapping"}, "principal":  "1cf25567-4c34-4174-8316-5393e0fe303f", "resource":  "https://vault.azure.net"},
+            {"_content": {"type": "application/vnd.celastrinajs.attribute+json;PrincipalMapping"}, "principal":  "1cf25567-4c34-4174-8316-5393e0fe303f", "resource":  "https://celastrinajs-demo-csmdb.documents.azure.com"}
+          ]
+        }
+      },
+      "authentication": {
+        "optimistic": true
+      }
+    }
+  ]
+}

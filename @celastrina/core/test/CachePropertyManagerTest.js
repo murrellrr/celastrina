@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-const {CelastrinaError, LOG_LEVEL, PropertyManager, CachedProperty, AppSettingsPropertyManager,
+const {CelastrinaError, LOG_LEVEL, PropertyManager, CacheProperty, AppSettingsPropertyManager,
        CachedPropertyManager} = require("../Core");
 const {MockPropertyManager} = require("./PropertyManagerTest");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
@@ -52,22 +52,22 @@ describe("CachePropertyManager", () => {
             let _cpm = new CachedPropertyManager();
             assert.strictEqual(_cpm._manager instanceof AppSettingsPropertyManager, true, "PropertyManager is AppSettingsPropertManager.");
             assert.deepStrictEqual(_cpm._cache, {}, "Cache Overrides.");
-            assert.strictEqual(_cpm._defaultTime, 300, "Default timeout.");
-            assert.strictEqual(_cpm._defaultUnit, "s", "Default time unit.");
+            assert.strictEqual(_cpm._defaultTime, 5, "Default timeout.");
+            assert.strictEqual(_cpm._defaultUnit, "minutes", "Default time unit.");
         });
         it("Should set the PM and default the rest of the parameters", () => {
             let _pm = new MockPropertyManager();
             let _cpm = new CachedPropertyManager(_pm);
             assert.strictEqual(_cpm._manager, _pm, "PropertyManager.");
-            assert.strictEqual(_cpm._defaultTime, 300, "Default timeout.");
-            assert.strictEqual(_cpm._defaultUnit, "s", "Default time unit.");
+            assert.strictEqual(_cpm._defaultTime, 5, "Default timeout.");
+            assert.strictEqual(_cpm._defaultUnit, "minutes", "Default time unit.");
         });
         it("Should set the PM and timeout, default the rest of the parameters", () => {
             let _pm = new MockPropertyManager();
             let _cpm = new CachedPropertyManager(_pm, 500);
             assert.strictEqual(_cpm._manager, _pm, "PropertyManager.");
             assert.strictEqual(_cpm._defaultTime, 500, "Default timeout.");
-            assert.strictEqual(_cpm._defaultUnit, "s", "Default time unit.");
+            assert.strictEqual(_cpm._defaultUnit, "minutes", "Default time unit.");
         });
         it("Should set the PM, timeout and unit, default the rest of the parameters", () => {
             let _pm = new MockPropertyManager();
@@ -99,12 +99,12 @@ describe("CachePropertyManager", () => {
             assert.strictEqual(_pm.lastKey, null, "Last key looked up should be null.");
             assert.strictEqual(_value, "mock_value", "Value is 'mock_value' from cache.");
             let _cache = await _cpm.getCacheInfo("mock_property");
-            assert.strictEqual(_cache instanceof CachedProperty, true, "Hash cached property.");
+            assert.strictEqual(_cache instanceof CacheProperty, true, "Hash cached property.");
         });
         it("Should refresh after expire", async () => {
             let _pm = new MockPropertyManager();
             _pm.mockProperty("mock_property", "mock_value");
-            let _cpm = new CachedPropertyManager(_pm, 1);
+            let _cpm = new CachedPropertyManager(_pm, 1, "s");
             let _value = await _cpm.getProperty("mock_property");
             assert.strictEqual(_pm.getPropertyInvoked, true, "_getProperty was invoked.");
             assert.strictEqual(_pm.lastKey, "mock_property", "Last key looked up was 'mock_property'.");
@@ -116,7 +116,57 @@ describe("CachePropertyManager", () => {
             assert.strictEqual(_pm.lastKey, "mock_property", "Last key looked up should be 'mock_property'.");
             assert.strictEqual(_value, "mock_value", "Value is 'mock_value' from cache.");
             let _cache = await _cpm.getCacheInfo("mock_property");
-            assert.strictEqual(_cache instanceof CachedProperty, true, "Hash cached property.");
+            assert.strictEqual(_cache instanceof CacheProperty, true, "Hash cached property.");
+        });
+        it("Should never refresh", async () => {
+            let _pm = new MockPropertyManager();
+            _pm.mockProperty("mock_property", "mock_value");
+            let _cpm = new CachedPropertyManager(_pm, 1, "s", [{key: "mock_property", cache: new CacheProperty(null, true, 0)}]);
+            let _value = await _cpm.getProperty("mock_property");
+            assert.strictEqual(_pm.getPropertyInvoked, true, "_getProperty was invoked.");
+            assert.strictEqual(_pm.lastKey, "mock_property", "Last key looked up was 'mock_property'.");
+            assert.strictEqual(_value, "mock_value", "Value is 'mock_value'.");
+            _pm.reset();
+            _clock.tick(3000);
+            _value = await _cpm.getProperty("mock_property");
+            assert.strictEqual(_pm.getPropertyInvoked, false, "_getProperty was invoked.");
+            assert.strictEqual(_pm.lastKey, null, "Last key looked up should be null.");
+            assert.strictEqual(_value, "mock_value", "Value is 'mock_value' from cache.");
+            let _cache = await _cpm.getCacheInfo("mock_property");
+            assert.strictEqual(_cache instanceof CacheProperty, true, "Hash cached property.");
+            _pm.reset();
+            _clock.tick(3000);
+            _value = await _cpm.getProperty("mock_property");
+            assert.strictEqual(_pm.getPropertyInvoked, false, "_getProperty was invoked.");
+            assert.strictEqual(_pm.lastKey, null, "Last key looked up should be null.");
+            assert.strictEqual(_value, "mock_value", "Value is 'mock_value' from cache.");
+            _cache = await _cpm.getCacheInfo("mock_property");
+            assert.strictEqual(_cache instanceof CacheProperty, true, "Hash cached property.");
+        });
+        it("Should always refresh", async () => {
+            let _pm = new MockPropertyManager();
+            _pm.mockProperty("mock_property", "mock_value");
+            let _cpm = new CachedPropertyManager(_pm, 1, "minute", [{key: "mock_property", cache: new CacheProperty(null, false)}]);
+            let _value = await _cpm.getProperty("mock_property");
+            assert.strictEqual(_pm.getPropertyInvoked, true, "_getProperty was invoked.");
+            assert.strictEqual(_pm.lastKey, "mock_property", "Last key looked up was 'mock_property'.");
+            assert.strictEqual(_value, "mock_value", "Value is 'mock_value'.");
+            _pm.reset();
+            _clock.tick(3000);
+            _value = await _cpm.getProperty("mock_property");
+            assert.strictEqual(_pm.getPropertyInvoked, true, "_getProperty was invoked.");
+            assert.strictEqual(_pm.lastKey, "mock_property", "Last key looked up was 'mock_property'.");
+            assert.strictEqual(_value, "mock_value", "Value is 'mock_value' from cache.");
+            let _cache = await _cpm.getCacheInfo("mock_property");
+            assert.strictEqual(_cache instanceof CacheProperty, true, "Hash cached property.");
+            _pm.reset();
+            _clock.tick(3000);
+            _value = await _cpm.getProperty("mock_property");
+            assert.strictEqual(_pm.getPropertyInvoked, true, "_getProperty was invoked.");
+            assert.strictEqual(_pm.lastKey, "mock_property", "Last key looked up was 'mock_property'.");
+            assert.strictEqual(_value, "mock_value", "Value is 'mock_value' from cache.");
+            _cache = await _cpm.getCacheInfo("mock_property");
+            assert.strictEqual(_cache instanceof CacheProperty, true, "Hash cached property.");
         });
     });
 });
@@ -143,7 +193,7 @@ describe("CachePropertyManager:Accessors", () => {
             assert.strictEqual(_pm.lastKey, null, "Last key looked up should be null.");
             assert.deepStrictEqual(_value, "value", "Value is 'value'.");
             let _cache = await _cpm.getCacheInfo("getProperty");
-            assert.strictEqual(_cache instanceof CachedProperty, true, "Hash cached property.");
+            assert.strictEqual(_cache instanceof CacheProperty, true, "Hash cached property.");
         });
     });
     describe("#getRegExp(key, defaultValue)", () => {
@@ -160,7 +210,7 @@ describe("CachePropertyManager:Accessors", () => {
             assert.strictEqual(_value instanceof RegExp, true, "Is RegExp type.");
             assert.deepStrictEqual(_value, new RegExp("/^Test/g"), "Value is RegEx from cahce.");
             let _cache = await _cpm.getCacheInfo("getRegExpProperty");
-            assert.strictEqual(_cache instanceof CachedProperty, true, "Hash cached property.");
+            assert.strictEqual(_cache instanceof CacheProperty, true, "Hash cached property.");
         });
     });
     describe("#getBoolean(key, defaultValue)", () => {
@@ -177,7 +227,7 @@ describe("CachePropertyManager:Accessors", () => {
             assert.strictEqual(typeof _value === "boolean", true, "Is boolean type.");
             assert.deepStrictEqual(_value, true, "Value is RegEx from cahce.");
             let _cache = await _cpm.getCacheInfo("getBooleanProperty");
-            assert.strictEqual(_cache instanceof CachedProperty, true, "Hash cached property.");
+            assert.strictEqual(_cache instanceof CacheProperty, true, "Hash cached property.");
         });
     });
     describe("#getNumber(key, defaultValue)", () => {
@@ -194,7 +244,7 @@ describe("CachePropertyManager:Accessors", () => {
             assert.strictEqual(typeof _value === "number", true, "Is number type.");
             assert.deepStrictEqual(_value, 42, "Value is 42 from cahce.");
             let _cache = await _cpm.getCacheInfo("getNumberProperty");
-            assert.strictEqual(_cache instanceof CachedProperty, true, "Hash cached property.");
+            assert.strictEqual(_cache instanceof CacheProperty, true, "Hash cached property.");
         });
     });
     describe("#getDate(key, defaultValue)", () => {
@@ -211,7 +261,7 @@ describe("CachePropertyManager:Accessors", () => {
             assert.strictEqual(_value instanceof Date, true, "Is Date type.");
             assert.deepStrictEqual(_value, new Date("1995-12-17T03:24:00"), "Value is '1995-12-17T03:24:00' from cahce.");
             let _cache = await _cpm.getCacheInfo("getDateProperty");
-            assert.strictEqual(_cache instanceof CachedProperty, true, "Hash cached property.");
+            assert.strictEqual(_cache instanceof CacheProperty, true, "Hash cached property.");
         });
     });
     describe("#getObject(key, defaultValue)", () => {
@@ -228,7 +278,7 @@ describe("CachePropertyManager:Accessors", () => {
             assert.strictEqual(_value instanceof MockObject, true, "Is MockObject type.");
             assert.deepStrictEqual(_value, new MockObject("mock_key", "mock_value"), "Value is MockObject from cahce.");
             let _cache = await _cpm.getCacheInfo("getObject");
-            assert.strictEqual(_cache instanceof CachedProperty, true, "Hash cached property.");
+            assert.strictEqual(_cache instanceof CacheProperty, true, "Hash cached property.");
         });
     });
     describe("#getTypedProperty(key, typename, defaultValue, factory)", () => {

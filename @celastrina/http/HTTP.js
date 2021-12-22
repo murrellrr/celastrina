@@ -1162,7 +1162,7 @@ class HTTPConfigurationParser extends ConfigParser {
      * @private
      */
     async _create(_Object) {
-        /**@type{HTTPAddOn}*/let _addon = this._config[HTTPAddOn.addOnName];
+        /**@type{HTTPAddOn}*/let _addon = this._addons.get(HTTPAddOn);
         if(instanceOfCelastringType(HTTPAddOn, _addon)) {
             if (_Object.hasOwnProperty("session") && (typeof _Object.session === "object") && _Object.session != null) {
                 let _session = _Object.session;
@@ -1252,7 +1252,7 @@ class JwtConfigurationParser extends ConfigParser {
      * @private
      */
     async _create(_Object) {
-        /**@type{JwtAddOn}*/let _addon = this._config[JwtAddOn.addOnName];
+        /**@type{JwtAddOn}*/let _addon = this._addons.get(JwtAddOn);
         if(instanceOfCelastringType(JwtAddOn, _addon)) {
             if (_Object.hasOwnProperty("issuers") && Array.isArray(_Object.issuers))
                 _addon.issuers = _Object.issuers;
@@ -2002,7 +2002,7 @@ class HMACConfigurationParser extends ConfigParser {
      * @private
      */
     async _create(_Object) {
-        /**@type{HMACAddOn}*/let _addon = this._config[HMACAddOn.addOnName];
+        /**@type{HMACAddOn}*/let _addon = this._addons.get(HMACAddOn);
         if(instanceOfCelastringType(HMACAddOn, _addon)) {
             if (_Object.hasOwnProperty("hmac") && (typeof _Object.hmac === "object") && _Object.hmac != null) {
                 _addon.hmac = _Object.hmac;

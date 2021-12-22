@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-const {CelastrinaError, CelastrinaValidationError, Configuration, CelastrinaEvent} = require("@celastrina/core");
+const {CelastrinaError, CelastrinaValidationError, Configuration, CelastrinaEvent, AddOnManager} = require("@celastrina/core");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockContext} = require("../../core/test/ContextTest");
 const assert = require("assert");
@@ -35,8 +35,9 @@ describe("TimerConfigParser", () => {
 			let _azcontext = new MockAzureFunctionContext();
 			let _config = {};
 			let _addon = new TimerAddOn();
-			_config[TimerAddOn.addOnName] = _addon;
-			_parser.initialize(_azcontext, _config);
+			let _addOnManager = new AddOnManager();
+			_addOnManager.add(_addon);
+			_parser.initialize(_azcontext, _config, _addOnManager);
 			let _Object = {rejectOnPastDue: true, abortOnReject: true};
 			_Object["_content"] = {type: "application/vnd.celastrinajs.config+json;Timer"};
 			await _parser.parse(_Object);

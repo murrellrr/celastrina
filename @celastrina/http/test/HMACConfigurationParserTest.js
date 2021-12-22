@@ -21,7 +21,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, instanceOfCelastringType, Configuration} = require("@celastrina/core");
+const {CelastrinaError, CelastrinaValidationError, LOG_LEVEL, instanceOfCelastringType, AddOnManager,
+       Configuration} = require("@celastrina/core");
 const {HMAC, HMACConfigurationParser, HMACAddOn, HTTPAddOn} = require("../HTTP");
 const assert = require("assert");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
@@ -36,12 +37,13 @@ describe("HMACConfigurationParserTest", () => {
                 hmac: _hmac
             };
             let _config = {};
-            _config[HTTPAddOn.addOnName] = new HTTPAddOn();
-            _config[HMACAddOn.addOnName] = new HMACAddOn();
+            let _addOnManager = new AddOnManager();
+            _addOnManager.add(new HTTPAddOn());
+            _addOnManager.add(new HMACAddOn());
             let _parser = new HMACConfigurationParser();
-            await _parser.initialize(_azcontext, _config);
+            await _parser.initialize(_azcontext, _config, _addOnManager);
             await _parser.parse(_object);
-            assert.deepStrictEqual(_config[HMACAddOn.addOnName].hmac, _hmac, "Expected _hmac.");
+            assert.deepStrictEqual(_addOnManager.get(HMACAddOn).hmac, _hmac, "Expected _hmac.");
         });
     });
 });

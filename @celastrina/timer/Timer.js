@@ -148,13 +148,15 @@ class TimerConfigParser extends ConfigParser {
 		super("Timer", link, version);
 	}
 	async _create(_Object) {
-		/**@type{TimerAddOn}*/let _addon = /**@type{TimerAddOn}*/this._config[TimerAddOn.addOnName];
+		/**@type{TimerAddOn}*/let _addon = /**@type{TimerAddOn}*/this._addons.get(TimerAddOn);
 		if(instanceOfCelastringType(TimerAddOn, _addon)) {
 			if(_Object.hasOwnProperty("rejectOnPastDue") && (typeof _Object.rejectOnPastDue === "boolean"))
 				_addon.rejectOnPastDue = _Object.rejectOnPastDue;
 			if(_Object.hasOwnProperty("abortOnReject") && (typeof _Object.abortOnReject === "boolean"))
 				_addon.abortOnReject = _Object.abortOnReject;
 		}
+		else
+			throw CelastrinaError.newError("Missing required Add-On '" + TimerAddOn.name + "'.");
 	}
 }
 /**

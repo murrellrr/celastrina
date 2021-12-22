@@ -35,9 +35,10 @@ class MockAddOn extends AddOn {
     /**@type{string}*/static get addOnName() {return "MockAddOn";}
     /***
      * @param {Array<string>} dependencies
+     * @param {Array<number>} lifecycles
      */
-    constructor(dependencies = []) {
-        super(dependencies);
+    constructor(dependencies = [], lifecycles = []) {
+        super(dependencies, lifecycles);
         this.invokedGetConfigParser = false;
         this.invokedGetAttributeParser = false;
         this.invokedInitialize = false;
@@ -250,18 +251,27 @@ describe("Configuration", () => {
         });
     });
     describe("#load(pm, config), resource config", () => {
-        let _loader = new Configuration("ConfigurationTest", "mock_property");
-        let _pm = new MockPropertyManager();
-        _pm.mockProperty("mock_resources", "[{\"id\": \"mock-resource-1\", \"authority\": \"authority1\", \"tenant\":  \"tenant1\", \"secret\": \"secret1\"},{\"id\": \"mock-resource-2\", \"authority\": \"authority2\", \"tenant\":  \"tenant2\", \"secret\": \"secret2\"}]");
-        _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good-resources.json", "utf8"));
-        let _azcontext = new MockAzureFunctionContext();
-        it("Sets resource authorizations", async () => {
+        let _loader = null;
+        let _pm = null;
+        let _azcontext = null;
+        before(() => {
             process.env["IDENTITY_ENDPOINT"] = "https://localhost:8443";
             process.env["IDENTITY_HEADER"] = "ThatsMyLuggage12345";
+            _loader = new Configuration("ConfigurationTest", "mock_property");
+            _pm = new MockPropertyManager();
+            _pm.mockProperty("mock_resources", "[{\"id\": \"mock-resource-1\", \"authority\": \"authority1\", \"tenant\":  \"tenant1\", \"secret\": \"secret1\"},{\"id\": \"mock-resource-2\", \"authority\": \"authority2\", \"tenant\":  \"tenant2\", \"secret\": \"secret2\"}]");
+            _pm.mockProperty("mock_property", fs.readFileSync("./test/config-good-resources.json", "utf8"));
+            _azcontext = new MockAzureFunctionContext();
+        });
+        after(() => {
+            delete process.env["IDENTITY_ENDPOINT"];
+        });
+        it("Sets resource authorizations", async () => {
             _loader.setValue("celastrinajs.core.permission", new PermissionManager());
             _loader.setValue("celastrinajs.core.resource", new ResourceManager());
             _loader.setValue("celastrinajs.core.property.manager", _pm);
             await assert.doesNotReject(_loader.initialize(_azcontext));
+            await assert.doesNotReject(_loader.ready());
             assert.notStrictEqual(_loader.getValue(Configuration.CONFIG_RESOURCE), null, "ResourceManager null.");
             /**@type{ResourceManager}*/let _resources = _loader.getValue(Configuration.CONFIG_RESOURCE);
             let _rm1 = new AppRegistrationResource("mock-resource-1", "authority1", "tenant1", "secret1");
@@ -271,8 +281,8 @@ describe("Configuration", () => {
             assert.deepStrictEqual(await _resources.getResource("mock-resource-1"), _rm1, "mock-resource-1 via getResource.");
             assert.deepStrictEqual(await _resources.getResource("mock-resource-2"), _rm2, "mock-resource-2 via getResource.");
             /**@type{ManagedIdentityResource}*/let _ra = /**@type{ManagedIdentityResource}*/await _resources.getResource(ManagedIdentityResource.MANAGED_IDENTITY);
+            assert.strictEqual(_ra != null, true, "Expected ManagedIdentityResource '_ra' not to be null.");
             assert.strictEqual(await _ra.getPrincipalForResource("mock_resource"), "mock_principal", "Expected 'mock_principal'.");
-            delete process.env["IDENTITY_ENDPOINT"];
         });
     });
     describe("#load(pm, config), full config", () => {
@@ -337,7 +347,7 @@ describe("Configuration", () => {
             _config.setValue(Configuration.CONFIG_RESOURCE, _rm);
             let _addon = new MockAddOn();
             assert.deepStrictEqual(_config.addOn(_addon), _config, "Returns _config.");
-            assert.strictEqual(_config._config.hasOwnProperty("MockAddOn"), true, "Expected add-on to be in the config addOns.");
+            assert.strictEqual(_config.hasAddOnSync("MockAddOn"), true, "Expected add-on to be in the config addOns.");
         });
         it("gets add-on", async () => {
             let _azcontext = new MockAzureFunctionContext();
@@ -361,14 +371,14 @@ describe("Configuration", () => {
         });
         it("should fail with null AddOn", () => {
             let _config = new Configuration("mock_configuration");
-            let _error = CelastrinaValidationError.newValidationError("Argument 'addOn' is required and must be of type 'celastrinajs.core.AddOn'.", "addOn");
+            let _error = CelastrinaValidationError.newValidationError("Argument 'addon' is required and must be of type 'celastrinajs.core.AddOn'.", "addon");
             assert.throws(() => {
                 _config.addOn(null);
             }, _error, "Expected exception.");
         });
         it("should fail with non AddOn", () => {
             let _config = new Configuration("mock_configuration");
-            let _error = CelastrinaValidationError.newValidationError("Argument 'addOn' is required and must be of type 'celastrinajs.core.AddOn'.", "addOn");
+            let _error = CelastrinaValidationError.newValidationError("Argument 'addon' is required and must be of type 'celastrinajs.core.AddOn'.", "addon");
             assert.throws(() => {
                 _config.addOn({});
             }, _error, "Expected exception.");

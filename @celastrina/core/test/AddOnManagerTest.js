@@ -21,48 +21,63 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-const {CelastrinaError, AddOn, Configuration, _AddOnManager} = require("../Core");
+const {CelastrinaError, AddOn, Configuration, LifeCycle, AddOnManager} = require("../Core");
 const {MockAzureFunctionContext} = require("../../test/AzureFunctionContextMock");
 const {MockPropertyManager} = require("./PropertyManagerTest");
 const {MockResourceManager} = require("./ResourceAuthorizationTest");
 const assert = require("assert");
 const {MockAddOn} = require("./ConfigurationTest");
+const {MockContext} = require("./ContextTest");
 
 class AddOnMockOne extends MockAddOn {
 	/**@type{string}*/static get addOnName() {return "AddOnMockOne";}
-	constructor(dependencies = []) {
-		super(dependencies);
+	constructor() {
+		super();
 	}
 }
 class AddOnMockTwo extends MockAddOn {
 	/**@type{string}*/static get addOnName() {return "AddOnMockTwo";}
-	constructor(dependencies = [AddOnMockOne.addOnName]) {
-		super(dependencies);
+	constructor() {
+		super([AddOnMockOne.addOnName], [LifeCycle.STATE.LOAD, LifeCycle.STATE.SAVE]);
+		this.doLifeCycleInvoked = false;
+		this.lifecyclesInvoked = [];
+	}
+	reset() {
+		this.doLifeCycleInvoked = false;
+		this.lifecyclesInvoked = [];
+	}
+	/**
+	 * @param {LifeCycle} lifecycle
+	 * @return {Promise<void>}
+	 */
+	async doLifeCycle(lifecycle) {
+		this.lifecyclesInvoked.push(lifecycle.lifecycle);
+		this.doLifeCycleInvoked = true;
 	}
 }
 class AddOnMockThree extends MockAddOn {
 	/**@type{string}*/static get addOnName() {return "AddOnMockThree";}
-	constructor(dependencies = [AddOnMockOne.addOnName]) {
-		super(dependencies);
+	constructor() {
+		super([AddOnMockOne.addOnName]);
 	}
 }
 class AddOnMockFour extends MockAddOn {
 	/**@type{string}*/static get addOnName() {return "AddOnMockFour";}
-	constructor(dependencies = [AddOnMockOne.addOnName, AddOnMockThree.addOnName]) {
-		super(dependencies);
+	constructor() {
+		super([AddOnMockOne.addOnName, AddOnMockThree.addOnName]);
 	}
 }
 
-describe("_AddOnManager", () => {
+describe("AddOnManager", () => {
 	describe("#add(addon)", () => {
 		it("should resolve addon to target without dependencies immediately", () => {
-			let _admanager = new _AddOnManager();
+			let _admanager = new AddOnManager();
 			let _addon = new AddOnMockOne();
 			_admanager.add(_addon);
 			assert.deepStrictEqual(_admanager._target[0], _addon, "Expected _addon.");
 		});
 		it("should resolve dependent to target", () => {
-			let _admanager = new _AddOnManager();
+			let _admanager = new AddOnManager();
 			let _addon = new AddOnMockOne();
 			let _addon2 = new AddOnMockTwo();
 			_admanager.add(_addon);
@@ -71,7 +86,7 @@ describe("_AddOnManager", () => {
 			assert.deepStrictEqual(_admanager._target[1], _addon2, "Expected _addon2.");
 		});
 		it("should resolve _addon/_addon2, but unresolve _addon3 dependent to target", () => {
-			let _admanager = new _AddOnManager();
+			let _admanager = new AddOnManager();
 			let _addon = new AddOnMockOne();
 			let _addon2 = new AddOnMockTwo();
 			let _addon3 = new AddOnMockThree();
@@ -87,7 +102,7 @@ describe("_AddOnManager", () => {
 	describe("#install(azcontext, parse, cfp, atp)", () => {
 		it("should install add-ons.", async () => {
 			let _azcontext = new MockAzureFunctionContext();
-			let _admanager = new _AddOnManager();
+			let _admanager = new AddOnManager();
 			let _addon = new AddOnMockOne();
 			let _addon2 = new AddOnMockTwo();
 			let _addon3 = new AddOnMockThree();
@@ -108,7 +123,7 @@ describe("_AddOnManager", () => {
 		});
 		it("should fail install add-ons with four unresolved.", async () => {
 			let _azcontext = new MockAzureFunctionContext();
-			let _admanager = new _AddOnManager();
+			let _admanager = new AddOnManager();
 			let _addon = new AddOnMockOne();
 			let _addon2 = new AddOnMockTwo();
 			let _addon3 = new AddOnMockThree();
@@ -126,7 +141,7 @@ describe("_AddOnManager", () => {
 		});
 		it("should initialize add-ons.", async () => {
 			let _azcontext = new MockAzureFunctionContext();
-			let _admanager = new _AddOnManager();
+			let _admanager = new AddOnManager();
 			let _addon = new AddOnMockOne();
 			let _addon2 = new AddOnMockTwo();
 			let _addon3 = new AddOnMockThree();
@@ -149,6 +164,31 @@ describe("_AddOnManager", () => {
 			assert.strictEqual(_addon2.invokedInitialize, true, "Expected true.");
 			assert.strictEqual(_addon.invokedInitialize, true, "Expected true.");
 			assert.strictEqual(_addon4.invokedInitialize, true, "Expected true.");
+		});
+	});
+	describe("#doLifeCycle(lifecycle, source, context, exception)", () => {
+		it("should do lifecycle on AddOn2", async () => {
+			let _azcontext = new MockAzureFunctionContext();
+			let _addon = new AddOnMockOne();
+			let _addon2 = new AddOnMockTwo();
+			let _config = new Configuration("AddOnManagerTest");
+			_config.addOn(_addon);
+			_config.addOn(_addon2);
+			await _config.initialize(_azcontext);
+			await _config.ready();
+			let _context = new MockContext(_config);
+
+			await _config.addOns.doLifeCycle(LifeCycle.STATE.INITIALIZE, null, _context);
+			await _config.addOns.doLifeCycle(LifeCycle.STATE.AUTHENTICATE, null, _context);
+			await _config.addOns.doLifeCycle(LifeCycle.STATE.AUTHORIZE, null, _context);
+			await _config.addOns.doLifeCycle(LifeCycle.STATE.VALIDATE, null, _context);
+			await _config.addOns.doLifeCycle(LifeCycle.STATE.LOAD, null, _context);
+			await _config.addOns.doLifeCycle(LifeCycle.STATE.PROCESS, null, _context);
+			await _config.addOns.doLifeCycle(LifeCycle.STATE.SAVE, null, _context);
+			await _config.addOns.doLifeCycle(LifeCycle.STATE.TERMINATE, null, _context);
+
+			assert.strictEqual(_addon2.doLifeCycleInvoked, true, "Expected true.");
+			assert.deepStrictEqual(_addon2.lifecyclesInvoked, [LifeCycle.STATE.LOAD, LifeCycle.STATE.SAVE], "Expected true.");
 		});
 	});
 });

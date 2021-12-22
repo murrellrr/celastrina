@@ -44,6 +44,9 @@ describe("instanceOfCelastringType", () => {
         it("should fail source null", () => {
             assert.strictEqual(instanceOfCelastringType(MockTypeA, null), false, "Expected false.");
         });
+        it("should fail gracefully, both null", () => {
+            assert.strictEqual(instanceOfCelastringType(null, null), false, "Expected false.");
+        });
         it("should fail source not an object, numeric", () => {
             assert.strictEqual(instanceOfCelastringType(MockTypeA, 100), false, "Expected false.");
         });
